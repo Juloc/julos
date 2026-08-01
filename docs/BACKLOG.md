@@ -14,7 +14,7 @@ Status values:
 
 | ID | Work item | Status | Notes |
 |---|---|---|---|
-| M0.1 | Documentation baseline | In progress | Foundation documents prepared on `agent/foundation-docs`. |
+| M0.1 | Documentation baseline | Done | Foundation documents and repository rules are established. |
 | M0.2 | Solution skeleton | Ready | First production-code task after documentation merge. |
 | M0.3 | Local development stack | Planned | Depends on solution skeleton. |
 | M0.4 | Continuous integration | Planned | Depends on build and test commands. |
