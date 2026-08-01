@@ -1,111 +1,239 @@
 ﻿# Architecture
 
-## System overview
+## 1. System overview
 
 ```text
-Client browser
+Remote or local client browser
   └─ JulOS Desktop
        ├─ Window manager
-       ├─ App launcher and widgets
-       └─ Session views
-            │
+       ├─ Taskbar, launcher and command palette
+       ├─ Widget host
+       ├─ Notification and problem center
+       └─ Native package application modules
+            │ HTTPS and SignalR
 JulOS Server
   ├─ Authentication and authorization
-  ├─ Package registry and lifecycle
-  ├─ App, window and layout state
+  ├─ Core application services
+  ├─ Package registry and lifecycle coordinator
   ├─ Capability broker
-  ├─ Events, notifications and problems
-  └─ Audit log and secret references
+  ├─ App, window and layout state
+  ├─ Agent connection service
+  ├─ Events, operations, notifications and problems
+  ├─ Audit log
+  └─ Secret reference service
        │
-JulOS Agent and package runtimes
-  ├─ Host metrics
-  ├─ Docker and Proxmox adapters
-  ├─ Browser runtime
-  ├─ Remote runtime
-  ├─ File providers
-  └─ External product integrations
+       ├─ PostgreSQL
+       ├─ Runtime Manager
+       │    └─ JulOS-owned package and session runtime containers
+       ├─ out-of-process package workers
+       └─ outbound-connected JulOS Agents
+            └─ hosts, Docker engines, filesystems and networks
 ```
 
-## Dependency direction
+Browser, RDP, VNC and SSH session content is transported through JulOS Remote. Internal websites are not generally embedded through iframes.
+
+## 2. Architectural layers
 
 Dependencies point inward:
 
 ```text
-Package implementations
-        ↓
-Package SDK and versioned contracts
-        ↓
-Core application services
-        ↓
-Core domain model
+Package implementations and infrastructure adapters
+                         ↓
+             Package SDK and Contracts
+                         ↓
+               Application services
+                         ↓
+                    Domain
 ```
 
-The core domain must not reference package implementations, infrastructure products or protocol-specific types.
+Composition roots point to implementations, but Domain and Application do not depend on outer layers.
 
-## Core responsibilities
+## 3. Domain responsibilities
 
-The core owns only cross-product platform behavior:
+Domain owns platform rules only:
 
-- users, roles and sessions
-- installed package records and package lifecycle
-- capabilities and permissions
-- applications and launch definitions
-- windows, layouts and desktop settings
-- notifications, problems and audit entries
-- agent identity and connectivity
-- encrypted secret references
+- package installation lifecycle
+- capability identity and provider-selection inputs
+- application and launch-target identity
+- desktop layout, window and widget state
+- session-reference lifecycle
+- Agent identity and state
+- permission and scope values
+- problem, notification and audit metadata
 
-The core does not implement Docker, Proxmox, Caddy, RDP, VNC, SSH, SMB, SFTP, WebDAV or network-discovery logic.
+Domain does not reference:
 
-## Desktop responsibilities
+- ASP.NET Core
+- Entity Framework Core
+- Docker, Proxmox or Caddy
+- Guacamole, RDP, VNC or SSH
+- SMB, SFTP or WebDAV
+- package implementation assemblies
+- filesystem, process or network APIs
 
-The desktop is a lightweight client shell. It owns presentation state but not authorization decisions.
+## 4. Application services
 
-- window placement, size, focus and snapping
+Application services implement core use cases through ports:
+
+- install, configure, enable, disable, update and remove packages
+- approve applications and discovery proposals
+- create and update layouts
+- enroll and revoke Agents
+- authorize and route capability requests
+- process problem observations
+- create operations and audit events
+- create and manage session references
+- lease secrets for one authorized operation
+
+Application services do not perform product-specific protocol work.
+
+## 5. JulOS Server
+
+Server is the ASP.NET Core composition root and control plane.
+
+It owns:
+
+- web authentication and sessions
+- endpoint mapping
+- authorization policy registration
+- persistence wiring
+- package lifecycle coordination
+- event and operation transport
+- Agent control connection
+- Runtime Manager client
+- package worker control clients
+
+Server remains functional when every optional package is disabled or faulted.
+
+## 6. JulOS Desktop
+
+Desktop is a lightweight browser client shell. It owns immediate presentation state but not authorization or authoritative infrastructure state.
+
+Responsibilities:
+
+- window placement, size, focus, z-order and snapping
 - taskbar and launcher behavior
 - widget placement
 - viewport-specific layout restoration
-- rendering registered package applications
-- reconnect and offline presentation
+- package Custom Element hosting
+- API and SignalR clients
+- offline, stale and reconnect presentation
+- localization and theme application
 
-Backend APIs remain authoritative for permissions, session creation and infrastructure actions.
+Window movement and resize occur locally at animation-frame speed. Persisted layout is synchronized after interaction; Server is not called for every pointer event.
 
-## Package runtime
+## 7. Package architecture
 
-A package can contribute:
+A package consists of one signed artifact descriptor and one or more optional components:
 
-- applications
-- widgets
-- background services
-- capability providers
-- settings pages
-- problem detectors
-- API endpoints behind the package boundary
-- database migrations for its own schema
-- optional runtime containers
+```text
+Package
+├─ manifest and signatures
+├─ frontend ES modules and localization assets
+├─ package worker image or executable
+├─ package-owned migrations
+├─ runtime image references
+├─ application and widget registrations
+└─ capability declarations
+```
 
-Packages must be independently startable and stoppable. A package crash is reported as a package problem and must not terminate the core.
+### 7.1 Package worker
 
-## Capability broker
+Package backend logic runs out of process. Worker responsibilities are limited to its domain and declared capabilities.
 
-Packages request capabilities through the core broker instead of referencing providers directly.
+A package worker:
+
+- exposes liveness and readiness
+- authenticates to Server
+- registers applications, widgets and capabilities
+- validates configuration
+- handles typed package requests
+- uses only its package storage and authorized external connections
+- has configured CPU and memory limits
+
+A worker crash changes the package to a visible fault state and does not terminate Server.
+
+### 7.2 Package frontend
+
+Package frontend code is a signed ES module loaded as a Custom Element with Shadow DOM.
+
+The Desktop supplies a limited host context for:
+
+- typed API access
+- localization
+- theme tokens
+- navigation
+- command registration
+- current window identity
+- permission summary
+
+The package does not receive raw authentication tokens, secret values or direct access to another package's state.
+
+### 7.3 Package storage
+
+Packages may use:
+
+- core package-settings storage for small versioned settings
+- a package-owned PostgreSQL schema with a restricted role
+- declared runtime volumes for profiles or temporary transfer data
+
+Cross-package database reads are forbidden.
+
+## 8. Runtime Manager
+
+Runtime Manager is a small privileged sidecar that owns direct access to the local container runtime.
+
+It manages only JulOS-owned resources:
+
+- package workers when containerized
+- Browser runtimes
+- Remote runtimes
+- package-declared helper runtimes
+
+Runtime Manager validates:
+
+- approved image digest
+- mandatory ownership labels
+- allowed networks
+- allowed mounts and volumes
+- allowed environment keys
+- CPU, memory and process limits
+- runtime ownership for inspect, stop and removal
+
+It does not expose the Docker API, arbitrary command execution or unrelated container control.
+
+Runtime Manager is part of the JulOS control plane and is independent from the optional Docker package that manages user Docker environments.
+
+## 9. Capability broker
+
+Packages collaborate through versioned capabilities instead of direct references.
 
 Example:
 
 ```text
-Proxmox package requests remote.console
-Core resolves an enabled provider
-Remote package creates the session
-Proxmox receives a versioned session reference
+Proxmox package requests remote.console/1
+Server validates user permission and target scope
+Capability broker selects a healthy Remote provider
+Remote creates a protocol-specific session
+Proxmox receives a protocol-neutral session reference
 ```
 
-Capability requests include the user, resource, requested operation and permission context. The backend validates every request.
+A capability request includes:
 
-## Agent model
+- caller package
+- user and permission context
+- target type and stable identity
+- capability name and version
+- typed operation payload
+- correlation ID and deadline
 
-A small JulOS Agent runs where local access is required. One agent binary exposes only explicitly enabled capabilities.
+Mutating requests create audit events.
 
-Initial agent capabilities:
+## 10. Agent architecture
+
+One Agent binary runs on hosts where local access is required.
+
+Initial capability families:
 
 - `system.metrics`
 - `system.storage`
@@ -115,54 +243,180 @@ Initial agent capabilities:
 - `files.local`
 - `network.discovery`
 
-The agent uses outbound authenticated communication to JulOS Server. It does not expose a general remote shell and does not accept arbitrary commands.
+The Agent:
 
-## Data ownership
+- establishes an outbound authenticated connection
+- advertises only enabled capabilities
+- accepts typed allowlisted commands
+- enforces target roots and scopes locally
+- supports cancellation, deadlines and result limits
+- has no general remote shell
 
-- Core database: users, layouts, package installations, permissions, applications, problems and audit metadata.
-- Package schema: package configuration and package-owned operational state.
-- External system: authoritative domain state and history.
-- Browser runtime storage: isolated user profiles and temporary session data.
-- File providers: file content remains in the configured source.
+Package-specific interpretation occurs in package workers. The Agent contains transport and host capability implementations, not package UI or business logic.
 
-Cross-package database reads are forbidden.
+## 11. Browser and Remote architecture
 
-## Real browser and remote sessions
+### 11.1 Remote
 
-JulOS applications are not generally embedded through iframes.
+Remote owns protocol-neutral session orchestration and protocol adapters.
 
-The Browser package starts a real isolated browser runtime inside the configured network. The Remote package provides the reusable session transport and input path extracted from Julgate. Browser, RDP, VNC and SSH sessions are represented by core session references and rendered in JulOS windows.
+Core sees only:
 
-Window state and runtime session state are separate. Closing a window can either disconnect, suspend or terminate a session according to the application policy.
+- session request
+- session reference
+- state
+- lifecycle policy
+- failure code
 
-## Integration products
+RDP, VNC, SSH, guacd and display transport types remain inside Remote components.
 
-Large products expose stable integration APIs. JulOS packages consume those APIs and provide summaries, widgets, problems and deep links.
+### 11.2 Browser
 
-The Caddy package must not read the Caddy UI database directly. Caddy UI exposes versioned integration endpoints for status, routes, certificates and problems.
+Browser owns isolated Chromium runtime policy:
 
-## Failure behavior
+- profile type
+- target URL
+- network profile
+- resource limits
+- download, upload and clipboard policy
+- inactivity and maximum duration
 
-- unavailable external systems show explicit offline states
-- last-known values are labeled with their observation time
-- reconnects do not require a full page reload
+Browser asks Runtime Manager to start the runtime and requests a Remote session for display and input.
+
+### 11.3 Window/session separation
+
+A Window stores presentation state. A Session stores runtime state.
+
+Closing a Window may disconnect, suspend or terminate according to the application policy. Reloading Desktop can restore a Window and then reconnect, show an expired state or request a new Session.
+
+## 12. Integration products
+
+Large products expose stable integration APIs. JulOS packages consume those APIs for summaries, problems and launch actions.
+
+Caddy UI integration:
+
+```text
+Caddy UI authoritative state
+   ↓ authenticated integration API
+JulOS.Caddy worker
+   ↓ package API and registrations
+JulOS Desktop widgets and application
+```
+
+JulOS.Caddy never reads Caddy UI database tables directly and does not require the Docker package.
+
+## 13. Data ownership
+
+### Core database
+
+- users, roles and permission assignments
+- package installations and lifecycle
+- application definitions and approvals
+- layouts, windows and widget placements
+- Agent identities and connection state
+- session references
+- problem, notification, operation and audit metadata
+- connection metadata and secret references
+
+### Package storage
+
+- package configuration
+- external-resource mapping
+- package-owned operational state
+- discovery observations
+- package-specific cached summaries where necessary
+
+### External system
+
+- infrastructure configuration
+- VM, container, route, certificate and file domain data
+- authoritative task and history data
+
+### Runtime storage
+
+- Browser profiles
+- temporary downloads and uploads
+- short-lived session artifacts
+
+Temporary runtime data is not confused with persistent package state.
+
+## 14. Communication paths
+
+### Client to Server
+
+- HTTPS REST for authoritative state and mutations
+- SignalR for change notifications
+- short-lived session-specific transport tokens for Remote
+
+### Server to package worker
+
+- authenticated versioned control and capability contracts over private network
+
+### Server to Runtime Manager
+
+- authenticated narrow allowlisted runtime API
+
+### Agent to Server
+
+- outbound long-lived mutually authenticated connection
+
+### Package worker to external product
+
+- package-owned adapter using an authorized secret lease and explicit timeout
+
+No component receives a generic proxy to another trust boundary.
+
+## 15. Failure behavior
+
+- unavailable external systems show explicit offline or unavailable states
+- last-known values include observation time and stale status
+- reconnect does not require full-page reload
 - failures never become empty success responses
 - package failures are isolated and observable
-- startup has a safe mode that disables optional packages
+- Agent disconnect cancels or fails affected operations predictably
+- Runtime Manager failure prevents new runtimes but does not stop core read access
+- startup safe mode disables optional packages
+- cleanup failure creates a problem rather than silently leaking resources
 
-## Security boundaries
+## 16. Security boundaries
 
-- TLS for all server-agent and runtime communication
-- encrypted secrets at rest
-- short-lived session credentials
-- backend-enforced capability permissions
-- confirmation for destructive actions
-- audit entries for configuration and infrastructure mutations
-- resource limits for browser and remote runtimes
-- no direct public exposure of Docker sockets or internal management APIs
+- TLS for all remote communication
+- mutual authentication for Agent and privileged control channels
+- encrypted secret storage and opaque references
+- short-lived session and credential leases
+- backend-enforced permissions and scopes
+- explicit confirmation for destructive actions
+- audit entries for mutations
+- package and runtime resource limits
+- signed package and runtime artifacts
+- no public Docker sockets, PostgreSQL ports or internal package control endpoints
 
-## Deployment model
+Detailed requirements are in `SECURITY_AND_OPERATIONS.md`.
 
-The first supported deployment is Docker Compose with PostgreSQL and optional package runtime containers. JulOS Server is the control plane. Agents connect Proxmox nodes, Docker hosts and selected VMs.
+## 17. Deployment model
 
-The architecture must not require all packages or runtime containers to be installed.
+The first supported control plane is Docker Compose.
+
+Required:
+
+- JulOS Server
+- PostgreSQL
+- Runtime Manager
+
+Optional:
+
+- package workers
+- Remote runtime or guacd
+- Browser runtime pool
+- Agents on Proxmox nodes, Docker hosts and selected VMs
+
+The architecture must not require all packages or runtimes to be installed.
+
+## 18. Evolution rules
+
+- public contracts are versioned
+- package implementation details do not enter Core
+- compatibility layers have documented removal versions
+- new abstraction requires a real repeated use case or explicit architectural boundary
+- external product integrations use documented public APIs
+- every boundary change updates architecture tests and decisions
