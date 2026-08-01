@@ -20,6 +20,7 @@ package-lock.json text eol=lf
 *.css text eol=crlf
 *.scss text eol=crlf
 *.html text eol=crlf
+*.ps1 text eol=crlf
 
 *.sh text eol=lf
 *.bash text eol=lf

@@ -5,9 +5,9 @@
 // rewrites itself are excluded, because the policy cannot survive that tool.
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { basename, extname, join } from 'node:path';
 
-import { toRepositoryPath, walkFiles } from './repository.mjs';
+import { repositoryRoot, toRepositoryPath, walkFiles } from './repository.mjs';
 
 const byteOrderMark = Buffer.from([0xef, 0xbb, 0xbf]);
 
@@ -77,6 +77,43 @@ async function inspect(absolutePath, form) {
   const required = toRequiredBytes(text, form);
 
   return { actual, required, matches: actual.equals(required) };
+}
+
+/**
+ * Returns the extensions whose line ending git does not pin.
+ *
+ * Without an explicit `eol` attribute git checks a file out with the platform's
+ * line ending, so the same commit satisfies this policy on Windows and violates
+ * it on Linux. The policy and `.gitattributes` therefore have to agree.
+ */
+export async function findUnpinnedExtensions() {
+  const attributes = await readFile(join(repositoryRoot, '.gitattributes'), 'utf8');
+
+  const pinned = new Map();
+
+  for (const line of attributes.split('\n')) {
+    const [pattern, ...rest] = line.trim().split(/\s+/);
+    const eol = rest.find((attribute) => attribute.startsWith('eol='));
+
+    if (pattern?.startsWith('*.') === true && eol !== undefined) {
+      pinned.set(pattern.slice(1).toLowerCase(), eol.slice('eol='.length));
+    }
+  }
+
+  const missing = [];
+
+  for (const [extensions, required] of [
+    [bomCrlfExtensions, 'crlf'],
+    [plainLfExtensions, 'lf'],
+  ]) {
+    for (const extension of extensions) {
+      if (pinned.get(extension) !== required) {
+        missing.push(`${extension} (.gitattributes must pin it to eol=${required})`);
+      }
+    }
+  }
+
+  return missing;
 }
 
 /** Returns the repository-relative paths of every file that violates the policy. */

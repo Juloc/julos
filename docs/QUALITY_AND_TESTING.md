@@ -291,7 +291,7 @@ Current stages:
 
 | Stage | Checks |
 |---|---|
-| `policy` | encoding, line endings and final newline against decision `D012` |
+| `policy` | encoding, line endings and final newline against decision `D012`, and that `.gitattributes` pins every extension the policy covers |
 | `restore` | .NET dependency restore |
 | `build` | .NET solution build |
 | `dotnet-test` | unit and architecture tests |
@@ -307,7 +307,9 @@ A stage whose subject does not exist yet reports `skipped` with the reason and t
 
 `container-build` reports `skipped` when no container runtime answers, because a developer without one must still be able to validate everything else. Continuous integration always has a runtime, so the images are built there.
 
-`node tools/normalize-encoding.mjs` corrects every violation the `policy` stage reports.
+`node tools/normalize-encoding.mjs` corrects every file violation the `policy` stage reports.
+
+The policy is checked against the working tree, and git decides what the working tree contains. An extension without an explicit `eol` attribute is checked out with the platform line ending, so the same commit would satisfy the policy on Windows and fail on Linux. The stage therefore verifies first that `.gitattributes` pins every extension the policy covers.
 
 ## 12. CI structure
 

@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { findViolations } from './lib/encoding-policy.mjs';
+import { findUnpinnedExtensions, findViolations } from './lib/encoding-policy.mjs';
 import { findBrokenLinks } from './lib/markdown-links.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
 
@@ -83,6 +83,15 @@ const stages = [
     name: 'policy',
     title: 'Repository encoding policy',
     async run() {
+      const unpinned = await findUnpinnedExtensions();
+
+      if (unpinned.length > 0) {
+        return failed(
+          'git would check these out with the platform line ending, so the policy would ' +
+            `hold on one operating system and fail on another:\n  ${unpinned.join('\n  ')}`,
+        );
+      }
+
       const violations = await findViolations();
 
       return violations.length === 0
