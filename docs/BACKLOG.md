@@ -31,7 +31,8 @@ Status values:
 | CORE-005 | Session references | Done | Protocol-neutral states; a closing window can never implicitly terminate a session. |
 | CORE-007 | Problems, notifications and audit | Done | One problem per condition; the audit event exposes no way to change it. |
 | CORE-008 | Permissions and scopes | Done | Pure evaluation, default deny; read never implies control. |
-| Phase 1 | Core platform model | In progress | `CORE-006` remains. |
+| CORE-006 | Agent model | Done | Revocation is terminal; a heartbeat cannot carry a measurement. |
+| Phase 1 | Core platform model | Done | Gate passed: every domain invariant has tests and Domain references only base libraries. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | Phase 2 | Persistence, authentication and core APIs | In progress | `API-006` is done; the rest depends on the Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
@@ -45,18 +46,18 @@ Status values:
 
 ## Next issue
 
-### CORE-007 — Implement problem, notification and audit models
+### API-001 — Add PostgreSQL core persistence
 
 Scope:
 
-- problem deduplication identity and state transitions
-- notification metadata
-- the append-only audit contract
+- a DbContext and mappings for the Phase 1 domain model
+- the first migration and a migration command
+- integration tests against a real PostgreSQL instance
 
 Acceptance:
 
-- repeated observations update one problem
-- resolved problems can reopen on a new observation
+- an empty database migrates successfully
+- constraints reflect domain invariants
 
 ## Specification status
 

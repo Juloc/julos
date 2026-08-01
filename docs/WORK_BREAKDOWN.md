@@ -305,6 +305,8 @@ Deliberately absent from the aggregate: the owning package, the user and the exp
 
 ### CORE-006 — Implement Agent domain model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver identity, enrollment, state, capabilities and revocation.
@@ -313,6 +315,16 @@ Acceptance:
 
 - revoked Agent cannot transition to connected
 - last-seen is not interpreted as a metric value
+
+Implemented in `JulOS.Domain.Agents`. `Revoked` has an empty outgoing transition set, so revocation is terminal in the type rather than by convention.
+
+The second criterion is structural. `AgentHeartbeat` is a value with exactly one member, the moment, and exactly one way to be produced, from the clock. There is no constructor that accepts a measurement, so a heartbeat cannot be mistaken for or repurposed as an observation of the host. Reflection tests fail the build if that changes.
+
+`CapabilityName` validates a generic dotted format and hard-codes no product, which keeps the capability vocabulary open while the Domain stays product-free.
+
+`CapabilityVersion` is separate from `Revision`: the Agent reports the former, and Core owns the latter for its own concurrency.
+
+The aggregate deliberately carries no credential, key or token. Section 2.11 of `DATA_AND_API_CONTRACTS.md` defines none, and the Domain has no mechanism to protect a secret. `CapabilityMetadata` documents the same constraint, because an opaque payload is where a careless caller would otherwise put one.
 
 ### CORE-007 — Implement problem, notification and audit models
 
