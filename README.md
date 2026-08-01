@@ -28,13 +28,19 @@ Initial deployment domain: `os.juloc.de`.
 - Caddy
 - Discovery
 
-## Repository status
-
-The repository is being initialized documentation-first. Architecture, implementation order, package contracts and contribution rules are defined before production code is added.
-
 ## Documentation
 
-The complete documentation will live under `docs/`. Contributors and AI agents must read `AGENTS.md` before changing the repository.
+- [`AGENTS.md`](AGENTS.md): mandatory engineering and AI-agent rules
+- [`docs/PRODUCT.md`](docs/PRODUCT.md): product scope, branding and user experience
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): system boundaries and runtime design
+- [`docs/PACKAGES.md`](docs/PACKAGES.md): package contracts and lifecycle
+- [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md): ordered junior-ready delivery plan
+- [`docs/BACKLOG.md`](docs/BACKLOG.md): current implementation status and next work
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): accepted architecture decisions
+
+## Repository status
+
+The repository is in the documentation and foundation phase. Production code starts only after the contracts in this repository are internally consistent.
 
 ## License
 
