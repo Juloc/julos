@@ -1,394 +1,291 @@
 ﻿# Implementation plan
 
-This plan is ordered. Do not start a later milestone while an earlier milestone has unresolved architecture or acceptance failures.
+This plan defines the mandatory delivery order. `WORK_BREAKDOWN.md` contains the individual junior-ready issues for each phase.
 
-Each numbered work item should normally become one GitHub issue. Split an item only when the resulting issues can be completed and validated independently.
+Do not start a later phase while an earlier phase has unresolved architecture, security or acceptance failures. Limited parallel work is allowed only when the listed dependencies are already stable and the branches do not require temporary incompatible contracts.
 
-## M0 — Repository foundation
+## Phase 0 — Repository and engineering foundation
 
-### M0.1 Documentation baseline
+Work items: `FND-001` through `FND-007`.
 
-- Add product, architecture, package, decision and implementation documentation.
-- Add contributor and AI-agent rules.
-- Add encoding and line-ending policy.
-- Add pull-request template.
+Deliver:
 
-Acceptance:
+- solution and project boundaries
+- pinned toolchains
+- TypeScript ES-module frontend build
+- architecture tests
+- repository validation commands
+- development Compose stack
+- pull-request CI
+- version metadata foundation
 
-- all foundation documents agree on scope and terminology
-- README links every authoritative document
-- backlog identifies the next implementation issue
+Gate:
 
-### M0.2 Solution skeleton
+- clean checkout builds and tests with one documented command
+- architecture tests enforce dependency direction
+- development stack reaches healthy state
+- no feature placeholder or product-specific Core dependency exists
 
-- Create the solution and directories for Core, Server, Desktop, Contracts, Package SDK, Agent and tests.
-- Pin the supported .NET SDK in the repository.
-- Add build-wide analyzers and nullable reference types.
-- Add minimal frontend toolchain only after documenting the selected approach.
+## Phase 1 — Core platform model
 
-Acceptance:
+Work items: `CORE-001` through `CORE-008`.
 
-- clean checkout builds with one documented command
-- no package-specific dependency exists in Core
-- architecture tests can reference the project structure
+Deliver:
 
-### M0.3 Local development stack
+- identifiers, clock and revisions
+- package lifecycle
+- applications and launch targets
+- layouts, windows and widgets
+- session references
+- Agents
+- permissions and scopes
+- problems, notifications and audit metadata
 
-- Add Docker Compose for JulOS Server and PostgreSQL.
-- Add development configuration examples without real secrets.
-- Add health and readiness endpoints.
-- Add deterministic database migration startup.
+Gate:
 
-Acceptance:
+- all domain invariants have unit tests
+- Domain references only base libraries
+- no Docker, Proxmox, Caddy, protocol or file-provider type appears in Core
 
-- `docker compose up` reaches healthy state
-- missing required configuration fails with an actionable message
-- restarts do not create duplicate migrations or seed data
+## Phase 2 — Persistence, authentication and core APIs
 
-### M0.4 Continuous integration
+Work items: `API-001` through `API-010`.
 
-- Build backend and frontend.
-- Run unit, architecture and integration tests.
-- Validate formatting, Markdown links and package manifests.
-- Build container images without publishing them on pull requests.
+Deliver:
 
-Acceptance:
+- PostgreSQL mappings and migrations
+- optimistic concurrency
+- local authentication
+- backend authorization
+- profile preferences
+- common errors and correlation IDs
+- background operations
+- encrypted secret references
+- audit service
+- SignalR event hub
 
-- the same validation is runnable locally
-- failure output identifies the failing project or rule
+Gate:
 
-## M1 — Core and authentication
+- authenticated desktop foundation is reachable
+- every mutation is permission-protected
+- secrets are absent from responses and logs
+- migration, concurrency and API integration tests pass
 
-### M1.1 Core domain model
+## Phase 3 — Desktop shell
 
-Implement only core-owned entities:
+Work items: `DESK-001` through `DESK-012`.
 
-- user and role references
-- package installation
-- capability registration
-- application definition
-- window and layout state
-- agent identity
-- problem and notification
-- audit entry
+Deliver:
 
-Acceptance:
+- Fluent 2 design system
+- taskbar, launcher and command palette
+- independent windows
+- drag, resize, focus and z-order
+- snapping
+- layout persistence
+- responsive desktop/tablet/mobile behavior
+- notifications and problem center
+- widget host
+- accessibility and keyboard behavior
 
-- no infrastructure product appears in core entity names
-- domain invariants have unit tests
-
-### M1.2 Local authentication
-
-- Implement local login and secure session handling.
-- Add roles and permission claims.
-- Prepare an OIDC provider contract without implementing provider-specific code.
-
-Acceptance:
-
-- unauthenticated access cannot reach desktop or APIs
-- authorization is validated by backend tests
-
-### M1.3 Secrets service
-
-- Store encrypted secret values separately from normal configuration.
-- Return opaque secret references to packages.
-- Prevent values from appearing in API responses and logs.
-
-Acceptance:
-
-- secret round-trip and access tests pass
-- log tests show no plaintext value
-
-## M2 — Desktop shell
-
-### M2.1 Desktop layout
-
-- Create desktop surface, taskbar, launcher, notification area and settings entry.
-- Use Fluent 2 design tokens consistently.
-- Support system, light and dark themes.
-
-Acceptance:
-
-- desktop works at desktop, tablet and mobile viewport sizes
-- no global CSS override is required for package applications
-
-### M2.2 Window manager
-
-Window state:
-
-```text
-WindowId, AppId, Title, Position, Size, State, ViewportClass,
-DesktopId, ZIndex, SessionId
-```
-
-Implement:
-
-- open and focus
-- move and resize
-- minimize, maximize and close
-- left, right and quarter snapping
-- configurable single-instance or multi-instance applications
-
-Acceptance:
+Gate:
 
 - five simultaneous windows remain usable
-- snapping never places a window outside the usable desktop
-- keyboard and touch interactions have tests where practical
+- reload restores layout
+- mobile mode uses safe task switching
+- window interactions meet performance budget
+- keyboard and accessibility checklist passes
 
-### M2.3 Layout persistence
+## Phase 4 — Package platform
 
-- Persist layout per user and viewport class.
-- Restore after reload and reconnect.
-- Separate window state from runtime session state.
+Work items: `PKG-001` through `PKG-012`.
 
-Acceptance:
+Deliver:
 
-- desktop and mobile layouts do not overwrite each other
-- missing applications are skipped with a visible explanation
+- signed manifest schema
+- artifact verification
+- Runtime Manager
+- package storage isolation
+- package worker contract
+- install, configure, enable, disable, update and remove
+- capability broker
+- signed frontend module host
+- Package Manager UI
+- reference test package
 
-## M3 — Package runtime
+Gate:
 
-### M3.1 Versioned manifest
+- a deliberately faulted package does not stop Server or Desktop
+- Runtime Manager cannot control unrelated containers
+- package schemas are isolated
+- packages communicate only through declared contracts and capabilities
 
-- Define JSON schema and validation errors.
-- Add package identity, versions, compatibility, permissions, applications, widgets and capabilities.
+## Phase 5 — Agent and host observability
 
-Acceptance:
+Work items: `AGT-001` through `AGT-006`.
 
-- valid and invalid manifest fixtures are tested
-- incompatible packages cannot be enabled
+Deliver:
 
-### M3.2 Package lifecycle
+- one-time enrollment
+- durable Agent identity
+- outbound authenticated connection
+- typed command dispatcher
+- Linux host metrics
+- host application and widgets
+- Agent diagnostics
 
-- Install, configure, enable, disable and remove.
-- Add package health, logs and fault state.
-- Add package-owned database migrations.
+Gate:
 
-Acceptance:
+- revoked Agents cannot reconnect
+- no arbitrary shell command exists
+- unavailable metrics are unknown rather than zero
+- offline state appears without page reload
 
-- a deliberately failing package does not stop the core
-- disabling a package removes its apps and widgets without deleting configuration
+## Phase 6 — Remote and Browser
 
-### M3.3 Capability broker
+Work items: `REM-001` through `REM-008` and `BRW-001` through `BRW-005`.
 
-- Register providers by versioned capability.
-- Resolve requests using enabled packages and target support.
-- Validate user permissions and audit mutations.
+Deliver:
 
-Acceptance:
+- protocol-neutral Remote contracts
+- evidence-based Julgate inventory
+- shared transport extraction
+- Remote worker and display client
+- RDP, VNC and SSH adapters
+- isolated Chromium runtime
+- persistent, temporary and fixed-application browser modes
 
-- packages do not reference each other directly
-- denied capability requests return explicit authorization errors
+Gate:
 
-## M4 — Agent and widgets
+- Julgate and JulOS share extracted implementation rather than copied code
+- Browser reaches internal DNS and private addresses without public exposure
+- session lifecycle remains separate from window lifecycle
+- temporary profiles are cleaned
+- supported protocol parity tests pass
 
-### M4.1 Agent enrollment
+## Phase 7 — Docker and Proxmox
 
-- Create one-time enrollment token.
-- Generate durable agent identity.
-- Use outbound authenticated connection and heartbeat.
+Work items: `DKR-001` through `DKR-005` and `PVE-001` through `PVE-005`.
 
-Acceptance:
+Deliver:
 
-- revoked agents cannot reconnect
-- offline agents are detected without manual refresh
+- Agent Docker capability
+- Docker inventory, application, discovery and problems
+- Proxmox connection, inventory, application, widgets and control
+- Proxmox console through Remote capability
 
-### M4.2 Host metrics
+Gate:
 
-- CPU, load, memory, uptime, storage and network counters.
-- Label values with observation time.
-
-Acceptance:
-
-- unavailable metrics do not become zero values
-- Linux collection is tested against fixtures or integration hosts
-
-### M4.3 Widget framework
-
-- Register, place, resize and remove widgets.
-- Stream updates without page reload.
-- Support loading, stale, offline and error states.
-
-Acceptance:
-
-- package widgets cannot modify another widget's state
-- widget clicks can open a registered application or deep link
-
-## M5 — Browser and Remote
-
-### M5.1 Remote contracts
-
-- Define session creation, connection state, display, input, clipboard and termination contracts.
-- Define reconnect and inactivity policies.
-
-Acceptance:
-
-- contracts are protocol-neutral
-- session and window lifecycle remain independent
-
-### M5.2 Julgate extraction
-
-- Inventory reusable Julgate session and transport code.
-- Extract backend and client components without copying old product UI.
-- Add parity checklist for RDP, VNC and SSH.
-
-Acceptance:
-
-- every extracted component has tests or a documented integration test
-- Julgate remains deployable during migration
-
-### M5.3 Browser runtime
-
-- Build isolated Chromium runtime.
-- Add persistent, temporary and fixed-app profiles.
-- Connect display and input through Remote.
-- Add session limits, cleanup and internal network access.
-
-Acceptance:
-
-- local IP and DNS targets work without public exposure
-- temporary profile data is removed after termination
-- multiple browser windows are isolated
-
-## M6 — Docker and Proxmox
-
-### M6.1 Docker connection and inventory
-
-- Connect through an agent capability.
-- Read hosts, Compose projects, services, containers, images, volumes and networks.
-- Add controlled lifecycle actions behind permissions.
-
-Acceptance:
-
-- no Docker socket is exposed publicly
-- read-only configuration cannot perform mutations
-
-### M6.2 Docker app discovery
-
-Discovery priority:
-
-1. JulOS labels
-2. Compose service metadata
-3. Caddy route integration
-4. published ports
-5. container and image heuristics
-
-Stable identity:
-
-```text
-agent-id + compose-project + service-name
-```
-
-Acceptance:
-
-- restart or container recreation does not duplicate an application
+- Docker socket is not publicly exposed
+- read-only connections cannot mutate
 - discovered applications require approval
+- stable identities survive container recreation
+- Proxmox write actions remain disabled by default
 
-### M6.3 Docker problems
+## Phase 8 — Files and Caddy
 
-Detect unhealthy, restart loop, stopped, unreachable, missing mount and resource-limit conditions.
+Work items: `FILE-001` through `FILE-007` and `CAD-001` through `CAD-002`.
 
-Acceptance:
+Deliver:
 
-- repeated observations update one problem instead of creating duplicates
+- provider-neutral file contracts
+- File Manager and transfer queue
+- Agent-local, SMB, SFTP and WebDAV providers
+- Remote and Browser transfer integration
+- Caddy UI integration API
+- JulOS Caddy package
 
-### M6.4 Proxmox inventory
+Gate:
 
-- Connect through supported Proxmox API authentication.
-- Read clusters, nodes, VMs, LXCs, storage, tasks and backups.
-- Add explicitly enabled control actions.
+- path traversal and provider-root escape tests pass
+- provider errors remain actionable
+- Caddy package works without Docker package
+- Caddy package uses only versioned Caddy UI APIs
 
-Acceptance:
+## Phase 9 — Discovery and operational hardening
 
-- write actions are disabled by default
-- console requests use Remote capability
+Work items: `DISC-001` through `DISC-005` and `OPS-001` through `OPS-007`.
 
-## M7 — Files and Caddy
+Deliver:
 
-### M7.1 File contracts and manager
+- ARP, ICMP, mDNS, SSDP and optional SNMP observations
+- discovery approval lifecycle
+- safe mode
+- backup and restore
+- retention and cleanup
+- security hardening
+- performance and accessibility passes
 
-- Define provider-neutral paths and operations.
-- Implement local agent, SMB, SFTP and WebDAV providers.
-- Add upload, download, copy, move, rename, delete and preview.
-
-Acceptance:
-
-- path traversal is blocked
-- destructive actions require explicit confirmation
-- provider errors retain their useful cause
-
-### M7.2 Caddy UI integration API
-
-Implement in Caddy UI:
-
-```text
-GET /api/integration/summary
-GET /api/integration/routes
-GET /api/integration/certificates
-GET /api/integration/problems
-```
-
-Acceptance:
-
-- API is versioned and authenticated
-- no JulOS database coupling is introduced
-
-### M7.3 Caddy package
-
-- Show health, route summary, certificate state and reload problems.
-- Open Caddy UI for complete management.
-
-Acceptance:
-
-- package functions without Docker package
-- package never reads Caddy UI database directly
-
-## M8 — Discovery, problems and hardening
-
-### M8.1 Network discovery
-
-- Collect ARP, ICMP, mDNS, SSDP and optional SNMP observations through agents.
-- Implement `Discovered → Confirmed → Managed → Ignored` lifecycle.
-
-Acceptance:
+Gate:
 
 - discovery never grants management automatically
-- ignored devices do not repeatedly reappear as new
+- ignored devices remain ignored
+- clean restore test succeeds
+- safe mode works without optional packages
+- no high-severity unresolved security blocker remains
+- documented performance and accessibility budgets pass
 
-### M8.2 Problem center
+## Phase 10 — Release and migration
 
-Common problem fields:
+Work items: `REL-001` through `REL-008`.
 
-```text
-ProblemId, SourcePackage, ResourceId, Severity, Title, Description,
-DetectedAt, LastSeenAt, SuggestedAction, DeepLink
-```
+Deliver:
 
-Acceptance:
+- installation wizard and setup guide
+- operational runbooks
+- fresh-install validation
+- supported-upgrade validation
+- Julgate parity and migration
+- signed release pipeline
+- final backup/restore release test
+- JulOS 1.0 release
 
-- problems deduplicate by source and resource identity
-- stale and resolved states are explicit
+Gate:
 
-### M8.3 Security and recovery
+- every success criterion in `PRODUCT.md` passes
+- all release artifacts use immutable versions or digests
+- release notes and migration notes are complete
+- documentation matches the release
+- no critical or high release blocker remains
 
-- rate limits, CSRF and content security policy
-- audit coverage
-- backup and restore
-- package safe mode
-- runtime resource limits
-- dependency and container scanning
+## Parallelization rules
 
-Acceptance:
+Allowed examples:
 
-- JulOS can start with optional packages disabled
-- documented restore test succeeds
+- pure Desktop geometry tests may proceed while unrelated API implementation is reviewed, after the window contract is stable
+- Caddy UI integration API can be developed in its repository while Files work proceeds
+- RDP, VNC and SSH adapters may proceed in parallel after common Remote contracts and worker lifecycle are stable
 
-## M9 — 1.0 release
+Forbidden examples:
 
-- complete end-to-end setup documentation
-- test fresh installation and upgrade
-- publish versioned images and release notes
-- verify Julgate migration status
-- create package template only if SDK is stable
+- building Docker UI before package frontend host and Agent contracts exist
+- copying Julgate code while shared extraction design is unresolved
+- implementing package installation with raw Docker access before Runtime Manager
+- adding file providers before path and permission contracts
+- starting release polish while restore is untested
 
-Release acceptance is defined in `docs/PRODUCT.md`.
+## Milestone completion process
+
+At the end of every phase:
+
+1. run full repository validation
+2. run the phase-specific integration checklist
+3. review architecture, security and operational documents
+4. update `BACKLOG.md`
+5. update `WORK_BREAKDOWN.md` from implementation evidence
+6. close completed issues
+7. create only the next actionable phase issues
+8. publish an internal milestone note when runtime behavior changed
+
+## Change control
+
+When implementation reveals that this order or architecture is incorrect:
+
+1. stop the affected implementation
+2. document the evidence
+3. update or add an accepted decision
+4. update every affected specification
+5. adjust issue dependencies
+6. continue only after the new design is internally consistent
+
+Do not route around a blocked dependency with a temporary implementation.
