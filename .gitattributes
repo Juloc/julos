@@ -1,0 +1,36 @@
+* text=auto
+
+*.md text eol=crlf
+*.txt text eol=crlf
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.sln text eol=crlf
+*.slnx text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+*.json text eol=crlf
+*.ts text eol=crlf
+*.tsx text eol=crlf
+*.js text eol=crlf
+*.jsx text eol=crlf
+*.css text eol=crlf
+*.scss text eol=crlf
+*.html text eol=crlf
+
+*.sh text eol=lf
+*.bash text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.pdf binary
