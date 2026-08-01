@@ -1,4 +1,4 @@
-using JulOS.Domain.Primitives;
+﻿using JulOS.Domain.Primitives;
 using JulOS.Domain.Sessions;
 using Microsoft.Extensions.Time.Testing;
 

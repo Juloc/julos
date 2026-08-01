@@ -245,6 +245,8 @@ Acceptance:
 
 ### CORE-005 — Implement session-reference domain model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver protocol-neutral states and lifecycle policy.
@@ -253,6 +255,12 @@ Acceptance:
 
 - window close and session termination are distinct
 - invalid lifecycle transitions fail
+
+Implemented in `JulOS.Domain.Sessions`. A closing window enters the aggregate only through `ApplyWindowClosed`, which dispatches through the session's `SessionLifecyclePolicy`. Closing a window can therefore disconnect, suspend or end a session, but it can never terminate one implicitly, which is decision `D018` made structural.
+
+`SessionRequest` carries an opaque kind and target reference owned by the requesting package, so no protocol name enters Core.
+
+Deliberately absent from the aggregate: the owning package, the user and the expiry timestamp listed in `DATA_AND_API_CONTRACTS.md` section 2.10. `ARCHITECTURE.md` section 11.1 limits what Core sees to the request, reference, state, lifecycle policy and failure code. Those three fields are ownership and persistence concerns and are mapped by `API-001`.
 
 ### CORE-006 — Implement Agent domain model
 

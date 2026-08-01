@@ -8,7 +8,16 @@ import { fileURLToPath } from 'node:url';
 export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** Directories that hold generated or external content and are never inspected. */
-const ignoredDirectories = new Set(['.git', 'bin', 'obj', 'node_modules', 'dist', 'build', 'artifacts']);
+const ignoredDirectories = new Set([
+  '.git',
+  '.claude',
+  'bin',
+  'obj',
+  'node_modules',
+  'dist',
+  'build',
+  'artifacts',
+]);
 
 /** Yields every committed-looking file below `directory`, as an absolute path. */
 export async function* walkFiles(directory = repositoryRoot) {
