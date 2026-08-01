@@ -285,6 +285,16 @@ Every long-running service exposes:
 
 Core readiness does not require optional packages. A package worker has its own readiness state.
 
+JulOS Server implements this at `/health/live` and `/health/ready`. Liveness registers no dependency check, so a database outage cannot cause an orchestrator restart loop. Readiness opens a core-database connection and executes a statement, because a reachable server that has not finished starting or refuses authentication is not a ready dependency.
+
+The container probe runs the application itself:
+
+```text
+dotnet /application/JulOS.Server.dll --health-check
+```
+
+The runtime image therefore ships no HTTP client tool.
+
 ## 15. Deployment topology
 
 ### 15.1 Required Compose services
@@ -294,6 +304,8 @@ julos-server
 julos-postgres
 julos-runtime-manager
 ```
+
+`deploy/compose/compose.yaml` currently defines the first two as the development stack. Runtime Manager joins it with `PKG-003`. The development stack publishes only the Server port, bound to the loopback interface, and requires `JULOS_POSTGRES_PASSWORD` to be set; there is no default credential.
 
 ### 15.2 Optional services
 

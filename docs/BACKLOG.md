@@ -20,8 +20,8 @@ Status values:
 | FND-002 | Architecture enforcement | Done | Dependency graph, forbidden namespaces, product terminology and composition root are enforced by tests. |
 | FND-003 | Frontend toolchain | Done | `src/JulOS.Desktop` type checks, tests and builds native ES modules without a bundler. |
 | FND-004 | Validation entrypoints | Done | `tools/validate.sh` and `tools/validate.ps1` wrap one shared implementation. |
-| FND-005 | Local development stack | Ready | Next implementation task. |
-| FND-006 | Pull-request CI | Planned | Depends on validation commands. |
+| FND-005 | Local development stack | Done | Server and PostgreSQL reach a healthy state; readiness verifies the database. |
+| FND-006 | Pull-request CI | Ready | Next implementation task. |
 | FND-007 | Version metadata | Planned | Can follow solution skeleton. |
 | Phase 1 | Core platform model | Planned | Starts after Phase 0 gate. |
 | Phase 2 | Persistence, authentication and core APIs | Planned | Depends on Core domain model. |
@@ -36,19 +36,19 @@ Status values:
 
 ## Next issue
 
-### FND-005 — Add the development Compose stack
+### FND-006 — Add pull-request continuous integration
 
 Scope:
 
-- JulOS Server and PostgreSQL services under `deploy/compose`
-- development volumes
-- safe example environment file
-- health and readiness wiring
+- backend build and tests
+- frontend type check and build
+- policy and documentation validation
+- container build without push
 
 Acceptance:
 
-- fresh `docker compose up` reaches healthy state
-- no real secret is committed
+- local validation and CI use the same commands
+- cache does not hide missing generated dependencies
 
 ## Specification status
 

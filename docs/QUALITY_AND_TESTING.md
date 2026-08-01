@@ -301,9 +301,11 @@ Current stages:
 | `desktop-build` | Desktop production assets |
 | `markdown-links` | relative Markdown links resolve |
 | `package-manifests` | package manifest validation |
-| `container-build` | container image build |
+| `container-build` | Compose configuration and container image build |
 
-A stage whose subject does not exist yet reports `skipped` with the reason and the work item that implements it. It never reports a pass it did not perform. `PKG-001` implements manifest validation and `FND-005` implements the container build.
+A stage whose subject does not exist yet reports `skipped` with the reason and the work item that implements it. It never reports a pass it did not perform. `PKG-001` implements manifest validation.
+
+`container-build` reports `skipped` when no container runtime answers, because a developer without one must still be able to validate everything else. Continuous integration always has a runtime, so the images are built there.
 
 `node tools/normalize-encoding.mjs` corrects every violation the `policy` stage reports.
 

@@ -86,6 +86,16 @@ pwsh tools/validate.ps1
 
 Both entry points call `tools/validate.mjs`, so they run identical checks. Add `--list` to see the stages, `--stage <name>` to run one. A failed stage exits non-zero and names itself. `node tools/normalize-encoding.mjs` corrects encoding-policy violations.
 
+## Run locally
+
+```bash
+cd deploy/compose
+cp .env.example .env
+docker compose up --build
+```
+
+Set `JULOS_POSTGRES_PASSWORD` in `.env` first; the stack refuses to start without it. See [`deploy/compose/README.md`](deploy/compose/README.md).
+
 ## Repository status
 
 The product and architecture specification is complete. The .NET solution skeleton exists and its dependency boundaries are covered by architecture tests. Work continues through the dependency order in `docs/WORK_BREAKDOWN.md`; `docs/BACKLOG.md` names the current item.

@@ -114,6 +114,8 @@ The manifest and container stages report `skipped` with the work item that imple
 
 ### FND-005 — Add development Compose stack
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver:
@@ -127,6 +129,14 @@ Acceptance:
 
 - fresh `docker compose up` reaches healthy state
 - no real secret is committed
+
+Implemented as `deploy/compose/compose.yaml` and `src/JulOS.Server/Dockerfile`, with base image tags pinned per decision `D020`.
+
+Liveness reports only that the process runs, so a database outage cannot cause a restart loop. Readiness runs `PostgreSqlHealthCheck`, which opens a connection and executes a statement; a reachable server that has not finished starting or refuses authentication is not ready. Server refuses to start without `ConnectionStrings__CoreDatabase`, and the stack refuses to start without `JULOS_POSTGRES_PASSWORD`, so no default credential can reach a running system.
+
+The container probe runs the application with `--health-check` instead of a shell tool, so the runtime image ships no HTTP client. No database port is published.
+
+Acceptance was verified on a clean stack: both services reached `healthy`, `/health/live` and `/health/ready` returned 200, and stopping PostgreSQL moved readiness to 503 while liveness stayed 200.
 
 ### FND-006 — Add pull-request CI
 

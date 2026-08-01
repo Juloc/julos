@@ -1,0 +1,56 @@
+# JulOS development stack.
+#
+# Start from this directory:
+#   cp .env.example .env      # then set a password
+#   docker compose up --build
+#
+# This file is for development. Runtime Manager, package workers and session
+# runtimes join the stack with the work items that implement them.
+
+name: julos-dev
+
+services:
+  postgres:
+    image: postgres:18.2-alpine
+    environment:
+      POSTGRES_DB: ${JULOS_POSTGRES_DB:-julos}
+      POSTGRES_USER: ${JULOS_POSTGRES_USER:-julos}
+      POSTGRES_PASSWORD: ${JULOS_POSTGRES_PASSWORD:?Set JULOS_POSTGRES_PASSWORD in deploy/compose/.env}
+    # No port is published. The database is reachable only from the stack network.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready --username="$$POSTGRES_USER" --dbname="$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ../..
+      dockerfile: src/JulOS.Server/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__CoreDatabase: >-
+        Host=postgres;Port=5432;Database=${JULOS_POSTGRES_DB:-julos};Username=${JULOS_POSTGRES_USER:-julos};Password=${JULOS_POSTGRES_PASSWORD:?Set JULOS_POSTGRES_PASSWORD in deploy/compose/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Bound to the loopback interface. The development stack is not a public deployment.
+      - "127.0.0.1:${JULOS_SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "dotnet", "/application/JulOS.Server.dll", "--health-check"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

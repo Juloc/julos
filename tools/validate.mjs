@@ -19,9 +19,23 @@ const passed = (detail) => ({ status: 'passed', detail });
 const skipped = (reason) => ({ status: 'skipped', detail: reason });
 const failed = (detail) => ({ status: 'failed', detail });
 
+/**
+ * npm is a batch script on Windows, and Node refuses to start one without a
+ * shell. Every argument this file passes is a literal defined above, so shell
+ * word splitting cannot change what runs.
+ */
+function needsShell(command) {
+  return process.platform === 'win32' && command === 'npm';
+}
+
 /** Runs a command and fails the stage on a non-zero exit code. */
-function run(command, args, cwd = repositoryRoot) {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit', shell: true });
+function run(command, args, cwd = repositoryRoot, env = {}) {
+  const result = spawnSync(command, args, {
+    cwd,
+    stdio: 'inherit',
+    shell: needsShell(command),
+    env: { ...process.env, ...env },
+  });
 
   if (result.error) {
     return failed(`'${command}' could not be started: ${result.error.message}`);
@@ -30,6 +44,16 @@ function run(command, args, cwd = repositoryRoot) {
   return result.status === 0
     ? passed(`${command} ${args.join(' ')}`)
     : failed(`'${command} ${args.join(' ')}' exited with code ${result.status}`);
+}
+
+/** Returns whether a container runtime is installed and its daemon answers. */
+function isDockerAvailable() {
+  const result = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
+    cwd: repositoryRoot,
+    stdio: 'ignore',
+  });
+
+  return !result.error && result.status === 0;
 }
 
 async function exists(path) {
@@ -136,15 +160,41 @@ const stages = [
   },
   {
     name: 'container-build',
-    title: 'Build the container images',
+    title: 'Validate the Compose stack and build the container images',
     async run() {
-      const dockerfiles = await findFiles((path) => /(^|[\\/])Dockerfile(\.|$)/.test(path));
+      const dockerfiles = await findFiles((path) => /[\\/]Dockerfile(\.|$)/.test(path));
 
-      return dockerfiles.length === 0
-        ? skipped('no Dockerfile exists yet; the deployment stack is FND-005')
-        : failed(
-            `${dockerfiles.length} Dockerfile(s) found but this stage is not implemented yet. Implement it with FND-005:\n  ${dockerfiles.join('\n  ')}`,
-          );
+      if (dockerfiles.length === 0) {
+        return skipped('no Dockerfile exists yet');
+      }
+
+      if (!isDockerAvailable()) {
+        return skipped('no reachable container runtime; the images are built by continuous integration');
+      }
+
+      // A placeholder password only proves that the file interpolates. The stack
+      // itself still refuses to start without a real value.
+      const composeCheck = run(
+        'docker',
+        ['compose', '--file', 'deploy/compose/compose.yaml', 'config', '--quiet'],
+        repositoryRoot,
+        { JULOS_POSTGRES_PASSWORD: 'validation-placeholder' },
+      );
+
+      if (composeCheck.status === 'failed') {
+        return composeCheck;
+      }
+
+      for (const dockerfile of dockerfiles) {
+        const tag = `julos-validate/${dockerfile.replaceAll('/', '-').toLowerCase()}`;
+        const build = run('docker', ['build', '--file', dockerfile, '--tag', tag, '.']);
+
+        if (build.status === 'failed') {
+          return build;
+        }
+      }
+
+      return passed(`compose configuration and ${dockerfiles.length} image(s) build`);
     },
   },
 ];

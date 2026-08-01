@@ -23,6 +23,7 @@ src/JulOS.Desktop/build/
 .env
 .env.*
 !.env.example
+!**/.env.example
 
 # Editor and operating system
 .vs/

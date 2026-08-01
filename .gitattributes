@@ -27,6 +27,9 @@ package-lock.json text eol=lf
 *.yaml text eol=lf
 Dockerfile text eol=lf
 Dockerfile.* text eol=lf
+.dockerignore text eol=lf
+*.env text eol=lf
+.env.example text eol=lf
 
 *.png binary
 *.jpg binary
