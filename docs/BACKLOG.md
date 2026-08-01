@@ -30,7 +30,8 @@ Status values:
 | CORE-004 | Desktop layout | Done | Z-order is derived and gap-free; a layout belongs to one viewport class. |
 | CORE-005 | Session references | Done | Protocol-neutral states; a closing window can never implicitly terminate a session. |
 | CORE-007 | Problems, notifications and audit | Done | One problem per condition; the audit event exposes no way to change it. |
-| Phase 1 | Core platform model | In progress | `CORE-006` and `CORE-008` remain. |
+| CORE-008 | Permissions and scopes | Done | Pure evaluation, default deny; read never implies control. |
+| Phase 1 | Core platform model | In progress | `CORE-006` remains. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | Phase 2 | Persistence, authentication and core APIs | In progress | `API-006` is done; the rest depends on the Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |

@@ -343,6 +343,8 @@ Deliberately absent: the owning user and the deep link from `DATA_AND_API_CONTRA
 
 ### CORE-008 — Implement permission and scope model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver permission strings, subject assignments and target scopes.
@@ -351,6 +353,14 @@ Acceptance:
 
 - read and control permissions remain separate
 - scope evaluation tests cover global, package and resource scopes
+
+Implemented in `JulOS.Domain.Permissions`. `PermissionEvaluator.Grants` is a pure function over an assignment set, so an authorization decision cannot depend on ambient state and is fully testable.
+
+Read and control separation is structural: permission equality is exact, and the evaluator never derives one permission from another. A test proves that holding a read permission grants nothing about control.
+
+Default deny. An empty assignment set grants nothing, and a narrow grant never widens: a package or resource scope satisfies only an exact same-kind, same-identity target, while a global scope satisfies any target.
+
+`PermissionAssignment` carries no revision, because the table in `DATA_AND_API_CONTRACTS.md` section 2.2 declares none. A grant is created and withdrawn rather than edited in place, which also keeps the audit trail readable.
 
 ## Phase 2 — Persistence, authentication and core APIs
 
