@@ -271,34 +271,41 @@ Expected behavior is documented for each test. Failures must not become empty da
 
 ## 11. Validation commands
 
-The repository must provide one top-level validation command for local and CI use, for example:
+The repository provides one top-level validation command for local and CI use:
 
 ```text
-./tools/validate.sh
+sh tools/validate.sh
 ```
 
 Windows equivalent:
 
 ```text
-tools\validate.ps1
+pwsh tools/validate.ps1
 ```
 
-The command runs only repository-supported steps and returns non-zero on failure.
+Both files are thin wrappers around `tools/validate.mjs`, which holds the only implementation. They cannot drift apart because there is nothing in them to drift.
 
-Expected stages:
+The command returns non-zero on failure and names the failed stage. `--list` prints the stages, `--stage <name>` runs a single stage.
 
-1. format and repository policy validation
-2. restore
-3. backend build
-4. frontend type check and build
-5. unit tests
-6. architecture tests
-7. integration tests that do not require optional protocol environments
-8. Markdown link validation
-9. package manifest validation
-10. container build validation when relevant
+Current stages:
 
-The PowerShell and shell entrypoints invoke the same underlying commands and do not implement different validation logic.
+| Stage | Checks |
+|---|---|
+| `policy` | encoding, line endings and final newline against decision `D012` |
+| `restore` | .NET dependency restore |
+| `build` | .NET solution build |
+| `dotnet-test` | unit and architecture tests |
+| `desktop-install` | Desktop dependencies, skipped when already installed |
+| `desktop-typecheck` | Desktop type checking |
+| `desktop-test` | Desktop logic tests |
+| `desktop-build` | Desktop production assets |
+| `markdown-links` | relative Markdown links resolve |
+| `package-manifests` | package manifest validation |
+| `container-build` | container image build |
+
+A stage whose subject does not exist yet reports `skipped` with the reason and the work item that implements it. It never reports a pass it did not perform. `PKG-001` implements manifest validation and `FND-005` implements the container build.
+
+`node tools/normalize-encoding.mjs` corrects every violation the `policy` stage reports.
 
 ## 12. CI structure
 

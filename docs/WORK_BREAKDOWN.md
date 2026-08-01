@@ -90,6 +90,8 @@ The milestone needs real code to prove the pipeline, so it delivers the startup 
 
 ### FND-004 — Implement repository validation entrypoints
 
+Status: done.
+
 Depends on: FND-001, FND-003.
 
 Deliver:
@@ -103,6 +105,12 @@ Acceptance:
 
 - both entrypoints run equivalent checks
 - any failed stage returns non-zero and identifies the stage
+
+Implemented as `tools/validate.mjs` with both entry points reduced to wrappers, so the two platforms cannot run different logic. `tools/lib/encoding-policy.mjs` turns decision `D012` into an executable check and backs `tools/normalize-encoding.mjs`.
+
+Acceptance was verified by breaking a Markdown link and by removing a final newline; each failed its stage, named it and exited non-zero.
+
+The manifest and container stages report `skipped` with the work item that implements them, so an unvalidated area is visible in the summary rather than counted as a pass.
 
 ### FND-005 — Add development Compose stack
 

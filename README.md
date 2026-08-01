@@ -72,7 +72,19 @@ npm test
 npm run build
 ```
 
-A single repository validation entrypoint covering backend, frontend and policy checks is added by work item `FND-004`.
+One command runs everything the repository can validate:
+
+```bash
+sh tools/validate.sh
+```
+
+On Windows:
+
+```bash
+pwsh tools/validate.ps1
+```
+
+Both entry points call `tools/validate.mjs`, so they run identical checks. Add `--list` to see the stages, `--stage <name>` to run one. A failed stage exits non-zero and names itself. `node tools/normalize-encoding.mjs` corrects encoding-policy violations.
 
 ## Repository status
 

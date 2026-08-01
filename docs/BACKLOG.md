@@ -19,8 +19,8 @@ Status values:
 | FND-001 / M0.2 | Solution skeleton | Done | Solution, central build configuration and the architecture test project build and pass. |
 | FND-002 | Architecture enforcement | Done | Dependency graph, forbidden namespaces, product terminology and composition root are enforced by tests. |
 | FND-003 | Frontend toolchain | Done | `src/JulOS.Desktop` type checks, tests and builds native ES modules without a bundler. |
-| FND-004 | Validation entrypoints | Ready | Next implementation task. |
-| FND-005 | Local development stack | Planned | Depends on solution skeleton. |
+| FND-004 | Validation entrypoints | Done | `tools/validate.sh` and `tools/validate.ps1` wrap one shared implementation. |
+| FND-005 | Local development stack | Ready | Next implementation task. |
 | FND-006 | Pull-request CI | Planned | Depends on validation commands. |
 | FND-007 | Version metadata | Planned | Can follow solution skeleton. |
 | Phase 1 | Core platform model | Planned | Starts after Phase 0 gate. |
@@ -36,18 +36,19 @@ Status values:
 
 ## Next issue
 
-### FND-004 — Implement repository validation entrypoints
+### FND-005 — Add the development Compose stack
 
 Scope:
 
-- `tools/validate.ps1` and `tools/validate.sh`
-- shared underlying validation commands for backend, frontend and repository policy
-- Markdown and manifest validation hooks
+- JulOS Server and PostgreSQL services under `deploy/compose`
+- development volumes
+- safe example environment file
+- health and readiness wiring
 
 Acceptance:
 
-- both entrypoints run equivalent checks
-- any failed stage returns non-zero and identifies the stage
+- fresh `docker compose up` reaches healthy state
+- no real secret is committed
 
 ## Specification status
 
