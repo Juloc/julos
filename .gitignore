@@ -25,6 +25,9 @@ src/JulOS.Desktop/build/
 !.env.example
 !**/.env.example
 
+# Transient agent worktrees
+.claude/worktrees/
+
 # Editor and operating system
 .vs/
 .vscode/*
