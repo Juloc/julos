@@ -47,6 +47,16 @@ Architecture tests enforce:
 
 Tests scan project references, assembly references and forbidden namespaces. Do not add a third-party architecture framework unless the custom rules become materially harder to maintain.
 
+`tests/JulOS.Architecture.Tests` implements these rules against the repository itself rather than against its own compile-time dependencies:
+
+- committed project files supply the project graph, so a forbidden reference cannot hide behind the test project's references
+- compiled assembly metadata supplies real type usage, so implicit usings cannot hide a dependency that never appears as a `using` directive
+- committed C# sources supply terminology, so a product type defined inside Core is caught even though it creates no external reference
+
+The allowed project graph is a complete table. A new project fails the coverage test until its allowed dependencies are declared, which makes every boundary an explicit decision.
+
+Architecture tests read build output, so the whole solution must be built before they run. `dotnet test --solution JulOS.slnx` does this; a missing assembly fails with an explicit message instead of passing silently.
+
 ### 2.4 Persistence integration tests
 
 Run against a real supported PostgreSQL container or isolated database:

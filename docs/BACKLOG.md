@@ -17,8 +17,8 @@ Status values:
 | M0.1 | Documentation baseline | Done | Product, architecture and contributor rules established. |
 | M0.1a | Complete project specification | Done | UX, technical design, data/API, security, operations, testing, Julgate migration and issue blueprint documented. |
 | FND-001 / M0.2 | Solution skeleton | Done | Solution, central build configuration and the architecture test project build and pass. |
-| FND-002 | Architecture enforcement | Ready | Next implementation task. Extends `tests/JulOS.Architecture.Tests`. |
-| FND-003 | Frontend toolchain | Planned | Depends on solution skeleton. |
+| FND-002 | Architecture enforcement | Done | Dependency graph, forbidden namespaces, product terminology and composition root are enforced by tests. |
+| FND-003 | Frontend toolchain | Ready | Next implementation task. Creates `src/JulOS.Desktop`. |
 | FND-004 | Validation entrypoints | Planned | Depends on backend and frontend skeleton. |
 | FND-005 | Local development stack | Planned | Depends on solution skeleton. |
 | FND-006 | Pull-request CI | Planned | Depends on validation commands. |
@@ -36,20 +36,19 @@ Status values:
 
 ## Next issue
 
-### FND-002 — Add architecture enforcement
+### FND-003 — Establish the frontend toolchain
 
 Scope:
 
-- extend `tests/JulOS.Architecture.Tests` with the full rule set from `ARCHITECTURE.md`
-- forbidden namespace checks for Domain, Contracts and Agent
-- package-to-package project reference prohibition
-- Contracts dependency checks against EF Core and ASP.NET types
-- Server remains the only composition root
+- create `src/JulOS.Desktop` with TypeScript configuration
+- native ES-module production build without a general SPA framework
+- development watch command
+- desktop logic test project using the built-in Node test runner
 
 Acceptance:
 
-- intentionally adding a forbidden reference fails the test
-- rules match `ARCHITECTURE.md`
+- type checking and production build run locally and in CI
+- generated output is not committed unless explicitly required
 
 ## Specification status
 

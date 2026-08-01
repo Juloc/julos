@@ -1,17 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Architecture rules enforced against the real repository layout.</Description>
+    <Description>Architecture rules enforced against the real repository layout and build output.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="MSTest" />
   </ItemGroup>
 
+  <ItemGroup Label="Lets the tests locate the build output of the projects they inspect.">
+    <AssemblyMetadata Include="JulOS.Configuration" Value="$(Configuration)" />
+    <AssemblyMetadata Include="JulOS.TargetFramework" Value="$(TargetFramework)" />
+  </ItemGroup>
+
   <!--
-    This project inspects project and source files on disk instead of referencing
-    the projects it validates, so a forbidden reference cannot be hidden by the
-    test project's own reference graph.
+    This project inspects project files and compiled assembly metadata instead of
+    referencing the projects it validates, so a forbidden reference cannot be
+    hidden by the test project's own reference graph.
   -->
 
 </Project>

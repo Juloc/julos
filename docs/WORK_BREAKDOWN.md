@@ -43,6 +43,8 @@ Implemented as: `global.json`, `Directory.Build.props`, `Directory.Packages.prop
 
 ### FND-002 — Add architecture enforcement
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver:
@@ -56,6 +58,12 @@ Acceptance:
 
 - intentionally adding a forbidden reference fails the test
 - rules match `ARCHITECTURE.md`
+
+Implemented in `tests/JulOS.Architecture.Tests` as a complete allowed dependency table, compiled-metadata checks for persistence, web and host-resource types, a PascalCase-aware product terminology scanner and composition-root rules. Acceptance was verified by adding a `JulOS.Domain` to `JulOS.Contracts` reference and a Domain type named after a product; both were reported and then removed.
+
+The package-to-package rule is reported as inconclusive until the first project exists under `packages/`, so its inactive state stays visible in the test run instead of appearing as a pass.
+
+The Package SDK public-surface review from `QUALITY_AND_TESTING.md` section 2.3 is implemented by `PKG-001`, when the SDK gains its first public type.
 
 ### FND-003 — Establish frontend toolchain
 
