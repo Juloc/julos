@@ -316,6 +316,8 @@ Acceptance:
 
 ### CORE-007 — Implement problem, notification and audit models
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver deduplication identity, state transitions, notification metadata and append-only audit contract.
@@ -324,6 +326,20 @@ Acceptance:
 
 - repeated observations update one problem
 - resolved problems can reopen on a new observation
+
+Implemented in `JulOS.Domain.Observability`.
+
+`ProblemIdentity` is the reporting package, the condition type and the stable resource identity. `Observe` refuses an identity that does not match, so a restart loop seen a hundred times stays one problem with a rising observation count instead of a hundred entries to dismiss.
+
+A resolved problem reopens on a new observation, because the condition is back and hiding it would leave an operator believing a fixed system is still fixed. An acknowledged or suppressed problem keeps that state: both are decisions the operator made about this exact condition, and the next poll must not undo them.
+
+Severity is a named, ordered value and never a colour, because colour alone is not a usable signal for a colour-blind operator or in a monochrome export.
+
+`AuditEvent` is append-only by construction. Every member is read-only and the type exposes no instance method at all; two reflection tests fail the build if that changes. `AuditOutcome` separates `Denied` from `Failed`, because repeated denials are a security signal and merging them would hide it inside operational noise.
+
+`Notification` carries a deduplication key so an event arriving on every poll produces one message rather than a stream the user learns to dismiss unread.
+
+Deliberately absent: the owning user and the deep link from `DATA_AND_API_CONTRACTS.md` sections 2.15 and 2.16, and the actor, agent and remote address from section 2.17. All are ownership and transport fields mapped by `API-001` and `API-009`.
 
 ### CORE-008 — Implement permission and scope model
 
