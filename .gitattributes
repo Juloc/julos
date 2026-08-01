@@ -9,10 +9,14 @@
 *.props text eol=crlf
 *.targets text eol=crlf
 *.json text eol=crlf
+package.json text eol=lf
+package-lock.json text eol=lf
 *.ts text eol=crlf
 *.tsx text eol=crlf
 *.js text eol=crlf
 *.jsx text eol=crlf
+*.mjs text eol=crlf
+*.cjs text eol=crlf
 *.css text eol=crlf
 *.scss text eol=crlf
 *.html text eol=crlf

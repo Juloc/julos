@@ -1,0 +1,32 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>JulOS</title>
+    <script type="module" src="./scripts/main.js"></script>
+    <script nomodule>
+      document.addEventListener('DOMContentLoaded', function () {
+        var notice = document.getElementById('unsupported-browser');
+        if (notice) {
+          notice.hidden = false;
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <!--
+      This notice is static and bilingual on purpose. It has to work before the
+      localization service loads, and in a browser that cannot run the shell at all.
+    -->
+    <section id="unsupported-browser" hidden lang="en">
+      <h1>JulOS cannot start in this browser</h1>
+      <p>JulOS needs a current browser with support for ES modules, Custom Elements and Shadow DOM.</p>
+      <p lang="de">
+        JulOS benötigt einen aktuellen Browser mit Unterstützung für ES-Module, Custom Elements und
+        Shadow DOM.
+      </p>
+    </section>
+  </body>
+</html>

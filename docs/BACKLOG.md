@@ -18,8 +18,8 @@ Status values:
 | M0.1a | Complete project specification | Done | UX, technical design, data/API, security, operations, testing, Julgate migration and issue blueprint documented. |
 | FND-001 / M0.2 | Solution skeleton | Done | Solution, central build configuration and the architecture test project build and pass. |
 | FND-002 | Architecture enforcement | Done | Dependency graph, forbidden namespaces, product terminology and composition root are enforced by tests. |
-| FND-003 | Frontend toolchain | Ready | Next implementation task. Creates `src/JulOS.Desktop`. |
-| FND-004 | Validation entrypoints | Planned | Depends on backend and frontend skeleton. |
+| FND-003 | Frontend toolchain | Done | `src/JulOS.Desktop` type checks, tests and builds native ES modules without a bundler. |
+| FND-004 | Validation entrypoints | Ready | Next implementation task. |
 | FND-005 | Local development stack | Planned | Depends on solution skeleton. |
 | FND-006 | Pull-request CI | Planned | Depends on validation commands. |
 | FND-007 | Version metadata | Planned | Can follow solution skeleton. |
@@ -36,19 +36,18 @@ Status values:
 
 ## Next issue
 
-### FND-003 — Establish the frontend toolchain
+### FND-004 — Implement repository validation entrypoints
 
 Scope:
 
-- create `src/JulOS.Desktop` with TypeScript configuration
-- native ES-module production build without a general SPA framework
-- development watch command
-- desktop logic test project using the built-in Node test runner
+- `tools/validate.ps1` and `tools/validate.sh`
+- shared underlying validation commands for backend, frontend and repository policy
+- Markdown and manifest validation hooks
 
 Acceptance:
 
-- type checking and production build run locally and in CI
-- generated output is not committed unless explicitly required
+- both entrypoints run equivalent checks
+- any failed stage returns non-zero and identifies the stage
 
 ## Specification status
 

@@ -82,6 +82,19 @@ Directories are created only when their first real implementation is added. Empt
 
 Projects declare package references without a version. Warnings are errors repository-wide; a suppression must be local, narrow and justified in place.
 
+### 2.2 Desktop build
+
+`src/JulOS.Desktop` is a Node workspace with `typescript` as its only build dependency. There is no bundler, so the compiler emits the modules the browser loads directly and every relative import carries its `.js` extension.
+
+| Command | Result |
+|---|---|
+| `npm run typecheck` | type checks sources and tests without emitting |
+| `npm run build` | emits `dist/scripts` and copies `static` to `dist` |
+| `npm run watch` | rebuilds on change during development |
+| `npm test` | compiles to `build/tests` and runs the Node test runner |
+
+`dist` and `build` are generated and are not committed.
+
 ## 3. Project responsibilities
 
 ### JulOS.Domain

@@ -100,6 +100,8 @@ Package workers and Server run the same contract fixture set.
 
 ### 2.7 Desktop logic tests
 
+Desktop tests are `*.test.ts` files next to the module they cover. `npm test` in `src/JulOS.Desktop` compiles them and runs the built-in Node test runner.
+
 Pure TypeScript tests cover:
 
 - window store commands

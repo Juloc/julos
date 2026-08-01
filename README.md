@@ -61,7 +61,18 @@ dotnet build JulOS.slnx
 dotnet test --solution JulOS.slnx
 ```
 
-`dotnet test` runs on Microsoft.Testing.Platform, which `global.json` selects. A single repository validation entrypoint covering backend, frontend and policy checks is added by work item `FND-004`.
+`dotnet test` runs on Microsoft.Testing.Platform, which `global.json` selects.
+
+The Desktop client is built from `src/JulOS.Desktop` with Node 24 or newer:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+A single repository validation entrypoint covering backend, frontend and policy checks is added by work item `FND-004`.
 
 ## Repository status
 

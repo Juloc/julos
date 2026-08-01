@@ -13,6 +13,11 @@ trim_trailing_whitespace = false
 [{.gitattributes,.gitignore,.editorconfig}]
 charset = utf-8
 
+# npm rewrites these files itself and preserves neither a byte order mark nor CRLF.
+[{package.json,package-lock.json}]
+charset = utf-8
+end_of_line = lf
+
 [*.{sh,bash}]
 charset = utf-8
 end_of_line = lf
@@ -37,6 +42,6 @@ indent_size = 2
 indent_style = space
 indent_size = 4
 
-[*.{ts,tsx,js,jsx,css,scss,html}]
+[*.{ts,tsx,js,jsx,mjs,cjs,css,scss,html}]
 indent_style = space
 indent_size = 2

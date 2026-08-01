@@ -67,6 +67,8 @@ The Package SDK public-surface review from `QUALITY_AND_TESTING.md` section 2.3 
 
 ### FND-003 — Establish frontend toolchain
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver:
@@ -81,6 +83,10 @@ Acceptance:
 
 - type checking and production build run locally and in CI
 - generated output is not committed unless explicitly required
+
+Implemented as `src/JulOS.Desktop` with `typescript` as the only build dependency and no bundler. `moduleResolution` is `nodenext`, so relative imports must carry their `.js` extension and the emitted modules load in the browser unchanged.
+
+The milestone needs real code to prove the pipeline, so it delivers the startup platform check: `platform-support.ts` detects missing Custom Element, Shadow DOM and CSS custom property support, and `main.ts` reveals a static bilingual notice in `static/index.html`. The notice is plain HTML because it must work before the localization service exists and in a browser that cannot run the shell. The shell surface itself belongs to `DESK-001`.
 
 ### FND-004 — Implement repository validation entrypoints
 

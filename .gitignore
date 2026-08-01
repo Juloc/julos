@@ -17,6 +17,7 @@ coverage/
 # Node and frontend build output
 node_modules/
 dist/
+src/JulOS.Desktop/build/
 
 # Local environment
 .env

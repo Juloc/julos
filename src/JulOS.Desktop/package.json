@@ -1,0 +1,21 @@
+{
+  "name": "julos-desktop",
+  "version": "0.0.0",
+  "description": "JulOS Desktop client shell.",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.test.json",
+    "build": "tsc --project tsconfig.json && node build.mjs",
+    "watch": "node build.mjs && tsc --project tsconfig.json --watch",
+    "test": "tsc --project tsconfig.test.json && node --test \"build/tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2"
+  }
+}
