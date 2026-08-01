@@ -212,6 +212,8 @@ Every later `CORE` item builds on these primitives: one identifier type per enti
 
 ### CORE-002 — Implement package lifecycle domain model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver states, valid transitions and fault metadata.
@@ -220,6 +222,14 @@ Acceptance:
 
 - invalid transitions fail explicitly
 - transition tests cover install through removal
+
+Implemented in `JulOS.Domain.Packages`. The transition table reproduces the graph in `PACKAGES.md` exactly, including the rule that a state with no running worker has no edge into `Faulted`: nothing there can crash.
+
+Entering `Faulted` is only possible through `Fault`, which requires a code, a description and a time. `TransitionTo` refuses that target explicitly, so a fault can never be recorded without a reason to show the operator.
+
+`PackageId` is the publisher's stable reverse domain name and is fixed for the life of the record. Removing and installing a package again produces a new installation record for the same package.
+
+Deliberately absent: installed version, manifest schema version, publisher, signature thumbprint, configuration state and health state from `DATA_AND_API_CONTRACTS.md` section 2.3. Those are defined by the manifest and the verification and health work items, and are added by `PKG-001`, `PKG-002` and `PKG-007`.
 
 ### CORE-003 — Implement applications and launch-target domain model
 

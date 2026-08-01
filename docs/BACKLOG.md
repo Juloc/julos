@@ -25,8 +25,9 @@ Status values:
 | FND-007 | Version metadata | Done | The root `VERSION` file drives assemblies, the image label and the diagnostics endpoint. |
 | Phase 0 | Repository and engineering foundation | Done | Gate passed: one command builds, tests and validates a clean checkout. |
 | CORE-001 | Core primitives | Done | Revision, entity identifiers, identifier generator and the shared domain failure type. |
+| CORE-002 | Package lifecycle | Done | The documented transition graph; a fault cannot be recorded without a reason. |
 | CORE-005 | Session references | Done | Protocol-neutral states; a closing window can never implicitly terminate a session. |
-| Phase 1 | Core platform model | In progress | `CORE-002`, `CORE-003`, `CORE-004`, `CORE-006`, `CORE-007` and `CORE-008` remain. |
+| Phase 1 | Core platform model | In progress | `CORE-003`, `CORE-004`, `CORE-006`, `CORE-007` and `CORE-008` remain. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | Phase 2 | Persistence, authentication and core APIs | In progress | `API-006` is done; the rest depends on the Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
@@ -40,19 +41,19 @@ Status values:
 
 ## Next issue
 
-### CORE-001 — Implement core identifiers and clock abstraction
+### CORE-003 — Implement applications and launch-target domain model
 
 Scope:
 
-- stable server-generated identifiers
-- a UTC clock port
-- the common revision value used by optimistic concurrency
-- `tests/JulOS.Domain.Tests`, created with its first real test as decision `D023` requires
+- application definitions and their stable keys
+- instance policies
+- launch targets and their external identities
+- approval states
 
 Acceptance:
 
-- time-dependent tests use an injected clock
-- identifiers are generated server-side
+- stable keys and external identities are enforced
+- display names are not identity fields
 
 ## Specification status
 
@@ -76,7 +77,7 @@ Implementation must not invent alternate behavior outside these specifications w
 
 ## Open product decisions
 
-These do not block FND-001:
+These block no current work item:
 
 - final license
 - final public JulOS domain
