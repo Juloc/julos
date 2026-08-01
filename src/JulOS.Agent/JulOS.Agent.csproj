@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>JulOS Agent. Single deployable host binary providing allowlisted capabilities over an outbound connection.</Description>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JulOS.Contracts\JulOS.Contracts.csproj" />
+  </ItemGroup>
+
+  <!--
+    The Agent implements transport and host capabilities only.
+    Package-specific interpretation belongs in package workers.
+  -->
+
+</Project>

@@ -181,3 +181,21 @@ One completed work item becomes one commit on `main`. Branches and pull requests
 Reason: the repository currently has a single maintainer. A mandatory branch and pull request per work item adds process latency without adding a real reviewer. The per-change content requirements — tests, documentation, backlog and validation — are unchanged and remain the actual quality gate.
 
 This decision is revisited when more than one person contributes regularly.
+
+## D022 — Repository-wide .NET build conventions
+
+**Status:** Accepted
+
+The .NET build uses the XML solution format `JulOS.slnx`, central package management through `Directory.Packages.props`, shared compiler settings through `Directory.Build.props`, and the Microsoft.Testing.Platform mode of `dotnet test` selected in `global.json`.
+
+Warnings are errors in every project and documentation generation is enabled, so an undocumented public API or an unused symbol fails the build rather than accumulating.
+
+Reason: one declared version per dependency and one declared setting per rule prevent per-project drift, which is the usual source of "works in one project" build differences. The Microsoft.Testing.Platform mode is required because the VSTest mode of `dotnet test` no longer supports these test projects on the .NET 10 SDK.
+
+## D023 — Test projects are created with their first real test
+
+**Status:** Accepted
+
+A test project is added when the code it validates exists. The foundation milestone therefore creates only `tests/JulOS.Architecture.Tests`, because repository structure and dependency direction are the only things that exist and can be asserted. `JulOS.Domain.Tests` and `JulOS.Application.Tests` are created by the first `CORE` work item that adds behavior.
+
+Reason: an empty test project reports a passing test run without validating anything, which is the misleading-success pattern that `D011` forbids.

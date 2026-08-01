@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Smallest stable surface required by JulOS package authors.</Description>
+    <IsPackable>true</IsPackable>
+    <PackageId>JulOS.PackageSdk</PackageId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JulOS.Contracts\JulOS.Contracts.csproj" />
+  </ItemGroup>
+
+  <!--
+    The SDK exposes contracts and helpers only. It must never reference
+    JulOS.Application, JulOS.Infrastructure or JulOS.Server.
+  -->
+
+</Project>

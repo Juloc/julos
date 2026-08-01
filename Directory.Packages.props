@@ -1,0 +1,17 @@
+﻿<Project>
+
+  <!--
+    Central package management. Every NuGet version is declared exactly once here.
+    Projects reference packages without a Version attribute.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="MSTest" Version="4.3.3" />
+  </ItemGroup>
+
+</Project>

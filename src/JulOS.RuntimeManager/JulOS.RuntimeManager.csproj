@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>JulOS Runtime Manager. Narrow privileged sidecar owning JulOS-owned runtime containers.</Description>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JulOS.Contracts\JulOS.Contracts.csproj" />
+  </ItemGroup>
+
+  <!--
+    Runtime Manager is a separate trust boundary. It must not reference
+    JulOS.Domain, JulOS.Application, JulOS.Infrastructure or JulOS.Server.
+    Its authenticated runtime API is delivered by PKG-003.
+  -->
+
+</Project>

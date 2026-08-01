@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Versioned JulOS contracts exchanged across process boundaries.</Description>
+  </PropertyGroup>
+
+  <!--
+    Contracts carry no persistence annotations and no implementation behavior,
+    so they take no ProjectReference and no EF Core or ASP.NET dependency.
+  -->
+
+</Project>

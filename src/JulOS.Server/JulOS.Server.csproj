@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>JulOS Server. ASP.NET Core composition root and control plane.</Description>
+    <UserSecretsId>julos-server</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JulOS.Application\JulOS.Application.csproj" />
+    <ProjectReference Include="..\JulOS.Infrastructure\JulOS.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>JulOS platform use cases and ports.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JulOS.Domain\JulOS.Domain.csproj" />
+    <ProjectReference Include="..\JulOS.Contracts\JulOS.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

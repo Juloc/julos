@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Architecture rules enforced against the real repository layout.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+  <!--
+    This project inspects project and source files on disk instead of referencing
+    the projects it validates, so a forbidden reference cannot be hidden by the
+    test project's own reference graph.
+  -->
+
+</Project>

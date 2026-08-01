@@ -16,8 +16,8 @@ Status values:
 |---|---|---|---|
 | M0.1 | Documentation baseline | Done | Product, architecture and contributor rules established. |
 | M0.1a | Complete project specification | Done | UX, technical design, data/API, security, operations, testing, Julgate migration and issue blueprint documented. |
-| FND-001 / M0.2 | Solution skeleton | Ready | GitHub issue #2 is the next implementation task. |
-| FND-002 | Architecture enforcement | Planned | Depends on solution skeleton. |
+| FND-001 / M0.2 | Solution skeleton | Done | Solution, central build configuration and the architecture test project build and pass. |
+| FND-002 | Architecture enforcement | Ready | Next implementation task. Extends `tests/JulOS.Architecture.Tests`. |
 | FND-003 | Frontend toolchain | Planned | Depends on solution skeleton. |
 | FND-004 | Validation entrypoints | Planned | Depends on backend and frontend skeleton. |
 | FND-005 | Local development stack | Planned | Depends on solution skeleton. |
@@ -36,28 +36,20 @@ Status values:
 
 ## Next issue
 
-### FND-001 / M0.2 — Create the solution skeleton
-
-Existing GitHub issue: #2.
+### FND-002 — Add architecture enforcement
 
 Scope:
 
-- create Domain, Application, Contracts, Infrastructure, Server, Desktop, Package SDK, Agent, Runtime Manager and test project foundations as defined in `TECHNICAL_SPECIFICATION.md`
-- pin the supported .NET SDK
-- enable nullable reference types and repository-wide warnings
-- establish project references according to architecture
-- document exact restore, build and test commands
-- add no product feature logic
-
-The issue may be updated before implementation so its project names match the complete specification. Do not implement later foundation items inside it unless they are necessary to make the skeleton build and validate.
+- extend `tests/JulOS.Architecture.Tests` with the full rule set from `ARCHITECTURE.md`
+- forbidden namespace checks for Domain, Contracts and Agent
+- package-to-package project reference prohibition
+- Contracts dependency checks against EF Core and ASP.NET types
+- Server remains the only composition root
 
 Acceptance:
 
-- clean checkout builds successfully
-- all initial tests pass
-- Domain has no outer-layer references
-- project structure matches `ARCHITECTURE.md` and `TECHNICAL_SPECIFICATION.md`
-- README and this backlog reflect the completed state
+- intentionally adding a forbidden reference fails the test
+- rules match `ARCHITECTURE.md`
 
 ## Specification status
 

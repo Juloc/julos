@@ -51,9 +51,21 @@ Main specifications:
 - [`docs/BACKLOG.md`](docs/BACKLOG.md): current implementation status
 - [`docs/DECISIONS.md`](docs/DECISIONS.md): accepted architecture decisions
 
+## Build and test
+
+Building requires the .NET SDK version pinned in [`global.json`](global.json).
+
+```bash
+dotnet restore JulOS.slnx
+dotnet build JulOS.slnx
+dotnet test --solution JulOS.slnx
+```
+
+`dotnet test` runs on Microsoft.Testing.Platform, which `global.json` selects. A single repository validation entrypoint covering backend, frontend and policy checks is added by work item `FND-004`.
+
 ## Repository status
 
-The product and architecture specification is complete enough to begin the bounded foundation implementation. The next implementation item is the solution skeleton in GitHub issue #2. Later work must follow the dependency order in `docs/WORK_BREAKDOWN.md`.
+The product and architecture specification is complete. The .NET solution skeleton exists and its dependency boundaries are covered by architecture tests. Work continues through the dependency order in `docs/WORK_BREAKDOWN.md`; `docs/BACKLOG.md` names the current item.
 
 ## Initial repository strategy
 

@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>JulOS platform domain model. Depends on the .NET base class libraries only.</Description>
+  </PropertyGroup>
+
+  <!--
+    Domain must never gain a ProjectReference or an infrastructure PackageReference.
+    JulOS.Architecture.Tests enforces this boundary.
+  -->
+
+</Project>

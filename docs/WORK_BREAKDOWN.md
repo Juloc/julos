@@ -18,6 +18,8 @@ For every item:
 
 ### FND-001 — Create solution skeleton
 
+Status: done.
+
 Depends on: documentation baseline.
 
 Deliver:
@@ -26,7 +28,7 @@ Deliver:
 - pinned .NET SDK
 - central build properties
 - nullable reference types and warnings
-- minimal test projects
+- minimal test project
 - documented build command
 
 Acceptance:
@@ -34,6 +36,10 @@ Acceptance:
 - clean checkout restores, builds and tests
 - Domain references only base libraries
 - no empty product feature implementation exists
+
+Implemented as: `global.json`, `Directory.Build.props`, `Directory.Packages.props`, `JulOS.slnx`, the eight `src` projects and `tests/JulOS.Architecture.Tests`.
+
+`JulOS.Desktop` is created by `FND-003` together with its TypeScript toolchain. `JulOS.Domain.Tests` and `JulOS.Application.Tests` are created by the first `CORE` item that adds behavior, per decision `D023`. `JulOS.Agent` and `JulOS.RuntimeManager` are console executables whose entry points exit with a non-zero code and name the work item that implements them; neither reports a fake ready state.
 
 ### FND-002 — Add architecture enforcement
 

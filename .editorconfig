@@ -9,6 +9,10 @@ trim_trailing_whitespace = true
 [*.md]
 trim_trailing_whitespace = false
 
+# Git and EditorConfig metadata is parsed by tools that do not all tolerate a byte order mark.
+[{.gitattributes,.gitignore,.editorconfig}]
+charset = utf-8
+
 [*.{sh,bash}]
 charset = utf-8
 end_of_line = lf

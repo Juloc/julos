@@ -71,6 +71,17 @@ tools/
 
 Directories are created only when their first real implementation is added. Empty placeholder projects are not retained unless the current milestone explicitly validates the intended dependency boundary.
 
+### 2.1 Repository build configuration
+
+| File | Purpose |
+|---|---|
+| `global.json` | pins the .NET SDK and selects the Microsoft.Testing.Platform mode of `dotnet test` |
+| `Directory.Build.props` | target framework, nullable reference types, warnings as errors, analyzers and shared metadata |
+| `Directory.Packages.props` | central package management; every NuGet version is declared exactly once |
+| `JulOS.slnx` | the solution; every committed project is listed exactly once |
+
+Projects declare package references without a version. Warnings are errors repository-wide; a suppression must be local, narrow and justified in place.
+
 ## 3. Project responsibilities
 
 ### JulOS.Domain

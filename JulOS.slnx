@@ -1,0 +1,15 @@
+﻿<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JulOS.Agent/JulOS.Agent.csproj" />
+    <Project Path="src/JulOS.Application/JulOS.Application.csproj" />
+    <Project Path="src/JulOS.Contracts/JulOS.Contracts.csproj" />
+    <Project Path="src/JulOS.Domain/JulOS.Domain.csproj" />
+    <Project Path="src/JulOS.Infrastructure/JulOS.Infrastructure.csproj" />
+    <Project Path="src/JulOS.PackageSdk/JulOS.PackageSdk.csproj" />
+    <Project Path="src/JulOS.RuntimeManager/JulOS.RuntimeManager.csproj" />
+    <Project Path="src/JulOS.Server/JulOS.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JulOS.Architecture.Tests/JulOS.Architecture.Tests.csproj" />
+  </Folder>
+</Solution>
