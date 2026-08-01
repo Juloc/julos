@@ -259,6 +259,8 @@ Deliberately absent: application type, module reference, custom element name and
 
 ### CORE-004 — Implement desktop layout domain model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver layouts, windows, widget placements, viewport classes and revisions.
@@ -267,6 +269,20 @@ Acceptance:
 
 - invalid bounds and duplicate z-order normalization are tested
 - mobile and desktop layouts remain separate
+
+Implemented in `JulOS.Domain.Layouts`.
+
+A layout belongs to exactly one `ViewportClass`, so a phone layout and a desktop layout are separate records and neither can overwrite the other.
+
+Z-order is derived, not stored input. The window list order is authoritative and `NormalizeZOrder` renumbers it into a gap-free sequence after every change. A stored layout that arrives with two windows on the same index cannot survive, because a duplicate index makes a click land on an arbitrary window.
+
+`WindowBounds` allows a negative origin, because a window may overhang while it is dragged, but `ClampToReachable` pulls a title bar back inside the usable area. A title bar outside it can never be grabbed again.
+
+`SnapGeometry` is pure arithmetic shared by the preview and the stored bounds, so the two cannot disagree. Halves are computed as `floor` and `remainder`, which keeps a one-pixel seam from appearing on an odd width.
+
+A window in a fixed state refuses `MoveTo` rather than accepting a geometry it does not have, and `Unminimize` returns it to the state it was in rather than silently discarding a maximized or snapped arrangement.
+
+Deliberately absent: the owning user, the layout name and the default flag from `DATA_AND_API_CONTRACTS.md` section 2.7, and the widget settings payload from section 2.9. Ownership belongs to `API-001` and the settings schema is package-defined, so it belongs to `PKG-001`.
 
 ### CORE-005 — Implement session-reference domain model
 

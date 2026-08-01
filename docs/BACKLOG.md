@@ -27,8 +27,9 @@ Status values:
 | CORE-001 | Core primitives | Done | Revision, entity identifiers, identifier generator and the shared domain failure type. |
 | CORE-002 | Package lifecycle | Done | The documented transition graph; a fault cannot be recorded without a reason. |
 | CORE-003 | Applications and launch targets | Done | Identity is a stable key; the record holds no display text at all. |
+| CORE-004 | Desktop layout | Done | Z-order is derived and gap-free; a layout belongs to one viewport class. |
 | CORE-005 | Session references | Done | Protocol-neutral states; a closing window can never implicitly terminate a session. |
-| Phase 1 | Core platform model | In progress | `CORE-004`, `CORE-006`, `CORE-007` and `CORE-008` remain. |
+| Phase 1 | Core platform model | In progress | `CORE-006`, `CORE-007` and `CORE-008` remain. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | Phase 2 | Persistence, authentication and core APIs | In progress | `API-006` is done; the rest depends on the Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
@@ -42,19 +43,18 @@ Status values:
 
 ## Next issue
 
-### CORE-004 — Implement desktop layout domain model
+### CORE-007 — Implement problem, notification and audit models
 
 Scope:
 
-- layouts per viewport class
-- window state and bounds
-- widget placements
-- revisions
+- problem deduplication identity and state transitions
+- notification metadata
+- the append-only audit contract
 
 Acceptance:
 
-- invalid bounds and duplicate z-order normalization are tested
-- mobile and desktop layouts remain separate
+- repeated observations update one problem
+- resolved problems can reopen on a new observation
 
 ## Specification status
 
