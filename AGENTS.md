@@ -51,7 +51,7 @@ Read the relevant package documentation and linked external-repository specifica
 
 Documentation is part of the implementation.
 
-Every pull request must update all affected Markdown files in the same change. At minimum verify:
+Every change must update all affected Markdown files in the same commit. At minimum verify:
 
 - product and user-visible behavior
 - architecture and dependency boundaries
@@ -66,16 +66,19 @@ A task is not complete while its documentation describes an older state.
 
 ## Change workflow
 
+The repository is maintained trunk-based. One completed work item becomes one commit on `main`.
+
 1. Select one item from `docs/WORK_BREAKDOWN.md` or an approved bug issue with clear acceptance criteria.
-2. Confirm all dependencies are merged.
-3. Create `agent/<short-description>` from `main`.
-4. Inspect current contracts, tests, documentation and affected external repositories before editing.
-5. Write or update the failing test or validation fixture when practical.
-6. Implement one coherent change without unrelated cleanup.
-7. Update tests and every affected Markdown file in the same pull request.
-8. Run the smallest relevant validation set, then the full repository validation.
-9. Open a draft pull request containing scope, design impact, security impact, validation and remaining limitations.
-10. Merge only when acceptance criteria, tests, documentation and backlog are complete.
+2. Confirm every dependency of that item is already on `main`.
+3. Inspect current contracts, tests, documentation and affected external repositories before editing.
+4. Write or update the failing test or validation fixture when practical.
+5. Implement one coherent change without unrelated cleanup.
+6. Update tests and every affected Markdown file in the same commit.
+7. Run the smallest relevant validation set, then the full repository validation.
+8. Commit only when acceptance criteria, tests, documentation and backlog are complete.
+9. Push regularly so `main` never holds long-lived unpublished work.
+
+Use a `agent/<short-description>` branch and a pull request when a change is large, risky or needs external review before it reaches `main`. The commit content requirements are identical in both cases.
 
 ## Definition of done
 
@@ -95,13 +98,13 @@ A change is done only when:
 
 The full checklist in `docs/QUALITY_AND_TESTING.md` is authoritative.
 
-## Issue and pull-request scope
+## Change scope
 
-- One issue should produce one coherent reviewable outcome.
+- One work item should produce one coherent reviewable commit.
 - Do not combine feature work with broad cleanup.
 - Split work when separate parts can be validated independently.
-- Do not split work so narrowly that temporary invalid architecture must be merged between issues.
-- A pull request may update multiple projects when one vertical contract requires it.
+- Do not split work so narrowly that temporary invalid architecture must land between commits.
+- One commit may update multiple projects when one vertical contract requires it.
 
 ## Error handling
 

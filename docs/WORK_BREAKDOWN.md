@@ -8,12 +8,11 @@ For every item:
 
 1. read the required documents listed in `AGENTS.md`
 2. verify every dependency is merged
-3. restate the issue scope and out-of-scope items in the pull request
+3. restate the item scope and out-of-scope items in the commit message
 4. add or update tests before declaring completion
 5. update all affected Markdown files
 6. run the repository validation command
-7. open a draft pull request
-8. merge only after acceptance criteria are satisfied
+7. commit only after acceptance criteria are satisfied
 
 ## Phase 0 — Repository and engineering foundation
 

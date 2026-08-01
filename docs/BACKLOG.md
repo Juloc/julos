@@ -92,4 +92,4 @@ These do not block FND-001:
 
 ## Backlog maintenance rule
 
-Every merged implementation pull request must update this file. Keep it focused on current status and the next actionable work. GitHub issues and releases remain the detailed historical record.
+Every implementation commit must update this file. Keep it focused on current status and the next actionable work. GitHub issues and releases remain the detailed historical record.

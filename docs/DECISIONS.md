@@ -171,3 +171,13 @@ Reason: consistent source language simplifies maintenance while supporting the i
 Core images, runtime images and packages are published with immutable versioned tags or digests. Deployment does not depend on an unpinned `latest` tag.
 
 Reason: package compatibility, migrations, rollback constraints and diagnostics require an exact deployed version.
+
+## D021 — Trunk-based delivery on `main`
+
+**Status:** Accepted
+
+One completed work item becomes one commit on `main`. Branches and pull requests are used only for large, risky or externally reviewed changes.
+
+Reason: the repository currently has a single maintainer. A mandatory branch and pull request per work item adds process latency without adding a real reviewer. The per-change content requirements — tests, documentation, backlog and validation — are unchanged and remain the actual quality gate.
+
+This decision is revisited when more than one person contributes regularly.

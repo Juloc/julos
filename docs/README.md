@@ -1,6 +1,6 @@
 ﻿# JulOS documentation map
 
-This directory is the authoritative specification for JulOS. Code, issues and pull requests must match these documents.
+This directory is the authoritative specification for JulOS. Code, issues and commits must match these documents.
 
 ## Required reading order
 
@@ -32,7 +32,7 @@ When documents appear to conflict, use this priority:
 4. implementation plan and work breakdown
 5. backlog and issue descriptions
 
-A conflict must be resolved by updating all affected documents in the same pull request. Do not silently choose one interpretation in code.
+A conflict must be resolved by updating all affected documents in the same commit. Do not silently choose one interpretation in code.
 
 ## Documentation ownership
 
@@ -46,4 +46,4 @@ A conflict must be resolved by updating all affected documents in the same pull 
 
 ## Change rule
 
-Every implementation pull request must identify the affected documents and update them. A feature is incomplete when the repository documentation still describes an older state.
+Every implementation commit must identify the affected documents and update them. A feature is incomplete when the repository documentation still describes an older state.

@@ -363,7 +363,7 @@ A work item is complete only when:
 9. operational and setup documentation is updated
 10. `docs/BACKLOG.md` reflects the state
 11. no workaround, dead code or unowned TODO remains
-12. the pull request can be safely reverted within documented migration limits
+12. the commit can be safely reverted within documented migration limits
 
 ## 16. Bug policy
 
