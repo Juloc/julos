@@ -233,6 +233,8 @@ Deliberately absent: installed version, manifest schema version, publisher, sign
 
 ### CORE-003 — Implement applications and launch-target domain model
 
+Status: done.
+
 Depends on: CORE-001.
 
 Deliver application definitions, instance policies, launch targets and approval states.
@@ -241,6 +243,19 @@ Acceptance:
 
 - stable keys and external identities are enforced
 - display names are not identity fields
+
+Implemented in `JulOS.Domain.Applications`. The second criterion is structural rather than a convention:
+
+- `ApplicationDefinition` holds a `LocalizationKey` and no display text at all, so there is nothing to mistake for a name. Renaming points at a different key and leaves identity untouched.
+- `LaunchTarget` identity is the owning package plus the `ExternalIdentity`. The label is separate and changes on every observation without affecting identity or approval.
+
+`Observe` never changes the approval state. An ignored target therefore stays ignored across inventory passes instead of reappearing as new, which is what `DKR-004` and `DISC-005` require.
+
+`ViewportClass` is added to `JulOS.Domain.Primitives` because both this item and `CORE-004` need the same vocabulary.
+
+The identifier type is `ApplicationDefinitionId`, not `ApplicationId`, because `System.ApplicationId` exists and the collision would force an alias in every consuming file.
+
+Deliberately absent: application type, module reference, custom element name and launch contract version from `DATA_AND_API_CONTRACTS.md` section 2.5, and the launch parameters from section 2.6. All are declared by the package manifest and are defined by `PKG-001`.
 
 ### CORE-004 — Implement desktop layout domain model
 

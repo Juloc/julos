@@ -130,6 +130,10 @@ Revision
 
 `StableKey` is unique within the package and remains unchanged after display-name changes.
 
+The domain type is named `ApplicationDefinitionId` rather than `ApplicationId`, because `System.ApplicationId` exists in the base class library and the collision would force an alias in every consuming file. The meaning is unchanged.
+
+The domain record holds `DisplayNameKey` and no display text at all. Storing the text would fix one language into the record and break the rule that no user-facing string is hard-coded.
+
 ### 2.6 Application launch target
 
 ```text
