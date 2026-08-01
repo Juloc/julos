@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Deliberately not the web SDK. An architecture test keeps JulOS.Server the only web
+    project, and Microsoft.AspNetCore.Mvc.Testing supplies the framework reference this
+    project needs to host it.
+  -->
+
+  <PropertyGroup>
+    <Description>Integration tests that drive the real JulOS Server host.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\JulOS.Server\JulOS.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+</Project>

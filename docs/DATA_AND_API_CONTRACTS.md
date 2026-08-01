@@ -442,6 +442,12 @@ Public integration endpoints exposed by JulOS are versioned independently when r
 
 The public `type` URI may initially be documentation-only and does not need to host dynamic content.
 
+The member names are constants in `JulOS.Contracts.Errors.ProblemExtensionNames`, and the codes that no feature owns are in `PlatformErrorCodes`. Renaming either is a breaking change for clients.
+
+Every response, successful or failing, carries the correlation identifier in the `X-Correlation-Id` header, and every problem body repeats it in `correlationId`. A caller may supply the header; it is echoed only when it consists of at most 64 letters, digits, hyphens and underscores, and is replaced with a generated identifier otherwise.
+
+A problem body never contains an exception message, a stack frame or an internal path. Only a domain rule violation contributes its own message, because that message is written for the caller.
+
 ## 5. Initial core API groups
 
 ### 5.1 Authentication and profile

@@ -25,6 +25,8 @@ internal static class PlatformProjects
 
     internal const string InfrastructureTests = "tests/JulOS.Infrastructure.Tests/JulOS.Infrastructure.Tests.csproj";
 
+    internal const string IntegrationTests = "tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj";
+
     /// <summary>The directory holding optional package projects.</summary>
     internal const string PackagesRoot = "packages";
 

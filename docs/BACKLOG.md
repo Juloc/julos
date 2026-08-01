@@ -26,7 +26,8 @@ Status values:
 | Phase 0 | Repository and engineering foundation | Done | Gate passed: one command builds, tests and validates a clean checkout. |
 | CORE-001 | Core primitives | Done | Revision, entity identifiers, identifier generator and the shared domain failure type. |
 | Phase 1 | Core platform model | In progress | `CORE-002` through `CORE-008` remain. |
-| Phase 2 | Persistence, authentication and core APIs | Planned | Depends on Core domain model. |
+| API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-006` is done; the rest depends on the Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |

@@ -20,17 +20,22 @@ public sealed class CompositionRootTests
             $"Only JulOS.Server hosts the web application, but '{WebSdk}' is used by {string.Join(", ", webProjects)}.");
     }
 
+    /// <summary>
+    /// Only a test may reference the composition root, and only to host it. Production
+    /// code that reaches into Server would turn the host into a shared library.
+    /// </summary>
     [TestMethod]
-    public void NoProjectReferencesTheServer()
+    public void OnlyTestsReferenceTheServer()
     {
         var violations = Repository
             .ProjectFiles()
+            .Where(projectFile => !projectFile.StartsWith("tests/", StringComparison.Ordinal))
             .Where(projectFile => Repository.ProjectReferences(projectFile).Contains(PlatformProjects.Server, StringComparer.Ordinal))
             .ToArray();
 
         Assert.AreEqual(
             0,
             violations.Length,
-            $"The composition root is referenced by nothing, but is referenced by {string.Join(", ", violations)}.");
+            $"The composition root must be referenced by nothing but tests, and is referenced by {string.Join(", ", violations)}.");
     }
 }

@@ -77,6 +77,8 @@ SQLite is not used as a substitute for PostgreSQL behavior.
 
 ### 2.5 API integration tests
 
+`tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.
+
 Start the real ASP.NET Core application with controlled dependencies:
 
 - authentication and authorization

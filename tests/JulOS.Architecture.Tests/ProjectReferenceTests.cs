@@ -21,6 +21,7 @@ public sealed class ProjectReferenceTests
         [PlatformProjects.ArchitectureTests] = [],
         [PlatformProjects.DomainTests] = [PlatformProjects.Domain],
         [PlatformProjects.InfrastructureTests] = [PlatformProjects.Infrastructure],
+        [PlatformProjects.IntegrationTests] = [PlatformProjects.Server],
     };
 
     [TestMethod]

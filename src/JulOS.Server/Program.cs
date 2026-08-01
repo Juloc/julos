@@ -4,6 +4,7 @@
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Health;
 using JulOS.Server;
+using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -25,6 +26,8 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
         $"The connection string '{CoreDatabaseConnectionName}' is not configured. "
         + $"Set ConnectionStrings__{CoreDatabaseConnectionName} or see deploy/compose/README.md.");
 
+builder.Services.AddJulOsErrorHandling();
+
 builder.Services
     .AddHealthChecks()
     .AddTypeActivatedCheck<PostgreSqlHealthCheck>(
@@ -34,6 +37,8 @@ builder.Services
         args: [coreDatabase]);
 
 var app = builder.Build();
+
+app.UseJulOsErrorHandling();
 
 // Liveness answers whether the process itself is running, so it registers no
 // dependency check. A failing dependency must not cause a restart loop.

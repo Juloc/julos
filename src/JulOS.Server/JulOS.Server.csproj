@@ -10,4 +10,8 @@
     <ProjectReference Include="..\JulOS.Infrastructure\JulOS.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup Label="The API integration tests drive the real host, including its internal wiring.">
+    <InternalsVisibleTo Include="JulOS.Integration.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -349,6 +349,8 @@ Acceptance:
 
 ### API-006 — Add common Problem Details and correlation IDs
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver middleware and stable error codes.
@@ -357,6 +359,16 @@ Acceptance:
 
 - API errors include correlation ID
 - stack traces and secrets are absent
+
+Implemented as `JulOS.Contracts.Errors` for the public member names and platform codes, and `JulOS.Server.Errors` for the correlation middleware and the single problem customiser that runs for handled failures and unhandled exceptions alike, so no failure path can return a differently shaped body.
+
+The developer exception page is deliberately never enabled. A response shape that differs between environments hides the production behaviour that needs testing.
+
+A caller-supplied `X-Correlation-Id` is echoed only when it is a short run of unreserved characters, otherwise it is replaced. An accepted value reaches log files and a response header, where a line break or a control character would let a caller forge an entry.
+
+Nothing derived from an unhandled exception reaches the client, because the message can carry a connection string or a credential. The correlation identifier is how the caller and the server-side entry are matched.
+
+`tests/JulOS.Integration.Tests` is created here and drives the real host through `WebApplicationFactory`.
 
 ### API-007 — Add operation-resource framework
 
