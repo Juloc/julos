@@ -165,6 +165,8 @@ PostgreSQL integration tests are added by `API-001` together with the persistenc
 
 ### FND-007 — Add version and release metadata foundation
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver:
@@ -178,6 +180,14 @@ Acceptance:
 
 - one version change updates all build outputs
 - no `latest` dependency is required
+
+Implemented as the root `VERSION` file, read by `Directory.Build.props` into `VersionPrefix`. The version is reachable through the assembly informational version, the startup log entry with event identifier 1000, `GET /api/v1/system/version` and the image label `org.opencontainers.image.version`.
+
+The `version` validation stage reads the built project version back through MSBuild, so the file cannot silently stop being the source.
+
+The Desktop footer and about surface belong to `DESK-001`, which builds the shell. The Desktop reads the version from `GET /api/v1/system/version` rather than embedding it, because the server is authoritative for the version it is running.
+
+The release-note template is `docs/RELEASE_NOTES_TEMPLATE.md`.
 
 ## Phase 1 — Core platform
 
@@ -310,10 +320,13 @@ Depends on: API-003, CORE-008.
 
 Deliver backend policies and administrator role management foundation.
 
+Includes attaching an authorization policy to `GET /api/v1/system/version`, which `FND-007` added while no authentication existed.
+
 Acceptance:
 
 - every mutation endpoint requires a policy
 - unauthorized calls return 401 or 403 correctly
+- no endpoint outside authentication and health is reachable unauthenticated
 
 ### API-005 — Add profile and preferences API
 
@@ -389,10 +402,13 @@ Depends on: FND-003, API-003, API-005.
 
 Deliver desktop surface, taskbar, theme tokens and localization foundation.
 
+Includes the footer and about surface showing the server version from `GET /api/v1/system/version`, which `FND-007` prepared.
+
 Acceptance:
 
 - system, light and dark themes work
 - English and German shell strings exist
+- the running server version is visible without opening developer tools
 
 ### DESK-002 — Implement client API and event services
 

@@ -11,7 +11,7 @@ WORKDIR /source
 
 # Restore first from the project graph alone, so a source change does not
 # invalidate the dependency layer.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+COPY global.json Directory.Build.props Directory.Packages.props VERSION ./
 COPY src/JulOS.Domain/JulOS.Domain.csproj src/JulOS.Domain/
 COPY src/JulOS.Contracts/JulOS.Contracts.csproj src/JulOS.Contracts/
 COPY src/JulOS.Application/JulOS.Application.csproj src/JulOS.Application/
@@ -30,6 +30,17 @@ RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
       --output /application
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.3 AS runtime
+
+# The application version always comes from the VERSION file above. This argument
+# only labels the image, because a Dockerfile cannot read a file into a label.
+# tools/validate.mjs and continuous integration pass the real value; a plain
+# `docker compose up --build` produces a clearly marked development image.
+ARG JULOS_VERSION=0.0.0-development
+
+LABEL org.opencontainers.image.title="JulOS Server" \
+      org.opencontainers.image.description="JulOS control plane." \
+      org.opencontainers.image.source="https://github.com/Juloc/julos" \
+      org.opencontainers.image.version="${JULOS_VERSION}"
 
 # The image ships no shell utilities for probing. The application answers its own
 # readiness probe through --health-check, so no HTTP client tool is installed.

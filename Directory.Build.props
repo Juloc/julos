@@ -20,6 +20,11 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <PropertyGroup Label="The repository VERSION file is the single version source.">
+    <JulOsVersionFile>$(MSBuildThisFileDirectory)VERSION</JulOsVersionFile>
+    <VersionPrefix>$([System.IO.File]::ReadAllText('$(JulOsVersionFile)').Trim())</VersionPrefix>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>

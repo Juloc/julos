@@ -22,6 +22,8 @@ This directory is the authoritative specification for JulOS. Code, issues and co
 16. [`DECISIONS.md`](DECISIONS.md) — accepted architecture decisions
 17. [`GLOSSARY.md`](GLOSSARY.md) — canonical terminology
 
+Supporting document: [`RELEASE_NOTES_TEMPLATE.md`](RELEASE_NOTES_TEMPLATE.md) — the shape of every release note.
+
 ## Source-of-truth rule
 
 When documents appear to conflict, use this priority:

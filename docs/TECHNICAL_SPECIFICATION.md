@@ -75,6 +75,7 @@ Directories are created only when their first real implementation is added. Empt
 
 | File | Purpose |
 |---|---|
+| `VERSION` | the single version source for every build output |
 | `global.json` | pins the .NET SDK and selects the Microsoft.Testing.Platform mode of `dotnet test` |
 | `Directory.Build.props` | target framework, nullable reference types, warnings as errors, analyzers and shared metadata |
 | `Directory.Packages.props` | central package management; every NuGet version is declared exactly once |
@@ -94,6 +95,21 @@ Projects declare package references without a version. Warnings are errors repos
 | `npm test` | compiles to `build/tests` and runs the Node test runner |
 
 `dist` and `build` are generated and are not committed.
+
+### 2.3 Versioning
+
+`VERSION` at the repository root holds one semantic version. `Directory.Build.props` reads it into `VersionPrefix`, so every assembly carries it without restating it anywhere.
+
+The running version is reachable through:
+
+- the assembly informational version
+- the startup log entry with event identifier 1000
+- `GET /api/v1/system/version`
+- the `org.opencontainers.image.version` label of the container image
+
+A Dockerfile cannot read a file into a label, so `JULOS_VERSION` is passed as a build argument. `tools/validate.mjs` and continuous integration pass the value from `VERSION`; a plain `docker compose up --build` labels the image `0.0.0-development`. The application version inside the image always comes from `VERSION`, because the file is part of the build context.
+
+The `version` validation stage reads the built project version back through MSBuild, so the file cannot silently stop being the source.
 
 ## 3. Project responsibilities
 

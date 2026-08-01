@@ -5,7 +5,7 @@
 // both platforms run exactly the same checks rather than two similar scripts.
 
 import { spawnSync } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { findUnpinnedExtensions, findViolations } from './lib/encoding-policy.mjs';
@@ -13,6 +13,13 @@ import { findBrokenLinks } from './lib/markdown-links.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
 
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
+
+const semanticVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/** Reads the single repository version source. */
+async function readRepositoryVersion() {
+  return (await readFile(join(repositoryRoot, 'VERSION'), 'utf8')).trim();
+}
 
 /** Outcome helpers. A stage either passes, is skipped for a stated reason, or fails. */
 const passed = (detail) => ({ status: 'passed', detail });
@@ -100,6 +107,35 @@ const stages = [
             `${violations.length} file(s) violate the encoding policy:\n  ${violations.join('\n  ')}\n` +
               'Run tools/normalize-encoding.mjs to correct them.',
           );
+    },
+  },
+  {
+    name: 'version',
+    title: 'Verify the single version source',
+    async run() {
+      const version = await readRepositoryVersion();
+
+      if (!semanticVersion.test(version)) {
+        return failed(`VERSION contains '${version}', which is not a semantic version.`);
+      }
+
+      // Reading the property back proves the build actually consumes the file,
+      // rather than the file merely existing next to a hard-coded number.
+      const query = spawnSync(
+        'dotnet',
+        ['msbuild', 'src/JulOS.Server/JulOS.Server.csproj', '-getProperty:Version'],
+        { cwd: repositoryRoot, encoding: 'utf8' },
+      );
+
+      if (query.status !== 0) {
+        return failed(`The project version could not be read: ${query.stderr?.trim() ?? 'unknown error'}`);
+      }
+
+      const projectVersion = query.stdout.trim();
+
+      return projectVersion === version
+        ? passed(`VERSION and the built assemblies both report ${version}`)
+        : failed(`VERSION says '${version}' but the project builds as '${projectVersion}'.`);
     },
   },
   {
@@ -194,9 +230,17 @@ const stages = [
         return composeCheck;
       }
 
+      const version = await readRepositoryVersion();
+
       for (const dockerfile of dockerfiles) {
         const tag = `julos-validate/${dockerfile.replaceAll('/', '-').toLowerCase()}`;
-        const build = run('docker', ['build', '--file', dockerfile, '--tag', tag, '.']);
+        const build = run('docker', [
+          'build',
+          '--file', dockerfile,
+          '--build-arg', `JULOS_VERSION=${version}`,
+          '--tag', tag,
+          '.',
+        ]);
 
         if (build.status === 'failed') {
           return build;

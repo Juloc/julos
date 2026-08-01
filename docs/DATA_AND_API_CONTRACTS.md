@@ -533,6 +533,30 @@ POST /api/v1/sessions/{sessionId}/terminate
 
 Transport signaling uses package-specific authenticated endpoints behind the session reference.
 
+### 5.8 System diagnostics
+
+```text
+GET  /api/v1/system/version
+```
+
+Returns the stable component name and the semantic version the component was built from:
+
+```json
+{
+  "component": "JulOS.Server",
+  "version": "0.1.0"
+}
+```
+
+This endpoint is unauthenticated while no authentication exists. `API-004` attaches its authorization policy together with every other endpoint policy.
+
+Health endpoints stay outside `/api/v1` because an orchestrator probes them, not an API client:
+
+```text
+GET  /health/live
+GET  /health/ready
+```
+
 ## 6. Real-time event contract
 
 SignalR hub:

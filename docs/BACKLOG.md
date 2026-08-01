@@ -22,8 +22,9 @@ Status values:
 | FND-004 | Validation entrypoints | Done | `tools/validate.sh` and `tools/validate.ps1` wrap one shared implementation. |
 | FND-005 | Local development stack | Done | Server and PostgreSQL reach a healthy state; readiness verifies the database. |
 | FND-006 | Pull-request CI | Done | One workflow runs `tools/validate.sh`, the same entry point developers run. |
-| FND-007 | Version metadata | Ready | Next implementation task. |
-| Phase 1 | Core platform model | Planned | Starts after Phase 0 gate. |
+| FND-007 | Version metadata | Done | The root `VERSION` file drives assemblies, the image label and the diagnostics endpoint. |
+| Phase 0 | Repository and engineering foundation | Done | Gate passed: one command builds, tests and validates a clean checkout. |
+| Phase 1 | Core platform model | Ready | `CORE-001` is the next implementation task. |
 | Phase 2 | Persistence, authentication and core APIs | Planned | Depends on Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
@@ -36,19 +37,19 @@ Status values:
 
 ## Next issue
 
-### FND-007 — Add version and release metadata
+### CORE-001 — Implement core identifiers and clock abstraction
 
 Scope:
 
-- one repository version source
-- assembly and image version propagation
-- version reachable in diagnostics and in the Desktop
-- release-note template
+- stable server-generated identifiers
+- a UTC clock port
+- the common revision value used by optimistic concurrency
+- `tests/JulOS.Domain.Tests`, created with its first real test as decision `D023` requires
 
 Acceptance:
 
-- one version change updates all build outputs
-- no `latest` dependency is required
+- time-dependent tests use an injected clock
+- identifiers are generated server-side
 
 ## Specification status
 

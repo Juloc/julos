@@ -1,6 +1,7 @@
 ﻿// JulOS Server composition root.
 // Authentication, persistence and feature endpoints are wired by later work items.
 
+using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Health;
 using JulOS.Server;
 
@@ -41,6 +42,13 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks(
     "/health/ready",
     new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) });
+
+// Diagnostics. API-004 attaches the authorization policy once roles exist.
+app.MapGet(
+    "/api/v1/system/version",
+    () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current));
+
+ServerLog.Starting(app.Logger, ServerVersion.ComponentName, ServerVersion.Current);
 
 await app.RunAsync().ConfigureAwait(false);
 

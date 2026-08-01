@@ -96,9 +96,17 @@ docker compose up --build
 
 Set `JULOS_POSTGRES_PASSWORD` in `.env` first; the stack refuses to start without it. See [`deploy/compose/README.md`](deploy/compose/README.md).
 
+## Versioning
+
+[`VERSION`](VERSION) is the single version source. It drives every assembly, the container image label and `GET /api/v1/system/version`. No deployment depends on an unpinned `latest` reference.
+
+[`docs/RELEASE_NOTES_TEMPLATE.md`](docs/RELEASE_NOTES_TEMPLATE.md) is the release-note template.
+
 ## Repository status
 
-The product and architecture specification is complete. The .NET solution skeleton exists and its dependency boundaries are covered by architecture tests. Work continues through the dependency order in `docs/WORK_BREAKDOWN.md`; `docs/BACKLOG.md` names the current item.
+The product and architecture specification is complete, and the engineering foundation of phase 0 is in place: the solution builds, architecture tests enforce the dependency boundaries, the Desktop toolchain type checks and builds, one command validates the repository, the development stack runs, and continuous integration runs that same command.
+
+Work continues through the dependency order in [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md); [`docs/BACKLOG.md`](docs/BACKLOG.md) names the current item.
 
 ## Initial repository strategy
 
