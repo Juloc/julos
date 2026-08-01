@@ -1,0 +1,60 @@
+# Repository validation.
+#
+# This workflow runs tools/validate.sh, the same entry point developers run.
+# Continuous integration must not grow its own list of checks; a stage belongs
+# in tools/validate.mjs so both places stay identical by construction.
+
+name: Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate the repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      # Only downloaded packages are cached. Build output, node_modules and
+      # generated assets are never restored, so a missing generated dependency
+      # fails the run instead of being served from an earlier one.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Run repository validation
+        run: sh tools/validate.sh
+
+      # The validation must not modify tracked files. A difference here means a
+      # generated artefact is committed out of date.
+      - name: Verify the working tree is unchanged
+        run: git diff --exit-code

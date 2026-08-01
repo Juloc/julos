@@ -311,17 +311,24 @@ A stage whose subject does not exist yet reports `skipped` with the reason and t
 
 ## 12. CI structure
 
+`.github/workflows/validation.yml` runs `sh tools/validate.sh` on every pull request and every push to `main`. Continuous integration must not maintain its own list of checks: a new check belongs in `tools/validate.mjs`, which makes local and CI runs identical by construction rather than by review.
+
+Only downloaded packages are cached. Build output, `node_modules` and generated assets are never restored, so a missing generated dependency fails the run instead of being served from an earlier one. The workflow ends with `git diff --exit-code`, which fails when validation modified a tracked file.
+
 ### Pull requests
 
 - repository policy
 - build
 - unit and architecture tests
-- PostgreSQL integration tests
 - desktop logic tests
-- selected end-to-end tests
-- package manifest validation
 - container build without push
-- dependency and secret scan
+
+Still to be added to the validation stages, with the work item that adds them:
+
+- PostgreSQL integration tests: `API-001`
+- package manifest validation: `PKG-001`
+- selected end-to-end tests: `DESK-012`
+- dependency and secret scan: `OPS-005`
 
 ### Main
 

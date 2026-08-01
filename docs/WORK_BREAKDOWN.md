@@ -140,6 +140,8 @@ Acceptance was verified on a clean stack: both services reached `healthy`, `/hea
 
 ### FND-006 — Add pull-request CI
 
+Status: done.
+
 Depends on: FND-004, FND-005.
 
 Deliver:
@@ -154,6 +156,12 @@ Acceptance:
 
 - local validation and CI use the same commands
 - cache does not hide missing generated dependencies
+
+Implemented as `.github/workflows/validation.yml`, which runs `sh tools/validate.sh` and nothing else. The workflow keeps no separate list of checks, so local and CI runs cannot diverge.
+
+Only downloaded packages are cached, never build output or `node_modules`, and the run ends with `git diff --exit-code` so a tracked file modified by validation fails the build.
+
+PostgreSQL integration tests are added by `API-001` together with the persistence they cover. There is no integration test to run yet, so no database service is configured; a service that starts and tests nothing would report a check that did not happen.
 
 ### FND-007 — Add version and release metadata foundation
 

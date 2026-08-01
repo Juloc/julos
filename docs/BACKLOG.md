@@ -21,8 +21,8 @@ Status values:
 | FND-003 | Frontend toolchain | Done | `src/JulOS.Desktop` type checks, tests and builds native ES modules without a bundler. |
 | FND-004 | Validation entrypoints | Done | `tools/validate.sh` and `tools/validate.ps1` wrap one shared implementation. |
 | FND-005 | Local development stack | Done | Server and PostgreSQL reach a healthy state; readiness verifies the database. |
-| FND-006 | Pull-request CI | Ready | Next implementation task. |
-| FND-007 | Version metadata | Planned | Can follow solution skeleton. |
+| FND-006 | Pull-request CI | Done | One workflow runs `tools/validate.sh`, the same entry point developers run. |
+| FND-007 | Version metadata | Ready | Next implementation task. |
 | Phase 1 | Core platform model | Planned | Starts after Phase 0 gate. |
 | Phase 2 | Persistence, authentication and core APIs | Planned | Depends on Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
@@ -36,19 +36,19 @@ Status values:
 
 ## Next issue
 
-### FND-006 — Add pull-request continuous integration
+### FND-007 — Add version and release metadata
 
 Scope:
 
-- backend build and tests
-- frontend type check and build
-- policy and documentation validation
-- container build without push
+- one repository version source
+- assembly and image version propagation
+- version reachable in diagnostics and in the Desktop
+- release-note template
 
 Acceptance:
 
-- local validation and CI use the same commands
-- cache does not hide missing generated dependencies
+- one version change updates all build outputs
+- no `latest` dependency is required
 
 ## Specification status
 
