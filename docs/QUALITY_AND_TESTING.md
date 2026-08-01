@@ -33,6 +33,10 @@ Test use cases with explicit fake ports:
 
 Fakes model only documented ports and must not reproduce infrastructure implementation complexity.
 
+### 2.2a Infrastructure adapter tests
+
+`tests/JulOS.Infrastructure.Tests` covers control-plane adapters that need no live dependency, such as identifier generation. Adapters that require PostgreSQL or another running system belong in the integration tests instead.
+
 ### 2.3 Architecture tests
 
 Architecture tests enforce:

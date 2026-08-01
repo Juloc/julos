@@ -59,6 +59,7 @@ tests/
   JulOS.Domain.Tests/
   JulOS.Application.Tests/
   JulOS.Architecture.Tests/
+  JulOS.Infrastructure.Tests/
   JulOS.Integration.Tests/
   JulOS.Desktop.Tests/
   JulOS.EndToEnd.Tests/

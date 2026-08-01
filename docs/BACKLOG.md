@@ -24,7 +24,8 @@ Status values:
 | FND-006 | Pull-request CI | Done | One workflow runs `tools/validate.sh`, the same entry point developers run. |
 | FND-007 | Version metadata | Done | The root `VERSION` file drives assemblies, the image label and the diagnostics endpoint. |
 | Phase 0 | Repository and engineering foundation | Done | Gate passed: one command builds, tests and validates a clean checkout. |
-| Phase 1 | Core platform model | Ready | `CORE-001` is the next implementation task. |
+| CORE-001 | Core primitives | Done | Revision, entity identifiers, identifier generator and the shared domain failure type. |
+| Phase 1 | Core platform model | In progress | `CORE-002` through `CORE-008` remain. |
 | Phase 2 | Persistence, authentication and core APIs | Planned | Depends on Core domain model. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |

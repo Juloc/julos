@@ -19,6 +19,8 @@ public sealed class ProjectReferenceTests
         [PlatformProjects.Agent] = [PlatformProjects.Contracts],
         [PlatformProjects.RuntimeManager] = [PlatformProjects.Contracts],
         [PlatformProjects.ArchitectureTests] = [],
+        [PlatformProjects.DomainTests] = [PlatformProjects.Domain],
+        [PlatformProjects.InfrastructureTests] = [PlatformProjects.Infrastructure],
     };
 
     [TestMethod]

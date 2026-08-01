@@ -193,6 +193,8 @@ The release-note template is `docs/RELEASE_NOTES_TEMPLATE.md`.
 
 ### CORE-001 — Implement core identifiers and clock abstraction
 
+Status: done.
+
 Depends on: FND-001.
 
 Deliver stable IDs, UTC clock port and common revision value.
@@ -201,6 +203,12 @@ Acceptance:
 
 - time-dependent tests use injected clock
 - IDs are generated server-side
+
+Implemented as `JulOS.Domain.Primitives` holding `Revision`, `EntityIdentifier` and `IIdentifierGenerator`, plus `DomainRuleViolationException` and the `TimeOrderedIdentifierGenerator` adapter. Decision `D024` records why the clock port is the base class library `TimeProvider` rather than a JulOS interface.
+
+`tests/JulOS.Domain.Tests` and `tests/JulOS.Infrastructure.Tests` are created here with their first real tests, as decisions `D023` and `D025` require.
+
+Every later `CORE` item builds on these primitives: one identifier type per entity, `Revision` for concurrency, `TimeProvider` for time, and `DomainRuleViolationException` with a stable code for a refusal.
 
 ### CORE-002 — Implement package lifecycle domain model
 

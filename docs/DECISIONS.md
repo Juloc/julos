@@ -199,3 +199,26 @@ Reason: one declared version per dependency and one declared setting per rule pr
 A test project is added when the code it validates exists. The foundation milestone therefore creates only `tests/JulOS.Architecture.Tests`, because repository structure and dependency direction are the only things that exist and can be asserted. `JulOS.Domain.Tests` and `JulOS.Application.Tests` are created by the first `CORE` work item that adds behavior.
 
 Reason: an empty test project reports a passing test run without validating anything, which is the misleading-success pattern that `D011` forbids.
+
+## D024 — Shared domain primitives
+
+**Status:** Accepted
+
+The domain shares four primitives, and nothing else:
+
+- `TimeProvider` from the base class library is the clock port. JulOS defines no clock interface of its own.
+- `IIdentifierGenerator` produces identifiers, implemented as time-ordered version 7 GUIDs derived from the injected `TimeProvider`.
+- Each entity declares its own identifier type, for example `public readonly record struct AgentId(Guid Value)`, validated through `EntityIdentifier.Validated`.
+- `Revision` carries optimistic concurrency, starting at 1 and never wrapping.
+
+A refused domain operation throws `DomainRuleViolationException` with a stable code.
+
+Reason: `TimeProvider` is the platform's clock abstraction and already has a maintained test double, so a custom interface would add a second concept without adding capability. Version 7 identifiers keep the primary key index compact because they sort by creation time, which random identifiers do not. Per-entity identifier types make passing the wrong identifier a compile error rather than a runtime lookup miss. Throwing rather than returning a failure value prevents a caller from ignoring a refusal and continuing into an invalid state.
+
+## D025 — Infrastructure adapters have their own unit test project
+
+**Status:** Accepted
+
+`tests/JulOS.Infrastructure.Tests` holds unit tests for control-plane adapters that need no external dependency. `tests/JulOS.Integration.Tests` remains for tests that run against a real PostgreSQL instance or another live dependency.
+
+Reason: an adapter such as the identifier generator is pure logic and must not require a database container to run. Putting it in the integration project would make the fast test set depend on infrastructure it does not need.
