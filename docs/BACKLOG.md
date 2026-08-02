@@ -41,7 +41,8 @@ Status values:
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | API-007 | Operation-resource framework | Done | Durable queued/running/terminal state, idempotent creation, progress events and persistent cancellation requests. |
 | API-008 | Secret-reference service | Done | AES-256-GCM storage, opaque metadata-only references, rotation, tombstones and short-lived operation-scoped leases. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-008` are done; `API-009` is next. |
+| API-009 | Audit service | Done | Security and authorization actions are append-only, sanitized and queryable with retention-safe cursor paging. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-009` are done; `API-010` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -53,18 +54,18 @@ Status values:
 
 ## Next issue
 
-### API-009 — Add audit service
+### API-010 — Add real-time event hub
 
 Scope:
 
-- append-only mutation audit service and query API
-- sanitized structured details and retention-safe paging
-- required security and infrastructure mutation coverage
+- versioned SignalR event envelope
+- authenticated client subscriptions
+- reconnect rule that refreshes authoritative API state
 
 Acceptance:
 
-- required security and infrastructure actions are audited
-- audit details are sanitized and never contain secret values
+- duplicate events do not duplicate client state
+- reconnect triggers an authoritative refresh
 
 ## Specification status
 
