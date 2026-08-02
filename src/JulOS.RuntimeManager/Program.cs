@@ -1,13 +1,12 @@
-﻿namespace JulOS.RuntimeManager;
+﻿using JulOS.RuntimeManager;
 
-/// <summary>Entry point of the JulOS Runtime Manager process.</summary>
-internal static class Program
-{
-    private static int Main()
-    {
-        Console.Error.WriteLine(
-            "JulOS Runtime Manager has no runnable implementation yet. Its authenticated runtime API is delivered by work item PKG-003.");
+var builder = WebApplication.CreateBuilder(args);
+var options = RuntimeManagerOptions.Read(builder.Configuration);
+builder.Services.AddSingleton(options);
+builder.Services.AddSingleton(new RuntimePolicy(options.AllowedNetworks));
+builder.Services.AddSingleton<IRuntimeBackend, DockerCliRuntimeBackend>();
 
-        return 1;
-    }
-}
+var app = builder.Build();
+app.UseMiddleware<RuntimeManagerAuthenticationMiddleware>();
+app.MapRuntimeManager();
+await app.RunAsync().ConfigureAwait(false);
