@@ -1,5 +1,6 @@
 ﻿using JulOS.Application.Packages;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.PackageSdk;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,14 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<IPackageWorkerSupervisor>(),
             packageRoot,
             provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IPackageUpdateService>(provider => new PostgresPackageUpdateService(
+            provider.GetRequiredService<CoreDbContext>(),
+            provider.GetRequiredService<PackageArtifactVerifier>(),
+            provider.GetRequiredService<IPackageWorkerSupervisor>(),
+            packageRoot,
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<CapabilityBroker>();
+        services.AddScoped<ICapabilityClient>(provider => provider.GetRequiredService<CapabilityBroker>());
         return services;
     }
 
