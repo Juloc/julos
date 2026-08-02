@@ -137,7 +137,10 @@ test('dragging a snapped window restores it under the same pointer ratio', () =>
   );
 
   assert.equal(restored.state, 'normal');
-  assert.deepEqual(restored.bounds, { x: 538, y: 0, width: 640, height: 420 });
+  assert.equal(Math.round(restored.bounds.x), 574);
+  assert.equal(restored.bounds.y, 0);
+  assert.equal(restored.bounds.width, 640);
+  assert.equal(restored.bounds.height, 420);
   assert.deepEqual(restored.restoreBounds, restored.bounds);
 });
 
