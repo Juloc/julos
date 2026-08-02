@@ -1,0 +1,60 @@
+name: Validate and clean Desktop diagnostics
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-fix-clean-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Validate Desktop
+        run: |
+          cd src/JulOS.Desktop
+          npm ci
+          set +e
+          npm run typecheck > ../../.github/desktop-error.txt 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            npm test >> ../../.github/desktop-error.txt 2>&1
+            status=$?
+          fi
+          set -e
+          echo "$status" > ../../.github/desktop-status.txt
+
+      - name: Commit result
+        run: |
+          status=$(cat .github/desktop-status.txt)
+          rm .github/desktop-status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$status" -eq 0 ]; then
+            rm -f .github/desktop-error.txt
+            git rm -f .github/workflows/desktop-diagnostics.yml .github/workflows/desktop-fix-and-clean.yml
+            git add src/JulOS.Desktop
+            git commit -m "Complete Desktop validation"
+          else
+            git add .github/desktop-error.txt src/JulOS.Desktop
+            git commit -m "Record Desktop validation failure"
+          fi
+          git push origin HEAD:agent/complete-julos-work-breakdown
