@@ -1,0 +1,53 @@
+name: Agent API-008 payload repair
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api008-repair-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Reconstruct verified segment 12
+        shell: bash
+        run: |
+          set -euo pipefail
+          hashes=(
+            e340b486633efd40ac39987a9e3bf5f5d357cb5d7d1668c1a8825dfe1363b88f
+            f0eb7efdf05994426842a0576ec20f9450fd973a066bcf125a8207fbffbec2ca
+            9d4dfffc7c39208edaaa534a9a757ca2779fc06a654a5323247cc79ad2f4eb5f
+            d59ab1e7b6e19ceb29a6009d79f3275a2f90b29de5a91d144657e04fbd07bd69
+            400c172561615e442b05739121bc5077491a161e863610f4a6fc50b6c77d50e6
+            b911b4f0a707fad6d1bba66b57a8bedd326d5728c0d9023cc81bb38665d4c444
+            16d9086bfa70d24a332f0998c77c2023d41167baf6e0da4e7d3046294b7b94f7
+          )
+
+          : > /tmp/api008-part-11
+          for index in "${!hashes[@]}"; do
+            chunk=$(printf '.agent/api008/part-11-chunks/chunk-%02d' "$index")
+            echo "${hashes[$index]}  $chunk" | sha256sum --check
+            cat "$chunk" >> /tmp/api008-part-11
+          done
+          echo "e58b6f5d104db910740dd7f8dc07c305974a5feda4e8991798e4ae76870a15de  /tmp/api008-part-11" | sha256sum --check
+          cp /tmp/api008-part-11 .agent/api008/part-11
+          rm -rf .agent/api008/part-11-chunks
+          rm .github/workflows/agent-api008-repair.yml
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Repair API-008 payload segment"
+          git push origin HEAD:${{ github.head_ref }}
