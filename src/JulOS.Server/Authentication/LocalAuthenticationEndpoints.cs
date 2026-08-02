@@ -1,6 +1,11 @@
-﻿using JulOS.Application.Authentication;
+﻿using System.Security.Claims;
+
+using JulOS.Application.Auditing;
+using JulOS.Application.Authentication;
 using JulOS.Contracts.Authentication;
+using JulOS.Domain.Observability;
 using JulOS.Infrastructure.Authentication;
+using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -71,38 +76,80 @@ internal static class LocalAuthenticationEndpoints
     }
 
     private static async Task<IResult> SetupAsync(
+        HttpContext context,
         InitialAdministratorRequest request,
         InitialAdministratorProvisioner provisioner,
         SignInManager<LocalUser> signInManager,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var user = await provisioner
-            .CreateAsync(
-                request.UserName,
-                request.DisplayName,
-                request.Password,
-                cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            var user = await provisioner
+                .CreateAsync(
+                    request.UserName,
+                    request.DisplayName,
+                    request.Password,
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-        await signInManager.SignInAsync(user, isPersistent: false).ConfigureAwait(false);
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                user.Id,
+                "authentication.setup",
+                "user",
+                user.Id.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+                AuditOutcome.Succeeded,
+                "Initial administrator created.",
+                cancellationToken).ConfigureAwait(false);
 
-        var response = ToResponse(user);
-        return TypedResults.Created("/api/v1/auth/status", response);
+            await signInManager.SignInAsync(user, isPersistent: false).ConfigureAwait(false);
+
+            var response = ToResponse(user);
+            return TypedResults.Created("/api/v1/auth/status", response);
+        }
+        catch (AuthenticationFailureException)
+        {
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                userId: null,
+                "authentication.setup",
+                "authentication_setup",
+                "initial",
+                AuditOutcome.Denied,
+                "Initial administrator setup denied.",
+                cancellationToken).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private static async Task<IResult> LoginAsync(
+        HttpContext context,
         LocalLoginRequest request,
         InitialAdministratorProvisioner provisioner,
         UserManager<LocalUser> userManager,
         SignInManager<LocalUser> signInManager,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         if (await provisioner.IsSetupRequiredAsync(cancellationToken).ConfigureAwait(false))
         {
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                userId: null,
+                "authentication.login",
+                "user",
+                "unknown",
+                AuditOutcome.Denied,
+                "Login denied.",
+                cancellationToken).ConfigureAwait(false);
             throw new AuthenticationFailureException(
                 AuthenticationFailureReason.SetupRequired);
         }
@@ -112,6 +159,16 @@ internal static class LocalAuthenticationEndpoints
             || request.UserName.Length > 128
             || request.Password.Length > 1024)
         {
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                userId: null,
+                "authentication.login",
+                "user",
+                "unknown",
+                AuditOutcome.Denied,
+                "Login denied.",
+                cancellationToken).ConfigureAwait(false);
             throw new AuthenticationFailureException(
                 AuthenticationFailureReason.InvalidCredentials);
         }
@@ -122,6 +179,16 @@ internal static class LocalAuthenticationEndpoints
 
         if (user is null)
         {
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                userId: null,
+                "authentication.login",
+                "user",
+                "unknown",
+                AuditOutcome.Denied,
+                "Login denied.",
+                cancellationToken).ConfigureAwait(false);
             throw new AuthenticationFailureException(
                 AuthenticationFailureReason.InvalidCredentials);
         }
@@ -132,10 +199,30 @@ internal static class LocalAuthenticationEndpoints
 
         if (!result.Succeeded)
         {
+            await AppendAuthenticationAuditAsync(
+                context,
+                auditService,
+                user.Id,
+                "authentication.login",
+                "user",
+                user.Id.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+                AuditOutcome.Denied,
+                "Login denied.",
+                cancellationToken).ConfigureAwait(false);
             throw new AuthenticationFailureException(
                 AuthenticationFailureReason.InvalidCredentials);
         }
 
+        await AppendAuthenticationAuditAsync(
+            context,
+            auditService,
+            user.Id,
+            "authentication.login",
+            "user",
+            user.Id.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+            AuditOutcome.Succeeded,
+            "Login succeeded.",
+            cancellationToken).ConfigureAwait(false);
         await signInManager.SignInAsync(user, isPersistent: false).ConfigureAwait(false);
 
         return TypedResults.Ok(ToResponse(user));
@@ -157,12 +244,58 @@ internal static class LocalAuthenticationEndpoints
     private static async Task<IResult> LogoutAsync(
         HttpContext context,
         IAntiforgery antiforgery,
-        SignInManager<LocalUser> signInManager)
+        SignInManager<LocalUser> signInManager,
+        IAuditService auditService,
+        CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+        var userId = CurrentUserId(context.User)
+            ?? throw new InvalidOperationException("The authenticated principal has no valid user identifier.");
 
+        await AppendAuthenticationAuditAsync(
+            context,
+            auditService,
+            userId,
+            "authentication.logout",
+            "user",
+            userId.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+            AuditOutcome.Succeeded,
+            "Logout succeeded.",
+            cancellationToken).ConfigureAwait(false);
         await signInManager.SignOutAsync().ConfigureAwait(false);
         return TypedResults.NoContent();
+    }
+
+    private static Task AppendAuthenticationAuditAsync(
+        HttpContext context,
+        IAuditService auditService,
+        Guid? userId,
+        string action,
+        string targetType,
+        string targetId,
+        AuditOutcome outcome,
+        string summary,
+        CancellationToken cancellationToken) => auditService.AppendAsync(
+            new AuditRecord(
+                userId,
+                AgentId: null,
+                SourcePackageId: null,
+                action,
+                targetType,
+                targetId,
+                outcome,
+                CorrelationId.Get(context),
+                context.Connection.RemoteIpAddress?.ToString(),
+                summary,
+                "Credential values omitted."),
+            cancellationToken);
+
+    private static Guid? CurrentUserId(ClaimsPrincipal principal)
+    {
+        var identifier = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(identifier, out var userId) && userId != Guid.Empty
+            ? userId
+            : null;
     }
 
     private static AuthenticatedUserResponse ToResponse(LocalUser user)
