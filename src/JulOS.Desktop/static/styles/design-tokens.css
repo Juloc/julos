@@ -112,3 +112,30 @@ textarea {
 *::after {
   box-sizing: border-box;
 }
+
+.unsupported-browser {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  max-width: 100%;
+  padding: 32px max(24px, calc((100vw - 680px) / 2));
+  background: var(--julos-color-background-gradient);
+  color: var(--julos-color-text-secondary);
+  line-height: 1.5;
+}
+
+.unsupported-browser[hidden] {
+  display: none;
+}
+
+.unsupported-browser h1 {
+  margin: 0 0 12px;
+  color: var(--julos-color-text);
+  font-size: clamp(24px, 5vw, 38px);
+  line-height: 1.15;
+}
+
+.unsupported-browser p {
+  margin: 4px 0;
+}
