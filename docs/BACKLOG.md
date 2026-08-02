@@ -42,8 +42,9 @@ Status values:
 | API-007 | Operation-resource framework | Done | Durable queued/running/terminal state, idempotent creation, progress events and persistent cancellation requests. |
 | API-008 | Secret-reference service | Done | AES-256-GCM storage, opaque metadata-only references, rotation, tombstones and short-lived operation-scoped leases. |
 | API-009 | Audit service | Done | Security and authorization actions are append-only, sanitized and queryable with retention-safe cursor paging. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-009` are done; `API-010` is next. |
-| Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
+| API-010 | Real-time event hub | Done | Authenticated SignalR envelopes are versioned; Desktop deduplicates events and refreshes authoritative state after reconnect. |
+| Phase 2 | Persistence, authentication and core APIs | Done | Gate passed: PostgreSQL, authentication, authorization, APIs, audit, secrets, operations and real-time events validate together. |
+| Phase 3 | Desktop shell | In progress | `DESK-001` is next: shell, tokens, themes, localization and visible server version. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -54,18 +55,20 @@ Status values:
 
 ## Next issue
 
-### API-010 — Add real-time event hub
+### DESK-001 — Create shell and design tokens
 
 Scope:
 
-- versioned SignalR event envelope
-- authenticated client subscriptions
-- reconnect rule that refreshes authoritative API state
+- responsive Desktop surface and taskbar
+- system, light and dark theme tokens
+- English and German localization foundation
+- visible running server version in the footer and About surface
 
 Acceptance:
 
-- duplicate events do not duplicate client state
-- reconnect triggers an authoritative refresh
+- all three theme modes work
+- shell strings exist in English and German
+- the server version is visible without developer tools
 
 ## Specification status
 
