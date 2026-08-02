@@ -1,4 +1,4 @@
-name: Agent API-005 corrected validation
+name: Agent API-005 diagnostic validation
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: agent-api005-corrected-${{ github.event.pull_request.number }}
+  group: agent-api005-diagnostic-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -99,14 +99,36 @@ jobs:
           dotnet restore JulOS.slnx
           dotnet build JulOS.slnx --no-restore
 
-      - name: Generate profile migration
+      - name: Generate and inspect profile migration
+        shell: bash
         run: |
+          set -euo pipefail
           dotnet tool restore
           dotnet ef migrations add AddProfilePreferences \
             --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
             --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
             --output-dir Persistence/Core/Migrations
           node tools/normalize-encoding.mjs
+          echo '--- generated migration ---'
+          migration=$(find src/JulOS.Infrastructure/Persistence/Core/Migrations -maxdepth 1 -name '*_AddProfilePreferences.cs' -print -quit)
+          test -n "$migration"
+          sed -n '1,260p' "$migration"
+
+      - name: Run focused setup diagnostic
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build JulOS.slnx --no-restore
+          dotnet test tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj \
+            --no-build \
+            --filter 'FullyQualifiedName~InitialSetupCreatesAdministratorAndProtectsTheApi' \
+            --logger 'console;verbosity=detailed' \
+            > /tmp/setup-test.log 2>&1 || {
+              echo '--- focused setup failure ---'
+              tail -n 350 /tmp/setup-test.log
+              exit 1
+            }
+          cat /tmp/setup-test.log
 
       - name: Run full repository validation
         run: sh tools/validate.sh
