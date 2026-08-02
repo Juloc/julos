@@ -145,7 +145,7 @@ test('invalid transitions and identities fail with stable error codes', () => {
 
 test('subscriptions receive snapshots and cannot mutate stored geometry', () => {
   const store = createStore();
-  const snapshots: readonly { readonly x: number }[][] = [];
+  const snapshots: Array<ReadonlyArray<{ readonly x: number }>> = [];
   const unsubscribe = store.subscribe((windows) => {
     snapshots.push(windows.map((window) => ({ x: window.bounds.x })));
   });
