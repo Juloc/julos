@@ -162,7 +162,7 @@ internal static class PackageEndpoints
     private static async Task<IResult> RemoveAsync(
         HttpContext context,
         string packageId,
-        RemovePackageRequest request,
+        [FromBody] RemovePackageRequest request,
         IAntiforgery antiforgery,
         IPackageManagementService service,
         CancellationToken cancellationToken)
