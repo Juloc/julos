@@ -95,6 +95,18 @@ jobs:
                   raise SystemExit('Authorization response mapper anchor not found.')
               endpoints = endpoints.replace(marker, metadata + marker)
           endpoint_path.write_text('\ufeff' + endpoints, encoding='utf-8')
+
+          tests_path = Path('tests/JulOS.Integration.Tests/Authorization/AuthorizationTests.cs')
+          tests = tests_path.read_text(encoding='utf-8-sig')
+          tests = tests.replace(
+              'using JulOS.Infrastructure.Authentication;\n',
+              'using JulOS.Infrastructure.Authentication;\n'
+              'using JulOS.Infrastructure.Persistence.Core;\n')
+          tests = tests.replace(
+              'using Microsoft.AspNetCore.Http.Metadata;\n',
+              'using Microsoft.AspNetCore.Http;\n'
+              'using Microsoft.AspNetCore.Http.Metadata;\n')
+          tests_path.write_text('\ufeff' + tests, encoding='utf-8')
           PY
           rm -rf .agent
           node tools/normalize-encoding.mjs
