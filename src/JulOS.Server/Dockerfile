@@ -5,6 +5,20 @@
 #
 # Base image tags are pinned. Decision D020 forbids depending on a moving tag.
 
+FROM node:24.18.0-alpine AS desktop-build
+
+WORKDIR /desktop
+
+# Dependency installation is isolated from source changes. The production build
+# emits native ES modules and static files without retaining Node in the runtime.
+COPY src/JulOS.Desktop/package.json src/JulOS.Desktop/package-lock.json ./
+RUN npm ci
+
+COPY src/JulOS.Desktop/tsconfig.json src/JulOS.Desktop/build.mjs ./
+COPY src/JulOS.Desktop/src/ ./src/
+COPY src/JulOS.Desktop/static/ ./static/
+RUN npm run build
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 
 WORKDIR /source
@@ -51,6 +65,7 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 WORKDIR /application
 
 COPY --from=build /application ./
+COPY --from=desktop-build /desktop/dist ./wwwroot/
 
 EXPOSE 8080
 
