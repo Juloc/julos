@@ -40,6 +40,7 @@ Status values:
 | API-005 | Profile and preferences API | Done | Authenticated language, time-zone, theme and motion preferences use antiforgery and optimistic concurrency. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | API-007 | Operation-resource framework | Done | Durable queued/running/terminal state, idempotent creation, progress events and persistent cancellation requests. |
+| API-008 | Secret-reference service | Done | AES-256-GCM storage, opaque metadata-only references, rotation, tombstones and short-lived operation-scoped leases. |
 | Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-008` are done; `API-009` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
