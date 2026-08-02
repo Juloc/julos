@@ -24,6 +24,9 @@ public static class PlatformErrorCodes
     /// <summary>A domain rule refused the operation and supplied no more specific code.</summary>
     public const string RuleViolation = "request.rule_violation";
 
+    /// <summary>The caller exceeded the request rate permitted for this operation.</summary>
+    public const string RateLimited = "request.rate_limited";
+
     /// <summary>A mutation used a stale resource revision and was not applied.</summary>
     public const string ConcurrencyConflict = "request.concurrency_conflict";
 

@@ -414,6 +414,8 @@ The Server maps that exception through the existing API-006 error pipeline to HT
 
 ### API-003 — Add local authentication
 
+Status: done.
+
 Depends on: API-001.
 
 Deliver initial admin setup, login, logout, secure cookies, lockout and session timeout.
@@ -422,6 +424,12 @@ Acceptance:
 
 - desktop and APIs reject unauthenticated users
 - login rate limiting is tested
+
+Implemented with ASP.NET Core Identity persisted in the existing `core` schema. The singleton `authentication_setup` row is locked inside one database transaction, so only one initial administrator can be created even when setup requests race. The administrator receives the system `Administrator` role, while permission evaluation and role-management endpoints remain owned by `API-004`.
+
+The Server uses a secure, HTTP-only, same-site session cookie, a validated configurable session timeout, lockout after repeated failures and a per-IP fixed-window limit for setup and login. Login failures deliberately return one public code for an unknown user, a wrong password and a locked account. Logout requires a valid antiforgery token.
+
+A fallback authorization policy protects every endpoint unless it is explicitly anonymous. Only authentication setup/status/login and health probes are anonymous. Integration tests run against migrated PostgreSQL and prove one-time setup, protected APIs, cookie attributes, lockout, rate limiting, antiforgery logout and configurable session expiry.
 
 ### API-004 — Add role and permission authorization
 

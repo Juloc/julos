@@ -95,6 +95,9 @@ dotnet run --project src/JulOS.Server -- --migrate-database
 
 Normal Server startup never changes the schema. The development Compose stack runs this command in its one-shot `migrate` service before starting Server.
 
+
+After a fresh migration, `GET /api/v1/auth/status` reports that initial setup is required. Create the first administrator once through `POST /api/v1/auth/setup`; subsequent API calls use the secure `.JulOS.Session` cookie. Authentication mutations, payloads and operational defaults are specified in [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md) and [`docs/SECURITY_AND_OPERATIONS.md`](docs/SECURITY_AND_OPERATIONS.md).
+
 ## Run locally
 
 ```bash

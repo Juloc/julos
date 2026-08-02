@@ -105,7 +105,7 @@ public sealed class ProblemDetailsTests
     {
         using var client = host.CreateClient();
 
-        using var response = await client.GetAsync(new Uri("/api/v1/system/version", UriKind.Relative));
+        using var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
 
         response.EnsureSuccessStatusCode();
 

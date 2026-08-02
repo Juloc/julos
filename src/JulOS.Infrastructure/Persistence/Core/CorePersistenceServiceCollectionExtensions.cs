@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JulOS.Infrastructure.Authentication;
+
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace JulOS.Infrastructure.Persistence.Core;
@@ -15,6 +17,7 @@ public static class CorePersistenceServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         services.AddDbContext<CoreDbContext>(options => Configure(options, connectionString));
+        services.AddScoped<InitialAdministratorProvisioner>();
 
         return services;
     }

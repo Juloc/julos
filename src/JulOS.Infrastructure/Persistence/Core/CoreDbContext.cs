@@ -1,15 +1,18 @@
 ﻿namespace JulOS.Infrastructure.Persistence.Core;
 
 using JulOS.Application.Concurrency;
+using JulOS.Infrastructure.Authentication;
 
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 /// <summary>
 /// Persistence boundary for JulOS-owned Core state.
 /// </summary>
-public sealed class CoreDbContext : DbContext
+public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid>
 {
+    private readonly TimeProvider timeProvider;
     /// <summary>
     /// Gets the PostgreSQL schema owned by the JulOS core platform.
     /// </summary>
@@ -24,11 +27,16 @@ public sealed class CoreDbContext : DbContext
     /// Initializes a new instance of the <see cref="CoreDbContext"/> class.
     /// </summary>
     /// <param name="options">The configured database-context options.</param>
-    public CoreDbContext(DbContextOptions<CoreDbContext> options)
+    /// <param name="timeProvider">The clock used for identity timestamps and revisions.</param>
+    public CoreDbContext(
+        DbContextOptions<CoreDbContext> options,
+        TimeProvider? timeProvider = null)
         : base(options)
     {
+        this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    internal DbSet<AuthenticationSetupRow> AuthenticationSetup => this.Set<AuthenticationSetupRow>();
     internal DbSet<PermissionAssignmentRow> PermissionAssignments => this.Set<PermissionAssignmentRow>();
     internal DbSet<PackageInstallationRow> PackageInstallations => this.Set<PackageInstallationRow>();
     internal DbSet<ApplicationDefinitionRow> ApplicationDefinitions => this.Set<ApplicationDefinitionRow>();
@@ -48,6 +56,7 @@ public sealed class CoreDbContext : DbContext
     {
         try
         {
+            this.PrepareIdentityRevisions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
         }
         catch (DbUpdateConcurrencyException exception)
@@ -63,6 +72,7 @@ public sealed class CoreDbContext : DbContext
     {
         try
         {
+            this.PrepareIdentityRevisions();
             return await base
                 .SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken)
                 .ConfigureAwait(false);
@@ -74,11 +84,44 @@ public sealed class CoreDbContext : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder builder)
     {
-        ArgumentNullException.ThrowIfNull(modelBuilder);
+        ArgumentNullException.ThrowIfNull(builder);
 
-        CoreModelConfiguration.Configure(modelBuilder);
+        base.OnModelCreating(builder);
+        CoreModelConfiguration.Configure(builder);
+    }
+
+    private void PrepareIdentityRevisions()
+    {
+        var now = this.timeProvider.GetUtcNow();
+
+        foreach (var entry in this.ChangeTracker.Entries<LocalUser>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.Revision = 1;
+                entry.Entity.CreatedAtUtc = entry.Entity.CreatedAtUtc == default ? now : entry.Entity.CreatedAtUtc;
+                entry.Entity.UpdatedAtUtc = entry.Entity.UpdatedAtUtc == default ? now : entry.Entity.UpdatedAtUtc;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Revision = checked(entry.OriginalValues.GetValue<int>(nameof(LocalUser.Revision)) + 1);
+                entry.Entity.UpdatedAtUtc = now;
+            }
+        }
+
+        foreach (var entry in this.ChangeTracker.Entries<LocalRole>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.Revision = 1;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Revision = checked(entry.OriginalValues.GetValue<int>(nameof(LocalRole.Revision)) + 1);
+            }
+        }
     }
 
     private static ConcurrencyConflictException CreateConcurrencyConflict(

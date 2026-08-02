@@ -230,3 +230,12 @@ Reason: an adapter such as the identifier generator is pure logic and must not r
 Entity Framework Core maps relational storage rows in Infrastructure rather than materializing the Domain aggregates directly. Each row exposes only storage data and a one-way `FromDomain` conversion where a Domain aggregate already exists. It contains no lifecycle rule, authorization decision or alternate state transition.
 
 Reason: some Domain types deliberately require services such as `TimeProvider` or enforce creation through named operations. Adding persistence-only constructors, mutable setters or EF annotations would weaken those invariants and make Domain depend on PostgreSQL tooling. Separate rows keep the Domain persistence-neutral while database constraints provide an independent final enforcement layer.
+
+## D027 — Local authentication uses Identity cookies and a default-deny fallback
+
+**Status:** Accepted
+
+Local accounts and roles use ASP.NET Core Identity stores in the existing `core` schema. Browser sessions use one secure, HTTP-only, same-site-strict Identity cookie. Server installs an authenticated-user fallback policy, and only setup, login, authentication status and health probes may opt out explicitly.
+
+Reason: Identity supplies reviewed password hashing, lockout, security stamps and cookie integration without placing credential behavior in Domain. A fallback policy makes a newly added endpoint private unless its owner consciously declares otherwise. Roles are stored now because the first administrator needs a stable system role, but permission mapping and role administration stay in `API-004` so authentication does not invent authorization behavior.
+

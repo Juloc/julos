@@ -1,4 +1,5 @@
-﻿using JulOS.Application.Concurrency;
+﻿using JulOS.Application.Authentication;
+using JulOS.Application.Concurrency;
 using JulOS.Domain;
 
 namespace JulOS.Server.Errors;
@@ -49,6 +50,15 @@ internal static class ErrorHandling
     {
         return exception switch
         {
+            AuthenticationFailureException authentication => authentication.Reason switch
+            {
+                AuthenticationFailureReason.SetupAlreadyCompleted => StatusCodes.Status409Conflict,
+                AuthenticationFailureReason.SetupRequired => StatusCodes.Status409Conflict,
+                AuthenticationFailureReason.InvalidSetupRequest => StatusCodes.Status400BadRequest,
+                AuthenticationFailureReason.InvalidCredentials => StatusCodes.Status401Unauthorized,
+                AuthenticationFailureReason.AntiforgeryInvalid => StatusCodes.Status400BadRequest,
+                _ => StatusCodes.Status500InternalServerError,
+            },
             ConcurrencyConflictException => StatusCodes.Status409Conflict,
             DomainRuleViolationException => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,

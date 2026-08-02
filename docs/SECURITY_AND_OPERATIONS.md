@@ -35,12 +35,19 @@ Authentication at one boundary does not automatically authorize another boundary
 
 Initial deployment supports local accounts with:
 
-- secure password hashing through ASP.NET Core Identity
-- secure, HTTP-only and same-site cookies
-- configurable session timeout
-- login rate limiting
-- account lockout with safe recovery
-- forced initial administrator creation during setup
+- password hashing and verification through ASP.NET Core Identity
+- secure, HTTP-only, same-site-strict cookies named `.JulOS.Session`
+- configurable sliding session timeout
+- a per-IP fixed-window limit shared by setup and login
+- account lockout after repeated failures without a user-enumerating response
+- one database-serialized initial administrator creation during setup
+- antiforgery validation before logout
+
+The defaults are 30 minutes for the session, 15 minutes for lockout, five failed passwords before lockout and five setup/login requests per 60 seconds. They are configured through `Authentication__SessionTimeoutMinutes`, `Authentication__LockoutMinutes`, `Authentication__MaximumFailedAccessAttempts`, `Authentication__LoginPermitLimit` and `Authentication__LoginWindowSeconds`. Invalid or unsafe ranges stop Server startup instead of being silently corrected.
+
+The initial password must be 12 to 1024 characters and satisfy the Identity digit, lowercase, uppercase, non-alphanumeric and unique-character rules. The setup endpoint never logs or returns it. Password hashes, security stamps and lockout state remain in the `core` identity tables.
+
+Safe lockout recovery in `API-003` is time expiry. Administrative account recovery and session revocation require audited authorization work and are added by their owning later items; no unauthenticated reset endpoint exists.
 
 ### 3.2 OIDC
 

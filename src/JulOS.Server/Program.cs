@@ -1,10 +1,11 @@
 ﻿// JulOS Server composition root.
-// Authentication and feature endpoints are wired by later work items.
+// Local authentication protects the control plane; feature endpoints follow later work items.
 
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Server;
+using JulOS.Server.Authentication;
 using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -36,6 +37,7 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
+builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 
 builder.Services
     .AddHealthChecks()
@@ -48,19 +50,33 @@ builder.Services
 var app = builder.Build();
 
 app.UseJulOsErrorHandling();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
 
 // Liveness answers whether the process itself is running, so it registers no
 // dependency check. A failing dependency must not cause a restart loop.
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous();
 
 app.MapHealthChecks(
     "/health/ready",
-    new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) });
+    new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) })
+    .AllowAnonymous();
 
-// Diagnostics. API-004 attaches the authorization policy once roles exist.
+app.MapJulOsLocalAuthentication();
+
+// The fallback policy requires a session. API-004 replaces this with the
+// narrower permission policy once role management and permission grants exist.
 app.MapGet(
     "/api/v1/system/version",
     () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current));
+
+// An unknown path has no protected resource behind it. Keep the platform's
+// common 404 problem response instead of challenging an unauthenticated caller.
+app.MapFallback(() => TypedResults.NotFound())
+    .AllowAnonymous();
 
 ServerLog.Starting(app.Logger, ServerVersion.ComponentName, ServerVersion.Current);
 

@@ -145,11 +145,11 @@ Contracts contain no persistence annotations or implementation behavior.
 
 ### JulOS.Infrastructure
 
-Contains core persistence, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
+Contains core persistence, the ASP.NET Core Identity stores for local users and roles, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
 
 ### JulOS.Server
 
-ASP.NET Core composition root. It owns middleware, endpoint mapping, authentication setup, background-service registration and dependency injection wiring.
+ASP.NET Core composition root. It owns middleware, endpoint mapping, authentication setup, secure cookie configuration, default-deny fallback authorization, rate limiting, antiforgery, background-service registration and dependency injection wiring.
 
 ### JulOS.Desktop
 

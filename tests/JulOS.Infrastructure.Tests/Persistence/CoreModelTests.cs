@@ -1,6 +1,7 @@
 ﻿using JulOS.Domain.Agents;
 using JulOS.Domain.Packages;
 using JulOS.Domain.Primitives;
+using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.Persistence.Core;
 
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,8 @@ public sealed class CoreModelTests
             typeof(AgentRow),
             typeof(AgentCapabilityRow),
             typeof(ProblemRow),
+            typeof(LocalUser),
+            typeof(LocalRole),
         };
 
         foreach (var mutableType in mutableTypes)

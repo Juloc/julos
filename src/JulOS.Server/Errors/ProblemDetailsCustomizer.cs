@@ -1,4 +1,5 @@
-﻿using JulOS.Application.Concurrency;
+﻿using JulOS.Application.Authentication;
+using JulOS.Application.Concurrency;
 using JulOS.Contracts.Errors;
 using JulOS.Domain;
 
@@ -40,6 +41,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = ruleViolation.Message;
         }
+        else if (exception is AuthenticationFailureException authenticationFailure)
+        {
+            context.ProblemDetails.Detail = authenticationFailure.Message;
+        }
         else if (exception is not null)
         {
             context.ProblemDetails.Detail = null;
@@ -63,6 +68,11 @@ internal static class ProblemDetailsCustomizer
             return (PlatformErrorCodes.ConcurrencyConflict, false);
         }
 
+        if (exception is AuthenticationFailureException authenticationFailure)
+        {
+            return (authenticationFailure.Code, false);
+        }
+
         if (exception is DomainRuleViolationException ruleViolation)
         {
             return (ruleViolation.Code, false);
@@ -75,6 +85,7 @@ internal static class ProblemDetailsCustomizer
             StatusCodes.Status403Forbidden => (PlatformErrorCodes.Forbidden, false),
             StatusCodes.Status404NotFound => (PlatformErrorCodes.NotFound, false),
             StatusCodes.Status409Conflict => (PlatformErrorCodes.RuleViolation, false),
+            StatusCodes.Status429TooManyRequests => (PlatformErrorCodes.RateLimited, true),
             StatusCodes.Status503ServiceUnavailable => (PlatformErrorCodes.Unexpected, true),
             _ when status >= StatusCodes.Status500InternalServerError => (PlatformErrorCodes.Unexpected, false),
             _ => (PlatformErrorCodes.Invalid, false),
@@ -90,6 +101,7 @@ internal static class ProblemDetailsCustomizer
             StatusCodes.Status403Forbidden => "The request is not permitted.",
             StatusCodes.Status404NotFound => "The resource does not exist.",
             StatusCodes.Status409Conflict => "The request conflicts with the current state.",
+            StatusCodes.Status429TooManyRequests => "Too many requests were submitted.",
             StatusCodes.Status503ServiceUnavailable => "A required dependency is unavailable.",
             _ => "The request failed.",
         };

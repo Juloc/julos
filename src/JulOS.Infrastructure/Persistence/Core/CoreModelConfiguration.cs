@@ -6,7 +6,9 @@ using JulOS.Domain.Packages;
 using JulOS.Domain.Permissions;
 using JulOS.Domain.Primitives;
 using JulOS.Domain.Sessions;
+using JulOS.Infrastructure.Authentication;
 
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -18,6 +20,8 @@ internal static class CoreModelConfiguration
 
     internal static void Configure(ModelBuilder modelBuilder)
     {
+        ConfigureIdentity(modelBuilder);
+        ConfigureAuthenticationSetup(modelBuilder.Entity<AuthenticationSetupRow>());
         ConfigurePackageInstallations(modelBuilder.Entity<PackageInstallationRow>());
         ConfigureApplications(modelBuilder.Entity<ApplicationDefinitionRow>());
         ConfigureApplicationViewports(modelBuilder.Entity<ApplicationViewportRow>());
@@ -32,6 +36,114 @@ internal static class CoreModelConfiguration
         ConfigureNotifications(modelBuilder.Entity<NotificationRow>());
         ConfigureAuditEvents(modelBuilder.Entity<AuditEventRow>());
         ConfigurePermissionAssignments(modelBuilder.Entity<PermissionAssignmentRow>());
+    }
+
+    private static void ConfigureIdentity(ModelBuilder modelBuilder)
+    {
+        var users = modelBuilder.Entity<LocalUser>();
+        users.ToTable("users", Schema, table =>
+        {
+            table.HasCheckConstraint("ck_users_revision", "revision >= 1");
+            table.HasCheckConstraint("ck_users_language", "char_length(preferred_language) BETWEEN 2 AND 32");
+            table.HasCheckConstraint("ck_users_theme", "theme IN ('system', 'light', 'dark')");
+        });
+        users.Property(user => user.Id).HasColumnName("id").ValueGeneratedNever();
+        users.Property(user => user.UserName).HasColumnName("user_name").HasMaxLength(128);
+        users.Property(user => user.NormalizedUserName).HasColumnName("normalized_user_name").HasMaxLength(128);
+        users.Property(user => user.Email).HasColumnName("email").HasMaxLength(256);
+        users.Property(user => user.NormalizedEmail).HasColumnName("normalized_email").HasMaxLength(256);
+        users.Property(user => user.EmailConfirmed).HasColumnName("email_confirmed");
+        users.Property(user => user.PasswordHash).HasColumnName("password_hash");
+        users.Property(user => user.SecurityStamp).HasColumnName("security_stamp");
+        users.Property(user => user.ConcurrencyStamp).HasColumnName("concurrency_stamp").IsConcurrencyToken();
+        users.Property(user => user.PhoneNumber).HasColumnName("phone_number").HasMaxLength(64);
+        users.Property(user => user.PhoneNumberConfirmed).HasColumnName("phone_number_confirmed");
+        users.Property(user => user.TwoFactorEnabled).HasColumnName("two_factor_enabled");
+        users.Property(user => user.LockoutEnd).HasColumnName("lockout_end_utc");
+        users.Property(user => user.LockoutEnabled).HasColumnName("lockout_enabled");
+        users.Property(user => user.AccessFailedCount).HasColumnName("access_failed_count");
+        users.Property(user => user.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+        users.Property(user => user.PreferredLanguage).HasColumnName("preferred_language").HasMaxLength(32).IsRequired();
+        users.Property(user => user.TimeZone).HasColumnName("time_zone").HasMaxLength(128).IsRequired();
+        users.Property(user => user.Theme).HasColumnName("theme").HasMaxLength(16).IsRequired();
+        users.Property(user => user.CreatedAtUtc).HasColumnName("created_at_utc");
+        users.Property(user => user.UpdatedAtUtc).HasColumnName("updated_at_utc");
+        users.Property(user => user.Revision).HasColumnName("revision").IsConcurrencyToken();
+        users.HasIndex(user => user.NormalizedUserName)
+            .IsUnique()
+            .HasDatabaseName("ux_users_normalized_user_name");
+        users.HasIndex(user => user.NormalizedEmail)
+            .HasDatabaseName("ix_users_normalized_email");
+
+        var roles = modelBuilder.Entity<LocalRole>();
+        roles.ToTable("roles", Schema, table =>
+        {
+            table.HasCheckConstraint("ck_roles_revision", "revision >= 1");
+        });
+        roles.Property(role => role.Id).HasColumnName("id").ValueGeneratedNever();
+        roles.Property(role => role.Name).HasColumnName("name").HasMaxLength(128);
+        roles.Property(role => role.NormalizedName).HasColumnName("normalized_name").HasMaxLength(128);
+        roles.Property(role => role.ConcurrencyStamp).HasColumnName("concurrency_stamp").IsConcurrencyToken();
+        roles.Property(role => role.IsSystemRole).HasColumnName("is_system_role");
+        roles.Property(role => role.Revision).HasColumnName("revision").IsConcurrencyToken();
+        roles.HasIndex(role => role.NormalizedName)
+            .IsUnique()
+            .HasDatabaseName("ux_roles_normalized_name");
+
+        var userRoles = modelBuilder.Entity<IdentityUserRole<Guid>>();
+        userRoles.ToTable("user_roles", Schema);
+        userRoles.Property(item => item.UserId).HasColumnName("user_id");
+        userRoles.Property(item => item.RoleId).HasColumnName("role_id");
+
+        var userClaims = modelBuilder.Entity<IdentityUserClaim<Guid>>();
+        userClaims.ToTable("user_claims", Schema);
+        userClaims.Property(item => item.Id).HasColumnName("id");
+        userClaims.Property(item => item.UserId).HasColumnName("user_id");
+        userClaims.Property(item => item.ClaimType).HasColumnName("claim_type");
+        userClaims.Property(item => item.ClaimValue).HasColumnName("claim_value");
+
+        var userLogins = modelBuilder.Entity<IdentityUserLogin<Guid>>();
+        userLogins.ToTable("user_logins", Schema);
+        userLogins.Property(item => item.LoginProvider).HasColumnName("login_provider").HasMaxLength(128);
+        userLogins.Property(item => item.ProviderKey).HasColumnName("provider_key").HasMaxLength(256);
+        userLogins.Property(item => item.ProviderDisplayName).HasColumnName("provider_display_name").HasMaxLength(256);
+        userLogins.Property(item => item.UserId).HasColumnName("user_id");
+
+        var userTokens = modelBuilder.Entity<IdentityUserToken<Guid>>();
+        userTokens.ToTable("user_tokens", Schema);
+        userTokens.Property(item => item.UserId).HasColumnName("user_id");
+        userTokens.Property(item => item.LoginProvider).HasColumnName("login_provider").HasMaxLength(128);
+        userTokens.Property(item => item.Name).HasColumnName("name").HasMaxLength(128);
+        userTokens.Property(item => item.Value).HasColumnName("value");
+
+        var roleClaims = modelBuilder.Entity<IdentityRoleClaim<Guid>>();
+        roleClaims.ToTable("role_claims", Schema);
+        roleClaims.Property(item => item.Id).HasColumnName("id");
+        roleClaims.Property(item => item.RoleId).HasColumnName("role_id");
+        roleClaims.Property(item => item.ClaimType).HasColumnName("claim_type");
+        roleClaims.Property(item => item.ClaimValue).HasColumnName("claim_value");
+    }
+
+    private static void ConfigureAuthenticationSetup(EntityTypeBuilder<AuthenticationSetupRow> entity)
+    {
+        entity.ToTable("authentication_setup", Schema, table =>
+        {
+            table.HasCheckConstraint("ck_authentication_setup_singleton", "id = 1");
+            table.HasCheckConstraint(
+                "ck_authentication_setup_completion",
+                "(completed_at_utc IS NULL AND administrator_user_id IS NULL) OR "
+                + "(completed_at_utc IS NOT NULL AND administrator_user_id IS NOT NULL)");
+        });
+        entity.HasKey(row => row.Id).HasName("pk_authentication_setup");
+        entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+        entity.Property(row => row.AdministratorUserId).HasColumnName("administrator_user_id");
+        entity.Property(row => row.CompletedAtUtc).HasColumnName("completed_at_utc");
+        entity.HasOne<LocalUser>()
+            .WithMany()
+            .HasForeignKey(row => row.AdministratorUserId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_authentication_setup_administrator");
+        entity.HasData(new AuthenticationSetupRow { Id = 1 });
     }
 
     private static void ConfigurePackageInstallations(EntityTypeBuilder<PackageInstallationRow> entity)

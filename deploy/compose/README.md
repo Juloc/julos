@@ -19,6 +19,9 @@ The one-shot `migrate` service applies committed Entity Framework Core migration
 
 The server answers on `http://127.0.0.1:8080`.
 
+
+A fresh database has no account. `GET /api/v1/auth/status` reports `setupRequired: true`; `POST /api/v1/auth/setup` creates the only initial administrator and returns the secure session cookie. Setup cannot be repeated after the database transaction records completion.
+
 To apply migrations outside Compose, set `ConnectionStrings__CoreDatabase` and run:
 
 ```bash

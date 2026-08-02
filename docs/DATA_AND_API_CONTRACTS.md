@@ -463,13 +463,24 @@ A problem body never contains an exception message, a stack frame or an internal
 ### 5.1 Authentication and profile
 
 ```text
+GET  /api/v1/auth/status
+POST /api/v1/auth/setup
 POST /api/v1/auth/login
+GET  /api/v1/auth/antiforgery
 POST /api/v1/auth/logout
 GET  /api/v1/profile
 PUT  /api/v1/profile/preferences
 ```
 
-Login is omitted when external OIDC-only mode is configured.
+`GET /api/v1/auth/status` and the one-time setup and login mutations are anonymous. Status exposes only whether initial setup is required and, when a valid session exists, the current user's identifier, username and display name.
+
+`POST /api/v1/auth/setup` accepts `userName`, `displayName` and `password`, creates exactly one initial administrator and establishes the session. The database serializes competing setup calls through the singleton setup row. A completed setup returns `authentication.setup_already_completed`; it is never silently repeated.
+
+`POST /api/v1/auth/login` establishes the same server-side Identity cookie. Unknown usernames, wrong passwords and locked accounts all return `authentication.invalid_credentials`, so the public response does not disclose account existence or lock state. Setup and login share a per-source rate limit and return the common retryable `request.rate_limited` problem with `Retry-After` when available.
+
+`GET /api/v1/auth/antiforgery` requires a valid session and returns the request-header name and token. `POST /api/v1/auth/logout` requires that token and ends the session. Raw authentication tokens and password hashes never appear in an API response.
+
+Local-account login remains available until a later accepted decision explicitly introduces an OIDC-only mode. Profile persistence and mutation belong to `API-005`.
 
 ### 5.2 Applications
 
@@ -564,7 +575,7 @@ Returns the stable component name and the semantic version the component was bui
 }
 ```
 
-This endpoint is unauthenticated while no authentication exists. `API-004` attaches its authorization policy together with every other endpoint policy.
+The fallback authentication policy now requires a valid local session. `API-004` replaces that broad requirement with the explicit system-version permission policy together with the remaining endpoint policies.
 
 Health endpoints stay outside `/api/v1` because an orchestrator probes them, not an API client:
 
