@@ -6,7 +6,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JulOS.Application\JulOS.Application.csproj" />
-    <ProjectReference Include="..\JulOS.Domain\JulOS.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
