@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "de.juloc.julos.test",
+  "name": "Test Package",
+  "publisher": "Juloc",
+  "version": "1.0.0",
+  "minimumCoreVersion": "1.0.0",
+  "maximumCoreVersion": null,
+  "worker": null,
+  "capabilitiesProvided": [],
+  "capabilitiesRequired": [],
+  "permissions": [],
+  "applications": [],
+  "widgets": [],
+  "settings": [],
+  "migrations": [],
+  "runtimeProfiles": [],
+  "dependencies": []
+}
