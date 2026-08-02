@@ -124,7 +124,9 @@ test('conflicting browser instances surface current revision and correlation', a
   const conflicts: LayoutConflict[] = [];
   const persistence = new DesktopLayoutPersistence(server.fetch, {
     debounceMilliseconds: 60_000,
-    onConflict: (conflict) => conflicts.push(conflict),
+    onConflict: (conflict) => {
+      conflicts.push(conflict);
+    },
   });
   await persistence.load('desktop');
   persistence.schedule('desktop', [windowSnapshot], []);
