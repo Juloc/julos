@@ -3,6 +3,7 @@
 
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Health;
+using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
@@ -12,6 +13,7 @@ using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
 using JulOS.Server.Events;
 using JulOS.Server.Layouts;
+using JulOS.Server.Packages;
 using JulOS.Server.Profile;
 using JulOS.Server.Operations;
 using JulOS.Server.Secrets;
@@ -36,8 +38,6 @@ if (DatabaseMigrationCommand.IsRequested(args))
 const string ReadinessTag = "ready";
 const string CoreDatabaseConnectionName = "CoreDatabase";
 
-// The control plane cannot operate without its database, so a missing connection
-// string stops startup instead of producing a server that fails on first use.
 var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnectionName)
     ?? throw new InvalidOperationException(
         $"The connection string '{CoreDatabaseConnectionName}' is not configured. "
@@ -48,6 +48,7 @@ builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();
 builder.Services.AddJulOsRealtimeEvents();
+builder.Services.AddJulOsPackageManagement(builder.Configuration, coreDatabase);
 var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
 builder.Services.AddJulOsSecretReferences(
     secretOptions.ActiveKeyId,
@@ -65,22 +66,15 @@ builder.Services
 var app = builder.Build();
 
 app.UseJulOsErrorHandling();
-
-// Desktop assets contain no authorization decision or secret. The shell must load
-// before setup and login, while every API and hub remains protected separately.
 app.UseDefaultFiles();
 app.UseStaticFiles();
-
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
-// Liveness answers whether the process itself is running, so it registers no
-// dependency check. A failing dependency must not cause a restart loop.
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
     .AllowAnonymous();
-
 app.MapHealthChecks(
     "/health/ready",
     new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) })
@@ -90,6 +84,7 @@ app.MapJulOsLocalAuthentication();
 app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsDesktopLayouts();
+app.MapJulOsPackages();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
 app.MapJulOsAudit();
@@ -100,8 +95,6 @@ app.MapGet(
     () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current))
     .RequireAuthorization(JulOsAuthorizationPolicies.SystemVersionRead);
 
-// An unknown path has no protected resource behind it. Keep the platform's
-// common 404 problem response instead of challenging an unauthenticated caller.
 app.MapFallback(() => TypedResults.NotFound())
     .AllowAnonymous();
 
