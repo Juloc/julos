@@ -1,0 +1,28 @@
+name: Agent source export
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Remove Git metadata
+        run: rm -rf .git
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: julos-api003-final-source
+          path: .
+          include-hidden-files: true
+          retention-days: 1
