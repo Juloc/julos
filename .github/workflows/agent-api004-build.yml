@@ -72,26 +72,12 @@ jobs:
           echo "e9044483d15942419ba03143fbd0b9193c4a338e35d1d225003b3342ebc1cf1d  /tmp/api004-migration.tar.gz" | sha256sum --check
           tar -xzf /tmp/api004-migration.tar.gz -C .
 
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/JulOS.Server/Authorization/AuthorizationEndpoints.cs')
-          text = path.read_text(encoding='utf-8-sig')
-          text = text.replace(
-              'using Microsoft.AspNetCore.Antiforgery;\n',
-              'using Microsoft.AspNetCore.Builder;\n')
-          text = text.replace(
-              '.WithMetadata(RequiredAntiforgeryMetadata.Instance);',
-              '.RequireAntiforgery();')
-          start = text.find('    private sealed class RequiredAntiforgeryMetadata')
-          end_marker = '    private static AuthorizationRoleResponse ToResponse('
-          if start >= 0:
-              end = text.find(end_marker, start)
-              if end < 0:
-                  raise SystemExit('Authorization response mapper anchor not found.')
-              text = text[:start] + text[end:]
-          path.write_text('\ufeff' + text, encoding='utf-8')
-          PY
+          echo "977726a432643356a34b87cc62e65130420e57143e031922c2af54a365340e95  .agent/api004-antiforgery.b64" | sha256sum --check
+          base64 --decode .agent/api004-antiforgery.b64 > /tmp/api004-antiforgery.tar.gz
+          echo "0dbadb409cb475feb80ec380f92bf934823760a9fe0a6cd0397120e4e2d7adff  /tmp/api004-antiforgery.tar.gz" | sha256sum --check
+          tar -xzf /tmp/api004-antiforgery.tar.gz -C /tmp
+          echo "f3e73d5c6c88ec7188451222694cebb0b3936239583a92e4fe49780a7b9adc2a  /tmp/AuthorizationEndpoints.cs" | sha256sum --check
+          cp /tmp/AuthorizationEndpoints.cs src/JulOS.Server/Authorization/AuthorizationEndpoints.cs
 
           rm -rf .agent
           node tools/normalize-encoding.mjs
