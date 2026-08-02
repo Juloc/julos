@@ -9,6 +9,9 @@
     <Project Path="src/JulOS.RuntimeManager/JulOS.RuntimeManager.csproj" />
     <Project Path="src/JulOS.Server/JulOS.Server.csproj" />
   </Folder>
+  <Folder Name="/packages/">
+    <Project Path="packages/JulOS.ReferencePackage/worker/JulOS.ReferencePackage.Worker.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/JulOS.Architecture.Tests/JulOS.Architecture.Tests.csproj" />
     <Project Path="tests/JulOS.Domain.Tests/JulOS.Domain.Tests.csproj" />
