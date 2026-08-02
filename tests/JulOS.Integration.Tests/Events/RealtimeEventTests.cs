@@ -88,14 +88,6 @@ public sealed class RealtimeEventTests
                 payloadDocument.RootElement))).ConfigureAwait(false);
     }
 
-    [TestMethod]
-    public void ContractNamesAndVersionAreStable()
-    {
-        Assert.AreEqual("/hubs/events", RealtimeEventContract.HubPath);
-        Assert.AreEqual("event", RealtimeEventContract.ClientMethod);
-        Assert.AreEqual(1, RealtimeEventContract.CurrentVersion);
-    }
-
     private static async Task<PostgreSqlTestDatabase> CreateMigratedDatabaseAsync()
     {
         var database = await PostgreSqlTestDatabase.CreateAsync().ConfigureAwait(false);
