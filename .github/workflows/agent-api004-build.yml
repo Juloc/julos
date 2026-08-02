@@ -2,8 +2,7 @@ name: Agent API-004 build
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
@@ -18,42 +17,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out branch
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-
-      - name: Apply verified API-004 code
+      - name: Apply and build API-004
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f .agent/api004-code/part-00 ]; then
-            echo "Code already applied."
-            exit 0
-          fi
-
-          tr -d '[:space:]' < .agent/api004-code/part-00 \
-            | base64 --decode | gzip -dc > /tmp/api004-code.patch
-          echo "28825509d059cefc6b68ed09392a010925a16467ba8e405f3ce4b61b38d03eb0  /tmp/api004-code.patch" \
-            | sha256sum --check
-          git apply --check /tmp/api004-code.patch
-          git apply /tmp/api004-code.patch
-
+          if [ ! -f .agent/api004-code/part-00 ]; then exit 0; fi
+          tr -d '[:space:]' < .agent/api004-code/part-00 | base64 --decode | gzip -dc > /tmp/code.patch
+          echo "28825509d059cefc6b68ed09392a010925a16467ba8e405f3ce4b61b38d03eb0  /tmp/code.patch" | sha256sum --check
+          git apply --check /tmp/code.patch
+          git apply /tmp/code.patch
           echo "d852837479e2e67632c596161fd3b9cdf9d4156d2745e670795ea8de711f5241  .agent/api004-new/part-00" | sha256sum --check
           echo "066c1d5cc5b95240367876ac72929520ba0baaff78ec77e3a06789c6e5aa52bb  .agent/api004-new/part-01" | sha256sum --check
           echo "b93c33e45dde518bce93b1d8c7cbd6594fe9e959a7eee070b9307ec4920b08d4  .agent/api004-new/part-02" | sha256sum --check
           echo "935dbbf03a07f8a4ed1aa1d00a432ffffbcc0153a789b9e48ed2a975f929ac8b  .agent/api004-new/part-03" | sha256sum --check
-          cat .agent/api004-new/part-* | base64 --decode > /tmp/api004-new-files.tar.gz
-          echo "2d8abf5facde089a8300eba611b143060c61770d2916c41129ed1f617c69ac41  /tmp/api004-new-files.tar.gz" \
-            | sha256sum --check
-          tar -xzf /tmp/api004-new-files.tar.gz -C .
-
+          cat .agent/api004-new/part-* | base64 --decode > /tmp/new.tar.gz
+          echo "2d8abf5facde089a8300eba611b143060c61770d2916c41129ed1f617c69ac41  /tmp/new.tar.gz" | sha256sum --check
+          tar -xzf /tmp/new.tar.gz -C .
           python3 - <<'PY'
           from pathlib import Path
 
@@ -66,14 +52,12 @@ jobs:
               '    public EfPermissionAssignmentReader(CoreDbContext context)')
           reader = reader.replace(
               '    public async Task<PermissionEvaluationSet> ReadForUserAsync(',
-              '    /// <inheritdoc />\n'
-              '    public async Task<PermissionEvaluationSet> ReadForUserAsync(')
+              '    /// <inheritdoc />\n    public async Task<PermissionEvaluationSet> ReadForUserAsync(')
           reader_path.write_text('\ufeff' + reader, encoding='utf-8')
 
-          administration_path = Path(
-              'src/JulOS.Infrastructure/Authorization/IdentityAuthorizationAdministration.cs')
-          administration = administration_path.read_text(encoding='utf-8-sig')
-          administration = administration.replace(
+          admin_path = Path('src/JulOS.Infrastructure/Authorization/IdentityAuthorizationAdministration.cs')
+          admin = admin_path.read_text(encoding='utf-8-sig')
+          admin = admin.replace(
               '    public IdentityAuthorizationAdministration(',
               '    /// <summary>Creates the Identity-backed authorization administrator.</summary>\n'
               '    /// <param name="context">The Core database context.</param>\n'
@@ -81,7 +65,7 @@ jobs:
               '    /// <param name="userManager">The local Identity user manager.</param>\n'
               '    /// <param name="timeProvider">The clock used for identifiers and grant timestamps.</param>\n'
               '    public IdentityAuthorizationAdministration(')
-          signatures = [
+          for signature in [
               'public async Task<IReadOnlyList<AuthorizationRole>> ListRolesAsync(',
               'public async Task<AuthorizationRole> CreateRoleAsync(',
               'public async Task<AuthorizationRole> UpdateRoleAsync(',
@@ -92,26 +76,35 @@ jobs:
               'public async Task<IReadOnlyList<StoredPermissionAssignment>> ListPermissionAssignmentsAsync(',
               'public async Task<StoredPermissionAssignment> GrantPermissionAsync(',
               'public async Task RevokePermissionAsync(',
-          ]
-          for signature in signatures:
-              administration = administration.replace(
-                  f'    {signature}',
-                  f'    /// <inheritdoc />\n    {signature}')
-          administration_path.write_text('\ufeff' + administration, encoding='utf-8')
-          PY
+          ]:
+              admin = admin.replace(f'    {signature}', f'    /// <inheritdoc />\n    {signature}')
+          admin_path.write_text('\ufeff' + admin, encoding='utf-8')
 
+          endpoint_path = Path('src/JulOS.Server/Authorization/AuthorizationEndpoints.cs')
+          endpoints = endpoint_path.read_text(encoding='utf-8-sig')
+          endpoints = endpoints.replace(
+              'using JulOS.Domain.Permissions;\n',
+              'using JulOS.Domain.Permissions;\n\nusing Microsoft.AspNetCore.Antiforgery;\n')
+          endpoints = endpoints.replace(
+              '.RequireAntiforgery();',
+              '.WithMetadata(RequiredAntiforgeryMetadata.Instance);')
+          marker = '\n    private static AuthorizationRoleResponse ToResponse('
+          metadata = '''\n    private sealed class RequiredAntiforgeryMetadata : IAntiforgeryMetadata\n    {\n        internal static RequiredAntiforgeryMetadata Instance { get; } = new();\n\n        public bool RequiresValidation => true;\n    }\n'''
+          if metadata not in endpoints:
+              if marker not in endpoints:
+                  raise SystemExit('Authorization response mapper anchor not found.')
+              endpoints = endpoints.replace(marker, metadata + marker)
+          endpoint_path.write_text('\ufeff' + endpoints, encoding='utf-8')
+          PY
           rm -rf .agent
           node tools/normalize-encoding.mjs
           dotnet restore JulOS.slnx
           dotnet build JulOS.slnx --no-restore
-
       - name: Commit compiled API-004 code
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet && git diff --cached --quiet; then
-            exit 0
-          fi
+          if git diff --quiet && git diff --cached --quiet; then exit 0; fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
