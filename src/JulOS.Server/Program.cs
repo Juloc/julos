@@ -64,6 +64,12 @@ builder.Services
 var app = builder.Build();
 
 app.UseJulOsErrorHandling();
+
+// Desktop assets contain no authorization decision or secret. The shell must load
+// before setup and login, while every API and hub remains protected separately.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
