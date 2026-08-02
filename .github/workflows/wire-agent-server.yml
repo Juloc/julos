@@ -1,0 +1,67 @@
+name: Wire Agent services into Server
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wire-agent-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - name: Wire Agent control plane
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, replacements):
+              file = Path(path)
+              data = file.read_bytes()
+              for old, new in replacements:
+                  if old not in data:
+                      raise SystemExit(f'missing expected text in {path}: {old!r}')
+                  data = data.replace(old, new, 1)
+              file.write_bytes(data)
+
+          patch('src/JulOS.Server/Program.cs', [
+              (b'using JulOS.Infrastructure.Health;\r\n',
+               b'using JulOS.Infrastructure.Agents;\r\nusing JulOS.Infrastructure.Health;\r\n'),
+              (b'using JulOS.Server.Auditing;\r\n',
+               b'using JulOS.Server.Agents;\r\nusing JulOS.Server.Auditing;\r\n'),
+              (b'builder.Services.AddJulOsCorePersistence(coreDatabase);\r\n',
+               b'builder.Services.AddJulOsCorePersistence(coreDatabase);\r\nbuilder.Services.AddJulOsAgentControl();\r\n'),
+              (b'app.MapJulOsAudit();\r\n',
+               b'app.MapJulOsAudit();\r\napp.MapJulOsAgents();\r\n'),
+          ])
+
+          patch('src/JulOS.Server/Errors/ProblemDetailsCustomizer.cs', [
+              (b'using JulOS.Application.Authentication;\r\n',
+               b'using JulOS.Application.Agents;\r\nusing JulOS.Application.Authentication;\r\n'),
+              (b'        else if (exception is AuthenticationFailureException authenticationFailure)\r\n',
+               b'        else if (exception is AgentControlException agentFailure)\r\n        {\r\n            context.ProblemDetails.Detail = agentFailure.Message;\r\n        }\r\n        else if (exception is AuthenticationFailureException authenticationFailure)\r\n'),
+              (b'        if (exception is AuthenticationFailureException authenticationFailure)\r\n',
+               b'        if (exception is AgentControlException agentFailure)\r\n        {\r\n            return (agentFailure.Code, false);\r\n        }\r\n\r\n        if (exception is AuthenticationFailureException authenticationFailure)\r\n'),
+          ])
+          PY
+
+      - name: Commit permanent changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/wire-agent-server.yml
+          git add src/JulOS.Server
+          git commit -m "Wire Agent control plane into Server"
+          git push origin HEAD:agent/complete-julos-work-breakdown
