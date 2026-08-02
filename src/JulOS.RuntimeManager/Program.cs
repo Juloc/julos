@@ -1,5 +1,8 @@
 ﻿using JulOS.RuntimeManager;
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+
 var builder = WebApplication.CreateBuilder(args);
 var options = RuntimeManagerOptions.Read(builder.Configuration);
 builder.Services.AddSingleton(options);
