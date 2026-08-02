@@ -1,0 +1,80 @@
+name: Apply current compiler fixes
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-current-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - name: Apply exact source replacements
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, replacements):
+              file = Path(path)
+              data = file.read_bytes()
+              for old, new in replacements:
+                  if old not in data:
+                      raise SystemExit(f"missing expected text in {path}: {old!r}")
+                  data = data.replace(old, new, 1)
+              file.write_bytes(data)
+
+          patch('src/JulOS.Infrastructure/Packages/PostgresPackageManagementService.cs', [
+              (b'internal sealed class PostgresPackageManagementService : IPackageManagementService',
+               b'internal sealed class PostgresPackageManagementService : IPackageManagementService, IDisposable'),
+              (b'    private PackageInstallationSnapshot ToSnapshot(',
+               b'    private static PackageInstallationSnapshot ToSnapshot('),
+              (b'    private async Task<MemoryStream> BufferArtifactAsync(',
+               b'    private static async Task<MemoryStream> BufferArtifactAsync('),
+              (b"entry.FullName.EndsWith('/', StringComparison.Ordinal)",
+               b"entry.FullName.EndsWith('/')"),
+              (b'    private static PackageManagementException Failure(string code, string message, Exception? inner = null) =>\r\n        new(code, message, inner);\r\n}',
+               b'    private static PackageManagementException Failure(string code, string message, Exception? inner = null) =>\r\n        new(code, message, inner);\r\n\r\n    public void Dispose()\r\n    {\r\n        this.lifecycleLock.Dispose();\r\n    }\r\n}'),
+          ])
+
+          patch('src/JulOS.Infrastructure/Packages/PostgresPackageUpdateService.cs', [
+              (b'internal sealed class PostgresPackageUpdateService : IPackageUpdateService',
+               b'internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDisposable'),
+              (b"entry.FullName.EndsWith('/', StringComparison.Ordinal)",
+               b"entry.FullName.EndsWith('/')"),
+              (b'    private PackageInstallationSnapshot Snapshot(',
+               b'    private static PackageInstallationSnapshot Snapshot('),
+              (b'    private sealed record CandidateArtifact(',
+               b'    public void Dispose()\r\n    {\r\n        this.updateLock.Dispose();\r\n    }\r\n\r\n    private sealed record CandidateArtifact('),
+          ])
+
+          patch('src/JulOS.Infrastructure/Agents/PostgresAgentControlService.cs', [
+              (b'using System.Data;\r\n', b'using System.Data;\r\nusing System.Globalization;\r\n'),
+              (b'$"expiresAtUtc={row.ExpiresAtUtc:O}"',
+               b'"expiresAtUtc=" + row.ExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture)'),
+              (b'$"tokenId={token.Id:D};machineIdentityHash={HashLabel(request.MachineIdentity)}"',
+               b'"tokenId=" + token.Id.ToString("D", CultureInfo.InvariantCulture)\r\n                    + ";machineIdentityHash=" + HashLabel(request.MachineIdentity)'),
+              (b'$"type={request.CommandType};expiresAtUtc={row.ExpiresAtUtc:O}"',
+               b'"type=" + request.CommandType\r\n                + ";expiresAtUtc=" + row.ExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture)'),
+          ])
+          PY
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/JulOS.Infrastructure
+          git commit -m "Fix package and agent compiler errors"
+          git push origin HEAD:agent/complete-julos-work-breakdown
