@@ -10,6 +10,8 @@
   | 'snapped-bottom-right'
   | 'full-screen';
 
+export type FixedWindowState = Exclude<WindowPresentationState, 'normal' | 'minimized'>;
+
 export interface WindowBounds {
   readonly x: number;
   readonly y: number;
@@ -186,21 +188,29 @@ export class WindowStore {
   }
 
   public maximize(windowId: string, usableArea: UsableArea): DesktopWindowSnapshot {
+    return this.applyFixedState(windowId, 'maximized', usableArea);
+  }
+
+  public applyFixedState(
+    windowId: string,
+    state: FixedWindowState,
+    usableArea: UsableArea,
+  ): DesktopWindowSnapshot {
     const window = this.#requireWindow(windowId);
     if (window.state === 'minimized') {
       throw new WindowStoreError(
         'window.not_visible',
-        'Restore a minimized window before maximizing it.',
+        'Restore a minimized window before applying fixed geometry.',
       );
     }
 
-    const bounds = validateUsableArea(usableArea);
+    const bounds = boundsForWindowState(state, validateUsableArea(usableArea));
     if (window.state === 'normal') {
       window.restoreBounds = window.bounds;
     }
 
     window.stateBeforeMinimize = null;
-    window.state = 'maximized';
+    window.state = state;
     window.bounds = bounds;
     this.focus(windowId);
     return toSnapshot(window);
@@ -218,7 +228,7 @@ export class WindowStore {
       window.state = previous;
       window.bounds = previous === 'normal'
         ? window.restoreBounds
-        : fixedBounds(previous, requireUsableArea(usableArea));
+        : boundsForWindowState(previous, requireUsableArea(usableArea));
       this.focus(windowId);
       return toSnapshot(window);
     }
@@ -296,6 +306,66 @@ export class WindowStore {
   }
 }
 
+export function boundsForWindowState(
+  state: FixedWindowState,
+  area: WindowBounds,
+): WindowBounds {
+  const validatedArea = validateBounds(area);
+  if (state === 'maximized' || state === 'full-screen') {
+    return cloneBounds(validatedArea);
+  }
+
+  const leftWidth = Math.floor(validatedArea.width / 2);
+  const rightWidth = validatedArea.width - leftWidth;
+  const topHeight = Math.floor(validatedArea.height / 2);
+  const bottomHeight = validatedArea.height - topHeight;
+
+  switch (state) {
+    case 'snapped-left':
+      return {
+        x: validatedArea.x,
+        y: validatedArea.y,
+        width: leftWidth,
+        height: validatedArea.height,
+      };
+    case 'snapped-right':
+      return {
+        x: validatedArea.x + leftWidth,
+        y: validatedArea.y,
+        width: rightWidth,
+        height: validatedArea.height,
+      };
+    case 'snapped-top-left':
+      return {
+        x: validatedArea.x,
+        y: validatedArea.y,
+        width: leftWidth,
+        height: topHeight,
+      };
+    case 'snapped-top-right':
+      return {
+        x: validatedArea.x + leftWidth,
+        y: validatedArea.y,
+        width: rightWidth,
+        height: topHeight,
+      };
+    case 'snapped-bottom-left':
+      return {
+        x: validatedArea.x,
+        y: validatedArea.y + topHeight,
+        width: leftWidth,
+        height: bottomHeight,
+      };
+    case 'snapped-bottom-right':
+      return {
+        x: validatedArea.x + leftWidth,
+        y: validatedArea.y + topHeight,
+        width: rightWidth,
+        height: bottomHeight,
+      };
+  }
+}
+
 function toSnapshot(window: StoredWindow): DesktopWindowSnapshot {
   return {
     id: window.id,
@@ -348,40 +418,6 @@ function requireUsableArea(area: UsableArea | undefined): WindowBounds {
   }
 
   return validateUsableArea(area);
-}
-
-function fixedBounds(
-  state: Exclude<WindowPresentationState, 'normal' | 'minimized'>,
-  area: WindowBounds,
-): WindowBounds {
-  if (state === 'maximized' || state === 'full-screen') {
-    return cloneBounds(area);
-  }
-
-  const leftWidth = Math.floor(area.width / 2);
-  const rightWidth = area.width - leftWidth;
-  const topHeight = Math.floor(area.height / 2);
-  const bottomHeight = area.height - topHeight;
-
-  switch (state) {
-    case 'snapped-left':
-      return { x: area.x, y: area.y, width: leftWidth, height: area.height };
-    case 'snapped-right':
-      return { x: area.x + leftWidth, y: area.y, width: rightWidth, height: area.height };
-    case 'snapped-top-left':
-      return { x: area.x, y: area.y, width: leftWidth, height: topHeight };
-    case 'snapped-top-right':
-      return { x: area.x + leftWidth, y: area.y, width: rightWidth, height: topHeight };
-    case 'snapped-bottom-left':
-      return { x: area.x, y: area.y + topHeight, width: leftWidth, height: bottomHeight };
-    case 'snapped-bottom-right':
-      return {
-        x: area.x + leftWidth,
-        y: area.y + topHeight,
-        width: rightWidth,
-        height: bottomHeight,
-      };
-  }
 }
 
 function validateIdentifier(value: string, name: string): void {
