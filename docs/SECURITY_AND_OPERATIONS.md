@@ -94,6 +94,11 @@ discovery.approve
 Rules:
 
 - every API mutation has a backend policy
+- default deny applies to anonymous users and to authenticated users without the exact permission
+- direct user grants and current role grants are evaluated through the same Core permission model
+- role names never bypass permission checks; the administrator role receives explicit assignments
+- system roles cannot be renamed or deleted, and the last administrator cannot be removed
+- role, membership and grant mutations require both authorization and antiforgery validation
 - package workers receive only the user and scope claims required for one operation
 - read and control permissions are separate
 - destructive actions use narrower permissions where necessary

@@ -1,6 +1,8 @@
 ﻿using JulOS.Infrastructure.Persistence.Core;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 using Npgsql;
 
@@ -42,6 +44,100 @@ public sealed class CoreMigrationTests
             connection);
         var applied = Convert.ToInt32(await migrationCommand.ExecuteScalarAsync().ConfigureAwait(false), System.Globalization.CultureInfo.InvariantCulture);
         Assert.IsTrue(applied > 0, "At least one migration must be recorded.");
+    }
+
+    [TestMethod]
+    public async Task ExistingAdministratorReceivesExplicitAuthorizationGrantsOnUpgrade()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync().ConfigureAwait(false);
+
+        var options = new DbContextOptionsBuilder<CoreDbContext>();
+        CorePersistenceServiceCollectionExtensions.Configure(options, database.ConnectionString);
+
+        await using (var context = new CoreDbContext(options.Options))
+        {
+            var migrator = context.Database.GetService<IMigrator>();
+            await migrator
+                .MigrateAsync("20260802121608_AddLocalAuthentication")
+                .ConfigureAwait(false);
+        }
+
+        var administratorUserId = Guid.CreateVersion7();
+        var administratorRoleId = Guid.CreateVersion7();
+
+        await using (var connection = new NpgsqlConnection(database.ConnectionString))
+        {
+            await connection.OpenAsync().ConfigureAwait(false);
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO core.roles
+                    (id, is_system_role, revision, name, normalized_name, concurrency_stamp)
+                VALUES
+                    (@role_id, TRUE, 1, 'Administrator', 'ADMINISTRATOR', 'role-stamp');
+
+                INSERT INTO core.users
+                    (id, display_name, preferred_language, time_zone, theme,
+                     created_at_utc, updated_at_utc, revision,
+                     user_name, normalized_user_name, email, normalized_email,
+                     email_confirmed, password_hash, security_stamp, concurrency_stamp,
+                     phone_number, phone_number_confirmed, two_factor_enabled,
+                     lockout_end_utc, lockout_enabled, access_failed_count)
+                VALUES
+                    (@user_id, 'Administrator', 'en', 'UTC', 'system',
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1,
+                     'admin', 'ADMIN', NULL, NULL,
+                     FALSE, NULL, 'security-stamp', 'user-stamp',
+                     NULL, FALSE, FALSE, NULL, TRUE, 0);
+
+                INSERT INTO core.user_roles (user_id, role_id)
+                VALUES (@user_id, @role_id);
+
+                UPDATE core.authentication_setup
+                SET administrator_user_id = @user_id,
+                    completed_at_utc = CURRENT_TIMESTAMP
+                WHERE id = 1;
+                """,
+                connection);
+            command.Parameters.AddWithValue("user_id", administratorUserId);
+            command.Parameters.AddWithValue("role_id", administratorRoleId);
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+
+        await CoreDatabaseMigrator.MigrateAsync(database.ConnectionString).ConfigureAwait(false);
+
+        await using var verification = new NpgsqlConnection(database.ConnectionString);
+        await verification.OpenAsync().ConfigureAwait(false);
+
+        await using var descriptionCommand = new NpgsqlCommand(
+            "SELECT description FROM core.roles WHERE id = @role_id",
+            verification);
+        descriptionCommand.Parameters.AddWithValue("role_id", administratorRoleId);
+        Assert.AreEqual(
+            "Full control of the JulOS installation.",
+            Convert.ToString(
+                await descriptionCommand.ExecuteScalarAsync().ConfigureAwait(false),
+                System.Globalization.CultureInfo.InvariantCulture));
+
+        await using var grantCommand = new NpgsqlCommand(
+            """
+            SELECT count(*)
+            FROM core.permission_assignments
+            WHERE subject_kind = 'Role'
+              AND subject_id = @role_id
+              AND scope_kind = 'Global'
+              AND scope_id IS NULL
+              AND permission IN (
+                  'core.system.version.read',
+                  'core.authorization.read',
+                  'core.authorization.manage')
+            """,
+            verification);
+        grantCommand.Parameters.AddWithValue("role_id", administratorRoleId);
+        Assert.AreEqual(
+            3L,
+            Convert.ToInt64(
+                await grantCommand.ExecuteScalarAsync().ConfigureAwait(false),
+                System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [TestMethod]

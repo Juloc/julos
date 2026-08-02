@@ -433,6 +433,8 @@ A fallback authorization policy protects every endpoint unless it is explicitly 
 
 ### API-004 — Add role and permission authorization
 
+Status: done.
+
 Depends on: API-003, CORE-008.
 
 Deliver backend policies and administrator role management foundation.
@@ -444,6 +446,12 @@ Acceptance:
 - every mutation endpoint requires a policy
 - unauthorized calls return 401 or 403 correctly
 - no endpoint outside authentication and health is reachable unauthenticated
+
+Implemented through `JulOS.Application.Authorization`, the Infrastructure-backed permission reader and role administrator, and policy handlers in `JulOS.Server.Authorization`. Permission evaluation uses the existing pure Domain evaluator and combines direct user grants with grants inherited from local Identity roles. There is no administrator bypass: the system administrator role receives the three initial Core permissions as ordinary global assignments.
+
+The version endpoint requires `core.system.version.read`. Authorization administration is split into read and manage permissions. Role, membership and grant mutations require both the manage policy and antiforgery validation. System roles cannot be renamed or deleted, and the last administrator cannot be removed.
+
+Migration `20260802131339_AddRoleAuthorization` adds role descriptions, makes global grants genuinely unique with PostgreSQL `NULLS NOT DISTINCT`, and backfills explicit administrator grants for installations upgraded from `API-003`. Integration tests cover anonymous `401`, authenticated `403`, role inheritance, administrative mutations, system-role safety, antiforgery metadata and the upgrade backfill against PostgreSQL.
 
 ### API-005 — Add profile and preferences API
 

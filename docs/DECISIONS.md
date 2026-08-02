@@ -239,3 +239,11 @@ Local accounts and roles use ASP.NET Core Identity stores in the existing `core`
 
 Reason: Identity supplies reviewed password hashing, lockout, security stamps and cookie integration without placing credential behavior in Domain. A fallback policy makes a newly added endpoint private unless its owner consciously declares otherwise. Roles are stored now because the first administrator needs a stable system role, but permission mapping and role administration stay in `API-004` so authentication does not invent authorization behavior.
 
+## D028 — Authorization has no role-name bypass
+
+**Status:** Accepted
+
+Backend policies resolve direct user grants and grants inherited from current ASP.NET Core Identity roles, then call the pure Core permission evaluator for the requested permission and scope. The built-in administrator role is immutable and receives explicit global assignments; its name never short-circuits a policy.
+
+Reason: a role-name superuser branch would create a second authorization system outside the Domain model, hide missing assignments and make scoped permissions impossible to reason about. Explicit persisted grants keep policy behavior visible, testable and migratable. Existing administrators are backfilled during the `API-004` migration so an upgrade cannot lock out the operator.
+

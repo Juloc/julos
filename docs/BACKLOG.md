@@ -36,8 +36,9 @@ Status values:
 | API-001 | PostgreSQL core persistence | Done | Core tables, constraints, migration command and real PostgreSQL integration tests. |
 | API-002 | Optimistic concurrency | Done | Revision tokens prevent stale writes; conflicts return HTTP 409 with the current revision. |
 | API-003 | Local authentication | Done | One-time administrator setup, secure cookie sessions, lockout, rate limiting and antiforgery logout. |
+| API-004 | Role and permission authorization | Done | Explicit scoped grants drive policies; administrator role and grant management are backend enforced. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-003` and `API-006` are done; `API-004` is next. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-004` and `API-006` are done; `API-005` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -49,18 +50,18 @@ Status values:
 
 ## Next issue
 
-### API-004 — Add role and permission authorization
+### API-005 — Add profile and preferences API
 
 Scope:
 
-- backend authorization policies backed by the Core permission model
-- administrator role-management foundation
-- explicit policy on every mutation and on the version endpoint
+- authenticated profile read API
+- language, timezone, theme and motion preferences
+- validated optimistic-concurrency updates
 
 Acceptance:
 
-- unauthorized calls return 401 or 403 correctly
-- no endpoint outside authentication and health is anonymously reachable
+- English and German are valid
+- invalid timezone and locale fail validation
 
 ## Specification status
 

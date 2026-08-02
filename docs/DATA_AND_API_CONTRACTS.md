@@ -482,7 +482,26 @@ PUT  /api/v1/profile/preferences
 
 Local-account login remains available until a later accepted decision explicitly introduces an OIDC-only mode. Profile persistence and mutation belong to `API-005`.
 
-### 5.2 Applications
+### 5.2 Authorization administration
+
+```text
+GET    /api/v1/authorization/roles
+POST   /api/v1/authorization/roles
+PUT    /api/v1/authorization/roles/{roleId}
+DELETE /api/v1/authorization/roles/{roleId}?revision={revision}
+GET    /api/v1/authorization/roles/{roleId}/members
+POST   /api/v1/authorization/roles/{roleId}/members/{userId}
+DELETE /api/v1/authorization/roles/{roleId}/members/{userId}
+GET    /api/v1/authorization/assignments
+POST   /api/v1/authorization/assignments
+DELETE /api/v1/authorization/assignments/{assignmentId}
+```
+
+Core permission names introduced here are `core.system.version.read`, `core.authorization.read` and `core.authorization.manage`. Assignments target a user or role and a global, package or resource scope. A user's effective set is the union of direct assignments and assignments inherited from current role membership; every final decision is made by the pure Core permission evaluator.
+
+The administrator role is a system role. It cannot be renamed or deleted, and its last member cannot be removed. It has no implicit superuser behavior: setup and the upgrade migration create explicit global assignments. Every authorization mutation requires `core.authorization.manage` and an antiforgery token. Reads require `core.authorization.read`. The version endpoint requires `core.system.version.read`.
+
+### 5.3 Applications
 
 ```text
 GET  /api/v1/applications
@@ -493,7 +512,7 @@ POST /api/v1/applications/{applicationId}/launch
 
 Launch returns either a native window descriptor, background operation or session reference.
 
-### 5.3 Desktop layouts
+### 5.4 Desktop layouts
 
 ```text
 GET  /api/v1/layouts?viewportClass=desktop
@@ -507,7 +526,7 @@ DELETE /api/v1/layouts/{layoutId}/windows/{windowId}
 
 Window updates may be batched at `/windows:batch` after a measured need exists.
 
-### 5.4 Packages
+### 5.5 Packages
 
 ```text
 GET  /api/v1/packages
@@ -523,7 +542,7 @@ GET  /api/v1/packages/{packageId}/health
 GET  /api/v1/packages/{packageId}/logs
 ```
 
-### 5.5 Agents
+### 5.6 Agents
 
 ```text
 POST /api/v1/agents/enrollment-tokens
@@ -535,7 +554,7 @@ POST /api/v1/agents/{agentId}/rename
 
 Agent binary communication does not use these browser-facing endpoints.
 
-### 5.6 Problems and notifications
+### 5.7 Problems and notifications
 
 ```text
 GET  /api/v1/problems
@@ -548,7 +567,7 @@ POST /api/v1/notifications/{notificationId}/read
 
 Manual resolution does not prevent a detector from reopening a problem when the condition still exists.
 
-### 5.7 Sessions
+### 5.8 Sessions
 
 ```text
 GET  /api/v1/sessions
@@ -560,7 +579,7 @@ POST /api/v1/sessions/{sessionId}/terminate
 
 Transport signaling uses package-specific authenticated endpoints behind the session reference.
 
-### 5.8 System diagnostics
+### 5.9 System diagnostics
 
 ```text
 GET  /api/v1/system/version

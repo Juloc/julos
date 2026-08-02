@@ -107,7 +107,9 @@ Server remains functional when every optional package is disabled or faulted.
 
 Core persistence is implemented in Infrastructure. `CoreDbContext` owns the `core` schema and maps persistence-specific rows to Domain concepts; Domain contains no EF Core reference, persistence annotation or materialization-only constructor. Server only composes the context and invokes the explicit migration process. Package schemas are outside the context and cannot be reached through its model.
 
-Local account records, password hashes, roles and setup completion are also Infrastructure-owned persistence. Server composes ASP.NET Core Identity, cookie sessions, rate limiting and antiforgery. A fallback policy denies anonymous access by default; endpoint owners must explicitly mark the setup, login, status or health surfaces anonymous. Permission policies and role administration remain a separate Application/Server concern in `API-004`.
+Local account records, password hashes, roles and setup completion are also Infrastructure-owned persistence. Server composes ASP.NET Core Identity, cookie sessions, rate limiting and antiforgery. A fallback policy denies anonymous access by default; endpoint owners must explicitly mark the setup, login, status or health surfaces anonymous.
+
+Authorization keeps three owners separate. Domain owns pure permission and scope evaluation. Application owns the stable Core permission catalog and role-administration ports. Infrastructure resolves direct user assignments and inherited role assignments from PostgreSQL, while Server maps named policies and administrator endpoints. No role name bypasses permission evaluation; even the system administrator role is authorized through explicit global assignments.
 
 ## 6. JulOS Desktop
 

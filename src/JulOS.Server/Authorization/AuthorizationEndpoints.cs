@@ -1,5 +1,6 @@
 ﻿using System.Security.Claims;
 
+using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
 using JulOS.Contracts.Authorization;
 using JulOS.Domain;
@@ -7,6 +8,7 @@ using JulOS.Domain.Packages;
 using JulOS.Domain.Permissions;
 
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace JulOS.Server.Authorization;
 
@@ -20,6 +22,8 @@ internal static class AuthorizationEndpoints
         var group = endpoints
             .MapGroup("/api/v1/authorization")
             .WithTags("Authorization");
+
+        group.AddEndpointFilter(ValidateAntiforgeryAsync);
 
         group.MapGet("/roles", ListRolesAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationRead);
@@ -194,6 +198,34 @@ internal static class AuthorizationEndpoints
                 AuthorizationAdministrationFailureReason.InvalidAssignment,
                 exception);
         }
+    }
+
+    private static async ValueTask<object?> ValidateAntiforgeryAsync(
+        EndpointFilterInvocationContext context,
+        EndpointFilterDelegate next)
+    {
+        if (!HttpMethods.IsGet(context.HttpContext.Request.Method))
+        {
+            var antiforgery = context.HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
+            try
+            {
+                await antiforgery.ValidateRequestAsync(context.HttpContext).ConfigureAwait(false);
+            }
+            catch (AntiforgeryValidationException exception)
+            {
+                throw new AuthenticationFailureException(
+                    AuthenticationFailureReason.AntiforgeryInvalid,
+                    exception);
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new AuthenticationFailureException(
+                    AuthenticationFailureReason.AntiforgeryInvalid,
+                    exception);
+            }
+        }
+
+        return await next(context).ConfigureAwait(false);
     }
 
     private sealed class RequiredAntiforgeryMetadata : IAntiforgeryMetadata
