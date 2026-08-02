@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 99,
+  "id": "de.juloc.julos.unsupported",
+  "name": "Unsupported Package",
+  "publisher": "Juloc",
+  "version": "1.0.0",
+  "minimumCoreVersion": "1.0.0",
+  "maximumCoreVersion": null,
+  "worker": null,
+  "capabilitiesProvided": [],
+  "capabilitiesRequired": [],
+  "permissions": [],
+  "applications": [],
+  "widgets": [],
+  "settings": [],
+  "migrations": [],
+  "runtimeProfiles": [],
+  "dependencies": []
+}
