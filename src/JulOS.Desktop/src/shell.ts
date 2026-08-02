@@ -26,7 +26,7 @@ const icons = {
 export class JulOsShell extends HTMLElement {
   readonly #api: ShellApiClient;
   #language: SupportedLanguage = normalizeLanguage(globalThis.navigator?.language);
-  #clockTimer: number | null = null;
+  #clockTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   #connected = false;
 
   public constructor(api = new ShellApiClient()) {
