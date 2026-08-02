@@ -1,3 +1,4 @@
+# Trigger the export after this workflow is registered on the branch.
 name: Agent source sync
 
 on:
