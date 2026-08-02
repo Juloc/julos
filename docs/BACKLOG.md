@@ -47,7 +47,9 @@ Status values:
 | DESK-001 | Shell and design tokens | Done | Responsive Fluent 2 shell, taskbar, themes, localization, About dialog and server version are built into the Server image. |
 | DESK-002 | Client API and event services | Done | Same-origin typed API calls, Problem Details, correlation references, distinct failure states and reconnect refresh are tested. |
 | DESK-003 | Window store | Done | Deterministic commands, gap-free z-order and all normal, minimized and maximized transitions work with five windows. |
-| Phase 3 | Desktop shell | In progress | `DESK-004` is next: frame-batched pointer and touch move/resize interactions. |
+| DESK-004 | Drag, resize and bounds | Done | Mouse, touch and pen updates are frame-batched; minimum sizes and reachable title bars are enforced. |
+| DESK-005 | Snapping | Done | Pointer previews and keyboard commands share taskbar-aware half, quarter and maximize geometry. |
+| Phase 3 | Desktop shell | In progress | `DESK-006` is next: grouped taskbar state, instance policy and Alt+Tab. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -58,19 +60,19 @@ Status values:
 
 ## Next issue
 
-### DESK-004 — Implement drag, resize and bounds
+### DESK-006 — Implement taskbar and window switcher
 
 Scope:
 
-- unified mouse, touch and pen pointer interactions
-- animation-frame batching for move and resize
-- draggable title-bar and interactive-control separation
-- application-defined minimum size and reachable title-bar constraints
+- grouped running applications and instance counts
+- single-user, single-target and multi-instance launch behavior
+- minimized-window activation
+- frozen-order Alt+Tab selection and predictable focus commit
 
 Acceptance:
 
-- no server request occurs per pointer movement
-- the title bar cannot become permanently unreachable
+- single-instance and multi-instance applications behave correctly
+- keyboard focus is predictable
 
 ## Specification status
 
