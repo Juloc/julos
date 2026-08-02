@@ -1,0 +1,272 @@
+  JulOS.Infrastructure.Tests -> /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:05.55
+passed: dotnet build JulOS.slnx --no-restore
+
+=== dotnet-test: Run .NET unit and architecture tests ===
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64)
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64)
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64)
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64)
+[33mskipped[m PackageProjectsDoNotReferenceEachOther
+  Assert.Inconclusive. No project exists under 'packages/' yet, so this rule has nothing to check.
+  from /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64)
+[m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 208ms)[m
+[m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 288ms)[m
+[m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(2s 073ms)[m
+[31mfailed[m CreationIsQueuedIdempotentAndAntiforgeryProtected [90m(1s 089ms)[m
+  from /home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64)
+[31m  Test method JulOS.Integration.Tests.Operations.OperationTests.CreationIsQueuedIdempotentAndAntiforgeryProtected threw exception:
+  System.InvalidOperationException: Sequence contains no matching element
+[m[90m    at System.Linq.ThrowHelper.ThrowNoMatchException()
+    at System.Linq.Enumerable.Single[TSource](IEnumerable`1 source, Func`2 predicate)
+    at JulOS.Integration.Tests.Operations.OperationTests.CreationIsQueuedIdempotentAndAntiforgeryProtected() in /_/tests/JulOS.Integration.Tests/Operations/OperationTests.cs:82[90m
+    at JulOS.Integration.Tests.Operations.OperationTests.CreationIsQueuedIdempotentAndAntiforgeryProtected() in /_/tests/JulOS.Integration.Tests/Operations/OperationTests.cs:85[90m
+    at Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Execution.TestMethodInfo.ExecuteInternalAsync(Object[] arguments, CancellationTokenSource timeoutTokenSource)
+    
+[m[90m  Standard output
+[90m    info: JulOS.Server[1000]
+          JulOS.Server 0.1.0 is starting.
+    info: Microsoft.Hosting.Lifetime[0]
+          Application started. Press Ctrl+C to shut down.
+    info: Microsoft.Hosting.Lifetime[0]
+          Hosting environment: Production
+    info: Microsoft.Hosting.Lifetime[0]
+          Content root path: /home/runner/work/julos/julos/src/JulOS.Server
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+          SELECT j.id, j.administrator_user_id, j.completed_at_utc
+          FROM (
+              SELECT id, administrator_user_id, completed_at_utc
+              FROM core.authentication_setup
+              WHERE id = 1
+              FOR UPDATE
+          ) AS j
+          LIMIT 2
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
+          FROM core.roles AS r
+          WHERE r.normalized_name = @normalizedName
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (0ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
+          FROM core.roles AS r
+          WHERE r.normalized_name = @normalizedName
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?', @p2='?', @p3='?' (DbType = Boolean), @p4='?', @p5='?', @p6='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+          INSERT INTO core.roles (id, concurrency_stamp, description, is_system_role, name, normalized_name, revision)
+          VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6);
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@normalizedUserName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT u.id, u.access_failed_count, u.concurrency_stamp, u.created_at_utc, u.display_name, u.email, u.email_confirmed, u.lockout_enabled, u.lockout_end_utc, u.motion, u.normalized_email, u.normalized_user_name, u.password_hash, u.phone_number, u.phone_number_confirmed, u.preferred_language, u.revision, u.security_stamp, u.theme, u.time_zone, u.two_factor_enabled, u.updated_at_utc, u.user_name
+          FROM core.users AS u
+          WHERE u.normalized_user_name = @normalizedUserName
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Int32), @p2='?', @p3='?' (DbType = DateTime), @p4='?', @p5='?', @p6='?' (DbType = Boolean), @p7='?' (DbType = Boolean), @p8='?' (DbType = DateTime), @p9='?', @p10='?', @p11='?', @p12='?', @p13='?', @p14='?' (DbType = Boolean), @p15='?', @p16='?' (DbType = Int32), @p17='?', @p18='?', @p19='?', @p20='?' (DbType = Boolean), @p21='?' (DbType = DateTime), @p22='?'], CommandType='Text', CommandTimeout='30']
+          INSERT INTO core.users (id, access_failed_count, concurrency_stamp, created_at_utc, display_name, email, email_confirmed, lockout_enabled, lockout_end_utc, motion, normalized_email, normalized_user_name, password_hash, phone_number, phone_number_confirmed, preferred_language, revision, security_stamp, theme, time_zone, two_factor_enabled, updated_at_utc, user_name)
+          VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20, @p21, @p22);
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (0ms) [Parameters=[@normalizedRoleName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
+          FROM core.roles AS r
+          WHERE r.normalized_name = @normalizedRoleName
+          LIMIT 2
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@p='?' (DbType = Guid), @p1='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.user_id, u.role_id
+          FROM core.user_roles AS u
+          WHERE u.user_id = @p AND u.role_id = @p1
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (0ms) [Parameters=[@normalizedRoleName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
+          FROM core.roles AS r
+          WHERE r.normalized_name = @normalizedRoleName
+          LIMIT 2
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@normalizedUserName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT u.id, u.access_failed_count, u.concurrency_stamp, u.created_at_utc, u.display_name, u.email, u.email_confirmed, u.lockout_enabled, u.lockout_end_utc, u.motion, u.normalized_email, u.normalized_user_name, u.password_hash, u.phone_number, u.phone_number_confirmed, u.preferred_language, u.revision, u.security_stamp, u.theme, u.time_zone, u.two_factor_enabled, u.updated_at_utc, u.user_name
+          FROM core.users AS u
+          WHERE u.normalized_user_name = @normalizedUserName
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p24='?' (DbType = Guid), @p2='?' (DbType = Int32), @p3='?', @p25='?', @p4='?' (DbType = DateTime), @p5='?', @p6='?', @p7='?' (DbType = Boolean), @p8='?' (DbType = Boolean), @p9='?' (DbType = DateTime), @p10='?', @p11='?', @p12='?', @p13='?', @p14='?', @p15='?' (DbType = Boolean), @p16='?', @p17='?' (DbType = Int32), @p26='?' (DbType = Int32), @p18='?', @p19='?', @p20='?', @p21='?' (DbType = Boolean), @p22='?' (DbType = DateTime), @p23='?'], CommandType='Text', CommandTimeout='30']
+          INSERT INTO core.user_roles (role_id, user_id)
+          VALUES (@p0, @p1);
+          UPDATE core.users SET access_failed_count = @p2, concurrency_stamp = @p3, created_at_utc = @p4, display_name = @p5, email = @p6, email_confirmed = @p7, lockout_enabled = @p8, lockout_end_utc = @p9, motion = @p10, normalized_email = @p11, normalized_user_name = @p12, password_hash = @p13, phone_number = @p14, phone_number_confirmed = @p15, preferred_language = @p16, revision = @p17, security_stamp = @p18, theme = @p19, time_zone = @p20, two_factor_enabled = @p21, updated_at_utc = @p22, user_name = @p23
+          WHERE id = @p24 AND concurrency_stamp = @p25 AND revision = @p26;
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@administratorRoleId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT p.permission
+          FROM core.permission_assignments AS p
+          WHERE p.subject_kind = 'Role' AND p.subject_id = @administratorRoleId AND p.scope_kind = 'Global'
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (1ms) [Parameters=[@p2='?' (DbType = Int32), @p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (DbType = Guid), @p6='?', @p7='?', @p8='?', @p9='?' (DbType = Guid), @p10='?', @p11='?' (DbType = Guid), @p12='?' (DbType = DateTime), @p13='?' (DbType = Guid), @p14='?', @p15='?', @p16='?', @p17='?' (DbType = Guid), @p18='?', @p19='?' (DbType = Guid), @p20='?' (DbType = DateTime), @p21='?' (DbType = Guid), @p22='?', @p23='?', @p24='?', @p25='?' (DbType = Guid), @p26='?', @p27='?' (DbType = Guid), @p28='?' (DbType = DateTime), @p29='?' (DbType = Guid), @p30='?', @p31='?', @p32='?', @p33='?' (DbType = Guid), @p34='?', @p35='?' (DbType = Guid), @p36='?' (DbType = DateTime), @p37='?' (DbType = Guid), @p38='?', @p39='?', @p40='?', @p41='?' (DbType = Guid), @p42='?', @p43='?' (DbType = Guid), @p44='?' (DbType = DateTime), @p45='?' (DbType = Guid), @p46='?', @p47='?', @p48='?', @p49='?' (DbType = Guid), @p50='?'], CommandType='Text', CommandTimeout='30']
+          UPDATE core.authentication_setup SET administrator_user_id = @p0, completed_at_utc = @p1
+          WHERE id = @p2;
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10);
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18);
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p19, @p20, @p21, @p22, @p23, @p24, @p25, @p26);
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p27, @p28, @p29, @p30, @p31, @p32, @p33, @p34);
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p35, @p36, @p37, @p38, @p39, @p40, @p41, @p42);
+          INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
+          VALUES (@p43, @p44, @p45, @p46, @p47, @p48, @p49, @p50);
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.id, u.claim_type, u.claim_value, u.user_id
+          FROM core.user_claims AS u
+          WHERE u.user_id = @user_Id
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT r.name
+          FROM core.user_roles AS u
+          INNER JOIN core.roles AS r ON u.role_id = r.id
+          WHERE u.user_id = @userId
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
+          SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
+          FROM core.roles AS r
+          WHERE r.normalized_name = @normalizedName
+          LIMIT 1
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@role_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT r.claim_type, r.claim_value
+          FROM core.role_claims AS r
+          WHERE r.role_id = @role_Id
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.role_id
+          FROM core.user_roles AS u
+          WHERE u.user_id = @userId
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (60ms) [Parameters=[@userId='?' (DbType = Guid), @roleIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+          SELECT p.id, p.granted_at_utc, p.granted_by_user_id, p.permission, p.scope_id, p.scope_kind, p.subject_id, p.subject_kind
+          FROM core.permission_assignments AS p
+          WHERE (p.subject_kind = 'User' AND p.subject_id = @userId) OR (p.subject_kind = 'Role' AND p.subject_id = ANY (@roleIds))
+    fail: Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware[1]
+          An unhandled exception has occurred while executing the request.
+          JulOS.Application.Authentication.AuthenticationFailureException: The antiforgery token is missing or invalid.
+           ---> System.InvalidOperationException: This form is being accessed with an invalid anti-forgery token. Validate the `IAntiforgeryValidationFeature` on the request before reading from the form.
+             at Microsoft.AspNetCore.Http.Features.FormFeature.HandleUncheckedAntiforgeryValidationFeature()
+             at Microsoft.AspNetCore.Http.Features.FormFeature.get_HasFormContentType()
+             at Microsoft.AspNetCore.Antiforgery.DefaultAntiforgeryTokenStore.GetRequestTokensAsync(HttpContext httpContext)
+             at Microsoft.AspNetCore.Antiforgery.DefaultAntiforgery.ValidateRequestAsync(HttpContext httpContext)
+             at JulOS.Server.Authentication.JulOsAntiforgery.ValidateAsync(HttpContext context, IAntiforgery antiforgery) in /_/src/JulOS.Server/Authentication/JulOsAntiforgery.cs:line 25
+             --- End of inner exception stack trace ---
+             at JulOS.Server.Authentication.JulOsAntiforgery.ValidateAsync(HttpContext context, IAntiforgery antiforgery) in /_/src/JulOS.Server/Authentication/JulOsAntiforgery.cs:line 35
+             at JulOS.Server.Operations.OperationEndpoints.CreateAsync(HttpContext context, CreateOperationRequest request, IAntiforgery antiforgery, IOperationService operations, CancellationToken cancellationToken) in /_/src/JulOS.Server/Operations/OperationEndpoints.cs:line 44
+             at Microsoft.AspNetCore.Http.RequestDelegateFactory.ExecuteTaskResult[T](Task`1 task, HttpContext httpContext)
+             at Microsoft.AspNetCore.Http.RequestDelegateFactory.<>c__DisplayClass102_2.<<HandleRequestBodyAndCompileRequestDelegateForJson>b__2>d.MoveNext()
+          --- End of stack trace from previous location ---
+             at Microsoft.AspNetCore.Antiforgery.Internal.AntiforgeryMiddleware.InvokeAwaited(HttpContext context)
+             at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Diagnostics.StatusCodePagesMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddlewareImpl.<Invoke>g__Awaited|10_0(ExceptionHandlerMiddlewareImpl middleware, HttpContext context, Task task)
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.role_id
+          FROM core.user_roles AS u
+          WHERE u.user_id = @userId
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (5ms) [Parameters=[@userId='?' (DbType = Guid), @roleIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+          SELECT p.id, p.granted_at_utc, p.granted_by_user_id, p.permission, p.scope_id, p.scope_kind, p.subject_id, p.subject_kind
+          FROM core.permission_assignments AS p
+          WHERE (p.subject_kind = 'User' AND p.subject_id = @userId) OR (p.subject_kind = 'Role' AND p.subject_id = ANY (@roleIds))
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@ownerUserId='?' (DbType = Guid), @idempotencyKey='?'], CommandType='Text', CommandTimeout='30']
+          SELECT o.id, o.cancellation_requested_at_utc, o.completed_at_utc, o.correlation_id, o.created_at_utc, o.current_step, o.failure_code, o.failure_detail, o.idempotency_key, o.operation_type, o.owner_user_id, o.progress_percent, o.request_fingerprint, o.revision, o.source_package_id, o.started_at_utc, o.state, o.target_reference
+          FROM core.operations AS o
+          WHERE o.owner_user_id = @ownerUserId AND o.idempotency_key = @idempotencyKey
+          LIMIT 2
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = DateTime), @p3='?', @p4='?' (DbType = DateTime), @p5='?', @p6='?', @p7='?', @p8='?', @p9='?', @p10='?' (DbType = Guid), @p11='?' (DbType = Int32), @p12='?' (DbType = StringFixedLength), @p13='?' (DbType = Int32), @p14='?', @p15='?' (DbType = DateTime), @p16='?', @p17='?'], CommandType='Text', CommandTimeout='30']
+          INSERT INTO core.operations (id, cancellation_requested_at_utc, completed_at_utc, correlation_id, created_at_utc, current_step, failure_code, failure_detail, idempotency_key, operation_type, owner_user_id, progress_percent, request_fingerprint, revision, source_package_id, started_at_utc, state, target_reference)
+          VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17);
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.role_id
+          FROM core.user_roles AS u
+          WHERE u.user_id = @userId
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (6ms) [Parameters=[@userId='?' (DbType = Guid), @roleIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+          SELECT p.id, p.granted_at_utc, p.granted_by_user_id, p.permission, p.scope_id, p.scope_kind, p.subject_id, p.subject_kind
+          FROM core.permission_assignments AS p
+          WHERE (p.subject_kind = 'User' AND p.subject_id = @userId) OR (p.subject_kind = 'Role' AND p.subject_id = ANY (@roleIds))
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@ownerUserId='?' (DbType = Guid), @idempotencyKey='?'], CommandType='Text', CommandTimeout='30']
+          SELECT o.id, o.cancellation_requested_at_utc, o.completed_at_utc, o.correlation_id, o.created_at_utc, o.current_step, o.failure_code, o.failure_detail, o.idempotency_key, o.operation_type, o.owner_user_id, o.progress_percent, o.request_fingerprint, o.revision, o.source_package_id, o.started_at_utc, o.state, o.target_reference
+          FROM core.operations AS o
+          WHERE o.owner_user_id = @ownerUserId AND o.idempotency_key = @idempotencyKey
+          LIMIT 2
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (2ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          SELECT u.role_id
+          FROM core.user_roles AS u
+          WHERE u.user_id = @userId
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (6ms) [Parameters=[@userId='?' (DbType = Guid), @roleIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+          SELECT p.id, p.granted_at_utc, p.granted_by_user_id, p.permission, p.scope_id, p.scope_kind, p.subject_id, p.subject_kind
+          FROM core.permission_assignments AS p
+          WHERE (p.subject_kind = 'User' AND p.subject_id = @userId) OR (p.subject_kind = 'Role' AND p.subject_id = ANY (@roleIds))
+    info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+          Executed DbCommand (4ms) [Parameters=[@ownerUserId='?' (DbType = Guid), @idempotencyKey='?'], CommandType='Text', CommandTimeout='30']
+          SELECT o.id, o.cancellation_requested_at_utc, o.completed_at_utc, o.correlation_id, o.created_at_utc, o.current_step, o.failure_code, o.failure_detail, o.idempotency_key, o.operation_type, o.owner_user_id, o.progress_percent, o.request_fingerprint, o.revision, o.source_package_id, o.started_at_utc, o.state, o.target_reference
+          FROM core.operations AS o
+          WHERE o.owner_user_id = @ownerUserId AND o.idempotency_key = @idempotencyKey
+          LIMIT 2
+    fail: Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware[1]
+          An unhandled exception has occurred while executing the request.
+          JulOS.Application.Operations.OperationFailureException: The idempotency key belongs to a different operation request.
+             at JulOS.Infrastructure.Operations.PostgresOperationService.MatchIdempotentRequest(OperationRow operation, String fingerprint) in /_/src/JulOS.Infrastructure/Operations/PostgresOperationService.cs:line 235
+             at JulOS.Infrastructure.Operations.PostgresOperationService.CreateAsync(CreateOperationCommand command, CancellationToken cancellationToken) in /_/src/JulOS.Infrastructure/Operations/PostgresOperationService.cs:line 42
+             at JulOS.Server.Operations.OperationEndpoints.CreateAsync(HttpContext context, CreateOperationRequest request, IAntiforgery antiforgery, IOperationService operations, CancellationToken cancellationToken) in /_/src/JulOS.Server/Operations/OperationEndpoints.cs:line 46
+             at Microsoft.AspNetCore.Http.RequestDelegateFactory.ExecuteTaskResult[T](Task`1 task, HttpContext httpContext)
+             at Microsoft.AspNetCore.Http.RequestDelegateFactory.<>c__DisplayClass102_2.<<HandleRequestBodyAndCompileRequestDelegateForJson>b__2>d.MoveNext()
+          --- End of stack trace from previous location ---
+             at Microsoft.AspNetCore.Antiforgery.Internal.AntiforgeryMiddleware.InvokeAwaited(HttpContext context)
+             at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Diagnostics.StatusCodePagesMiddleware.Invoke(HttpContext context)
+             at Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddlewareImpl.<Invoke>g__Awaited|10_0(ExceptionHandlerMiddlewareImpl middleware, HttpContext context, Task task)
+    info: Microsoft.Hosting.Lifetime[0]
+          Application is shutting down...
+    
+  Error output
+[m[m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 1 error(s)[m [90m(20s 474ms)[m
+Exit code: 2
+
+[31mTest run summary: Failed!
+  [m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 1 error(s)[m [90m(20s 474ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 288ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 208ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(2s 073ms)[m
+
+[m  total: 278
+[31m  failed: 1
+[m  succeeded: 276
+  skipped: 1
+  duration: 20s 966ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
+
+Validation stage 'dotnet-test' failed: 'dotnet test --solution JulOS.slnx --no-build' exited with code 2
+
+Summary:
+  passed  policy
+  passed  version
+  passed  restore
+  passed  build
+  failed  dotnet-test
