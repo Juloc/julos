@@ -2,6 +2,7 @@
 
 export const shellMessageKeys = [
   'about',
+  'accessDenied',
   'agentStatus',
   'close',
   'commandPalette',
@@ -12,7 +13,10 @@ export const shellMessageKeys = [
   'noApplicationsBody',
   'noApplicationsTitle',
   'notifications',
+  'offline',
   'problems',
+  'reference',
+  'requestFailed',
   'serverUnavailable',
   'settings',
   'setupRequired',
@@ -27,6 +31,7 @@ type ShellMessages = Readonly<Record<ShellMessageKey, string>>;
 export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> = {
   en: {
     about: 'About JulOS',
+    accessDenied: 'You do not have permission to view this information.',
     agentStatus: 'Agent status',
     close: 'Close',
     commandPalette: 'Search and commands',
@@ -37,7 +42,10 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     noApplicationsBody: 'Open the launcher to start an installed application.',
     noApplicationsTitle: 'No applications are open',
     notifications: 'Notifications',
+    offline: 'The JulOS server cannot be reached.',
     problems: 'Problems',
+    reference: 'Reference',
+    requestFailed: 'The request failed.',
     serverUnavailable: 'Server information unavailable',
     settings: 'Settings',
     setupRequired: 'Initial setup required',
@@ -46,6 +54,7 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
   },
   de: {
     about: 'Über JulOS',
+    accessDenied: 'Du hast keine Berechtigung, diese Informationen anzuzeigen.',
     agentStatus: 'Agent-Status',
     close: 'Schließen',
     commandPalette: 'Suche und Befehle',
@@ -56,7 +65,10 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     noApplicationsBody: 'Öffne den Launcher, um eine installierte Anwendung zu starten.',
     noApplicationsTitle: 'Keine Anwendungen geöffnet',
     notifications: 'Benachrichtigungen',
+    offline: 'Der JulOS-Server ist nicht erreichbar.',
     problems: 'Probleme',
+    reference: 'Referenz',
+    requestFailed: 'Die Anfrage ist fehlgeschlagen.',
     serverUnavailable: 'Serverinformationen nicht verfügbar',
     settings: 'Einstellungen',
     setupRequired: 'Ersteinrichtung erforderlich',
