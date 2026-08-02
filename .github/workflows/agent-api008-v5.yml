@@ -50,7 +50,7 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
-      - name: Apply corrected API-008 source, policies, and web JSON tests
+      - name: Apply corrected API-008 source, policies, web JSON tests, and CI Compose inputs
         shell: bash
         run: |
           set -euo pipefail
@@ -115,6 +115,18 @@ jobs:
               raise SystemExit(
                   f'Expected two secret-response JSON deserializations, found {count}.')
           tests.write_text('\ufeff' + text, encoding='utf-8')
+
+          validator = Path('tools/validate.mjs')
+          text = validator.read_text(encoding='utf-8-sig')
+          old = "{ JULOS_POSTGRES_PASSWORD: 'validation-placeholder' },"
+          new = """{
+            JULOS_POSTGRES_PASSWORD: 'validation-placeholder',
+            JULOS_SECRET_KEY_RING_PATH: './secret-keys',
+          },"""
+          if old not in text:
+              raise SystemExit('The Compose validation environment was not found.')
+          text = text.replace(old, new, 1)
+          validator.write_text('\ufeff' + text, encoding='utf-8')
           PY
 
           rm -rf .agent-diagnostic
@@ -153,7 +165,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .agent-diagnostic/api008-validation.txt
-          git commit -m 'Record API-008 validation failure after web JSON correction' || true
+          git commit -m 'Record API-008 validation failure after Compose input fix' || true
           git push origin HEAD:${{ github.head_ref }}
           exit "$status"
 
