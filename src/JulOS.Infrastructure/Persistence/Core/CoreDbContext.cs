@@ -10,9 +10,20 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 /// </summary>
 public sealed class CoreDbContext : DbContext
 {
+    /// <summary>
+    /// Gets the PostgreSQL schema owned by the JulOS core platform.
+    /// </summary>
     public const string SchemaName = "core";
+
+    /// <summary>
+    /// Gets the schema-qualified Entity Framework migration-history table name.
+    /// </summary>
     public const string MigrationHistoryTableName = "__ef_migrations_history";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CoreDbContext"/> class.
+    /// </summary>
+    /// <param name="options">The configured database-context options.</param>
     public CoreDbContext(DbContextOptions<CoreDbContext> options)
         : base(options)
     {
@@ -62,6 +73,7 @@ public sealed class CoreDbContext : DbContext
         }
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
