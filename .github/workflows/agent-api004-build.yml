@@ -54,6 +54,52 @@ jobs:
             | sha256sum --check
           tar -xzf /tmp/api004-new-files.tar.gz -C .
 
+          python3 - <<'PY'
+          from pathlib import Path
+
+          reader_path = Path('src/JulOS.Infrastructure/Authorization/EfPermissionAssignmentReader.cs')
+          reader = reader_path.read_text(encoding='utf-8-sig')
+          reader = reader.replace(
+              '    public EfPermissionAssignmentReader(CoreDbContext context)',
+              '    /// <summary>Creates a permission reader backed by Core persistence.</summary>\n'
+              '    /// <param name="context">The Core database context.</param>\n'
+              '    public EfPermissionAssignmentReader(CoreDbContext context)')
+          reader = reader.replace(
+              '    public async Task<PermissionEvaluationSet> ReadForUserAsync(',
+              '    /// <inheritdoc />\n'
+              '    public async Task<PermissionEvaluationSet> ReadForUserAsync(')
+          reader_path.write_text('\ufeff' + reader, encoding='utf-8')
+
+          administration_path = Path(
+              'src/JulOS.Infrastructure/Authorization/IdentityAuthorizationAdministration.cs')
+          administration = administration_path.read_text(encoding='utf-8-sig')
+          administration = administration.replace(
+              '    public IdentityAuthorizationAdministration(',
+              '    /// <summary>Creates the Identity-backed authorization administrator.</summary>\n'
+              '    /// <param name="context">The Core database context.</param>\n'
+              '    /// <param name="roleManager">The local Identity role manager.</param>\n'
+              '    /// <param name="userManager">The local Identity user manager.</param>\n'
+              '    /// <param name="timeProvider">The clock used for identifiers and grant timestamps.</param>\n'
+              '    public IdentityAuthorizationAdministration(')
+          signatures = [
+              'public async Task<IReadOnlyList<AuthorizationRole>> ListRolesAsync(',
+              'public async Task<AuthorizationRole> CreateRoleAsync(',
+              'public async Task<AuthorizationRole> UpdateRoleAsync(',
+              'public async Task DeleteRoleAsync(',
+              'public async Task<IReadOnlyList<AuthorizationRoleMember>> ListRoleMembersAsync(',
+              'public async Task AddRoleMemberAsync(',
+              'public async Task RemoveRoleMemberAsync(',
+              'public async Task<IReadOnlyList<StoredPermissionAssignment>> ListPermissionAssignmentsAsync(',
+              'public async Task<StoredPermissionAssignment> GrantPermissionAsync(',
+              'public async Task RevokePermissionAsync(',
+          ]
+          for signature in signatures:
+              administration = administration.replace(
+                  f'    {signature}',
+                  f'    /// <inheritdoc />\n    {signature}')
+          administration_path.write_text('\ufeff' + administration, encoding='utf-8')
+          PY
+
           rm -rf .agent
           node tools/normalize-encoding.mjs
           dotnet restore JulOS.slnx
