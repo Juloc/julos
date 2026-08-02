@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>JulOS.ReferencePackage.Worker</AssemblyName>
+    <RootNamespace>JulOS.ReferencePackage.Worker</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/JulOS.PackageSdk/JulOS.PackageSdk.csproj" />
+  </ItemGroup>
+
+</Project>
