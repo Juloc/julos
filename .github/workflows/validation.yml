@@ -1,18 +1,27 @@
-name: API-003 implementation validation
+# Repository validation.
+#
+# This workflow runs tools/validate.sh, the same entry point developers run.
+# Continuous integration must not grow its own list of checks; a stage belongs
+# in tools/validate.mjs so both places stay identical by construction.
+
+name: Validation
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: api003-${{ github.event.pull_request.number }}
+  group: validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  implement:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  validate:
+    name: Validate the repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -34,21 +43,8 @@ jobs:
           --health-retries 20
 
     steps:
-      - name: Check out the working branch
+      - name: Check out the repository
         uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-
-      - name: Apply the verified API-003 overlay
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .agent/api003/part-* | base64 --decode > /tmp/api003-overlay.tar.gz
-          echo "54f127203633d131c58c984bd415a44a4768bfa3768aec6c816378cb8f707231  /tmp/api003-overlay.tar.gz" | sha256sum --check
-          tar -xzf /tmp/api003-overlay.tar.gz -C .
-          rm -rf .agent
-          node tools/normalize-encoding.mjs
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -62,27 +58,20 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
-      - name: Restore tools and dependencies
-        run: |
-          dotnet tool restore
-          dotnet restore JulOS.slnx
+      # Only downloaded packages are cached. Build output, node_modules and
+      # generated assets are never restored, so a missing generated dependency
+      # fails the run instead of being served from an earlier one.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
 
-      - name: Generate the authentication migration
-        run: |
-          dotnet ef migrations add AddLocalAuthentication \
-            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
-            --startup-project src/JulOS.Server/JulOS.Server.csproj \
-            --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
-            --output-dir Persistence/Core/Migrations
-          node tools/normalize-encoding.mjs
-
-      - name: Validate the complete repository
+      - name: Run repository validation
         run: sh tools/validate.sh
 
-      - name: Commit the completed work package
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m "Implement API-003 local authentication"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      # The validation must not modify tracked files. A difference here means a
+      # generated artefact is committed out of date.
+      - name: Verify the working tree is unchanged
+        run: git diff --exit-code
