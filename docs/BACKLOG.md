@@ -46,7 +46,8 @@ Status values:
 | Phase 2 | Persistence, authentication and core APIs | Done | Gate passed: PostgreSQL, authentication, authorization, APIs, audit, secrets, operations and real-time events validate together. |
 | DESK-001 | Shell and design tokens | Done | Responsive Fluent 2 shell, taskbar, themes, localization, About dialog and server version are built into the Server image. |
 | DESK-002 | Client API and event services | Done | Same-origin typed API calls, Problem Details, correlation references, distinct failure states and reconnect refresh are tested. |
-| Phase 3 | Desktop shell | In progress | `DESK-003` is next: deterministic window state and commands. |
+| DESK-003 | Window store | Done | Deterministic commands, gap-free z-order and all normal, minimized and maximized transitions work with five windows. |
+| Phase 3 | Desktop shell | In progress | `DESK-004` is next: frame-batched pointer and touch move/resize interactions. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -57,19 +58,19 @@ Status values:
 
 ## Next issue
 
-### DESK-003 — Implement window store
+### DESK-004 — Implement drag, resize and bounds
 
 Scope:
 
-- deterministic open and close commands
-- focus and gap-free z-order
-- move, resize, minimize, restore and maximize transitions
-- unit coverage with at least five simultaneous windows
+- unified mouse, touch and pen pointer interactions
+- animation-frame batching for move and resize
+- draggable title-bar and interactive-control separation
+- application-defined minimum size and reachable title-bar constraints
 
 Acceptance:
 
-- unit tests cover every state transition
-- five simultaneous windows remain usable
+- no server request occurs per pointer movement
+- the title bar cannot become permanently unreachable
 
 ## Specification status
 
