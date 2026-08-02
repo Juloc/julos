@@ -11,6 +11,7 @@ using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
 using JulOS.Server.Events;
+using JulOS.Server.Layouts;
 using JulOS.Server.Profile;
 using JulOS.Server.Operations;
 using JulOS.Server.Secrets;
@@ -88,6 +89,7 @@ app.MapHealthChecks(
 app.MapJulOsLocalAuthentication();
 app.MapJulOsAuthorization();
 app.MapJulOsProfile();
+app.MapJulOsDesktopLayouts();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
 app.MapJulOsAudit();
