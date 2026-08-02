@@ -1,0 +1,61 @@
+name: API-002 final rebuild
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+      - name: Rebuild clean API-002 commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --binary 1bc2c4edf4e290f555c41e0b792c332f860e1dc7 db85b24fd2b77ffb67a8bc068702b801acbfa3ab > /tmp/api002.patch
+          git reset --hard 1bc2c4edf4e290f555c41e0b792c332f860e1dc7
+          git apply /tmp/api002.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('src/JulOS.Infrastructure/Persistence/Core/CoreDbContext.cs'): [
+                  ('databaseValues.GetValue<int>(revisionProperty);',
+                   'databaseValues.GetValue<int>(revisionProperty.Name);'),
+              ],
+              Path('tests/JulOS.Integration.Tests/Persistence/OptimisticConcurrencyTests.cs'): [
+                  ('PackageState.Failed', 'PackageState.Faulted'),
+              ],
+          }
+
+          for path, changes in replacements.items():
+              text = path.read_text(encoding='utf-8-sig')
+              for old, new in changes:
+                  if text.count(old) != 1:
+                      raise SystemExit(f'unexpected occurrence count for {old!r} in {path}')
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+          PY
+          node tools/normalize-encoding.mjs
+          node tools/validate.mjs --stage policy --stage markdown-links
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "API-002: add optimistic concurrency handling" \
+            -m "Scope: translate EF Core concurrency failures centrally, return HTTP 409 with the current revision, and prove with PostgreSQL integration tests that stale writes cannot overwrite newer state." \
+            -m "Out of scope: authentication, authorization policies, profile settings endpoints and automatic retry behavior." \
+            -m "Validation: source files were normalized and policy, link and diff checks passed before commit; full repository validation follows on the clean branch state."
+          git push --force origin HEAD:agent/complete-julos-work-breakdown
