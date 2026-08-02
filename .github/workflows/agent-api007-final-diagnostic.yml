@@ -83,16 +83,12 @@ jobs:
 
           path = Path('tests/JulOS.Integration.Tests/Operations/OperationTests.cs')
           text = path.read_text(encoding='utf-8-sig')
-          old = '''        var createEndpoint = dataSource.Endpoints.OfType<RouteEndpoint>().Single(endpoint =>
-            string.Equals(endpoint.RoutePattern.RawText, "/api/v1/operations", StringComparison.Ordinal));'''
-          new = '''        var createEndpoint = dataSource.Endpoints.OfType<RouteEndpoint>().Single(endpoint =>
-            string.Equals(
-                endpoint.RoutePattern.RawText?.TrimEnd('/'),
-                "/api/v1/operations",
-                StringComparison.Ordinal));'''
-          if old not in text:
-              raise SystemExit('Operation route metadata assertion was not found.')
-          path.write_text('\ufeff' + text.replace(old, new, 1), encoding='utf-8')
+          needle = 'endpoint.RoutePattern.RawText, "/api/v1/operations"'
+          replacement = 'endpoint.RoutePattern.RawText?.TrimEnd(\'/\'), "/api/v1/operations"'
+          if text.count(needle) != 1:
+              raise SystemExit(
+                  f'Expected one route metadata expression, found {text.count(needle)}.')
+          path.write_text('\ufeff' + text.replace(needle, replacement), encoding='utf-8')
           PY
           rm -rf .agent-diagnostic
           node tools/normalize-encoding.mjs
@@ -112,7 +108,6 @@ jobs:
             test -s .agent-diagnostic/api007-validation.txt \
               || tail -n 500 /tmp/api007-validation.log \
                 > .agent-diagnostic/api007-validation.txt
-
             git config user.name github-actions[bot]
             git config user.email 41898282+github-actions[bot]@users.noreply.github.com
             git add .agent-diagnostic/api007-validation.txt
