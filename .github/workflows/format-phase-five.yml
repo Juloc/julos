@@ -1,0 +1,47 @@
+name: Format Phase 5 implementation
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: format-phase-five-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Format and normalize
+        run: |
+          dotnet restore JulOS.slnx
+          dotnet format JulOS.slnx --no-restore --severity info
+          node tools/normalize-encoding.mjs
+
+      - name: Commit permanent formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/format-phase-five.yml
+          git add --all
+          git commit -m "Format Phase 5 implementation"
+          git pull --rebase origin agent/complete-julos-work-breakdown
+          git push origin HEAD:agent/complete-julos-work-breakdown
