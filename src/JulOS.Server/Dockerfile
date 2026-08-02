@@ -10,8 +10,9 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 WORKDIR /source
 
 # Restore first from the project graph alone, so a source change does not
-# invalidate the dependency layer.
-COPY global.json Directory.Build.props Directory.Packages.props VERSION ./
+# invalidate the dependency layer. The analyzer configuration is copied as part
+# of the build contract so container publishing enforces the same rules as CI.
+COPY .editorconfig global.json Directory.Build.props Directory.Packages.props VERSION ./
 COPY src/JulOS.Domain/JulOS.Domain.csproj src/JulOS.Domain/
 COPY src/JulOS.Contracts/JulOS.Contracts.csproj src/JulOS.Contracts/
 COPY src/JulOS.Application/JulOS.Application.csproj src/JulOS.Application/
