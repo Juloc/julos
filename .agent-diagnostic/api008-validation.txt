@@ -1,9 +1,9 @@
 ﻿  JulOS.Domain -> /home/runner/work/julos/julos/src/JulOS.Domain/bin/Debug/net10.0/JulOS.Domain.dll
   JulOS.PackageSdk -> /home/runner/work/julos/julos/src/JulOS.PackageSdk/bin/Debug/net10.0/JulOS.PackageSdk.dll
   JulOS.Architecture.Tests -> /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll
+  JulOS.Domain.Tests -> /home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll
   JulOS.RuntimeManager -> /home/runner/work/julos/julos/src/JulOS.RuntimeManager/bin/Debug/net10.0/JulOS.RuntimeManager.dll
   JulOS.Application -> /home/runner/work/julos/julos/src/JulOS.Application/bin/Debug/net10.0/JulOS.Application.dll
-  JulOS.Domain.Tests -> /home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll
   JulOS.Agent -> /home/runner/work/julos/julos/src/JulOS.Agent/bin/Debug/net10.0/JulOS.Agent.dll
   JulOS.Infrastructure -> /home/runner/work/julos/julos/src/JulOS.Infrastructure/bin/Debug/net10.0/JulOS.Infrastructure.dll
   JulOS.Server -> /home/runner/work/julos/julos/src/JulOS.Server/bin/Debug/net10.0/JulOS.Server.dll
@@ -14,21 +14,21 @@ Build succeeded.
     0 Warning(s)
     0 Error(s)
 
-Time Elapsed 00:00:06.58
+Time Elapsed 00:00:05.87
 passed: dotnet build JulOS.slnx --no-restore
 
 === dotnet-test: Run .NET unit and architecture tests ===
-Running tests from /home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64)
-Running tests from /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64)
 Running tests from /home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64)
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64)
 Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64)
-[m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 040ms)[m
+Running tests from /home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64)
 [33mskipped[m PackageProjectsDoNotReferenceEachOther
   Assert.Inconclusive. No project exists under 'packages/' yet, so this rule has nothing to check.
   from /home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64)
-[m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 603ms)[m
-[m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(2s 072ms)[m
-[31mfailed[m ValuesStayEncryptedOpaqueAndOperationScopedAcrossLifecycle [90m(3s 444ms)[m
+[m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 164ms)[m
+[m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 670ms)[m
+[m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 978ms)[m
+[31mfailed[m ValuesStayEncryptedOpaqueAndOperationScopedAcrossLifecycle [90m(3s 549ms)[m
   from /home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64)
 [31m  Assertion failed. Expected values to be equal.
   
@@ -43,7 +43,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
 [90m    info: JulOS.Server[1000]
           JulOS.Server 0.1.0 is starting.
     warn: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[35]
-          No XML encryptor configured. Key {5e99a92e-c46c-450c-8862-0b6500d178f0} may be persisted to storage in unencrypted form.
+          No XML encryptor configured. Key {c2ed1712-89d1-4453-a4bf-6e6ea6c7492f} may be persisted to storage in unencrypted form.
     info: Microsoft.Hosting.Lifetime[0]
           Application started. Press Ctrl+C to shut down.
     info: Microsoft.Hosting.Lifetime[0]
@@ -61,7 +61,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           ) AS j
           LIMIT 2
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (11ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (10ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
           SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
           FROM core.roles AS r
           WHERE r.normalized_name = @normalizedName
@@ -77,13 +77,13 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           INSERT INTO core.roles (id, concurrency_stamp, description, is_system_role, name, normalized_name, revision)
           VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6);
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (3ms) [Parameters=[@normalizedUserName='?'], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (2ms) [Parameters=[@normalizedUserName='?'], CommandType='Text', CommandTimeout='30']
           SELECT u.id, u.access_failed_count, u.concurrency_stamp, u.created_at_utc, u.display_name, u.email, u.email_confirmed, u.lockout_enabled, u.lockout_end_utc, u.motion, u.normalized_email, u.normalized_user_name, u.password_hash, u.phone_number, u.phone_number_confirmed, u.preferred_language, u.revision, u.security_stamp, u.theme, u.time_zone, u.two_factor_enabled, u.updated_at_utc, u.user_name
           FROM core.users AS u
           WHERE u.normalized_user_name = @normalizedUserName
           LIMIT 1
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Int32), @p2='?', @p3='?' (DbType = DateTime), @p4='?', @p5='?', @p6='?' (DbType = Boolean), @p7='?' (DbType = Boolean), @p8='?' (DbType = DateTime), @p9='?', @p10='?', @p11='?', @p12='?', @p13='?', @p14='?' (DbType = Boolean), @p15='?', @p16='?' (DbType = Int32), @p17='?', @p18='?', @p19='?', @p20='?' (DbType = Boolean), @p21='?' (DbType = DateTime), @p22='?'], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (5ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Int32), @p2='?', @p3='?' (DbType = DateTime), @p4='?', @p5='?', @p6='?' (DbType = Boolean), @p7='?' (DbType = Boolean), @p8='?' (DbType = DateTime), @p9='?', @p10='?', @p11='?', @p12='?', @p13='?', @p14='?' (DbType = Boolean), @p15='?', @p16='?' (DbType = Int32), @p17='?', @p18='?', @p19='?', @p20='?' (DbType = Boolean), @p21='?' (DbType = DateTime), @p22='?'], CommandType='Text', CommandTimeout='30']
           INSERT INTO core.users (id, access_failed_count, concurrency_stamp, created_at_utc, display_name, email, email_confirmed, lockout_enabled, lockout_end_utc, motion, normalized_email, normalized_user_name, password_hash, phone_number, phone_number_confirmed, preferred_language, revision, security_stamp, theme, time_zone, two_factor_enabled, updated_at_utc, user_name)
           VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20, @p21, @p22);
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
@@ -93,13 +93,13 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           WHERE r.normalized_name = @normalizedRoleName
           LIMIT 2
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (1ms) [Parameters=[@p='?' (DbType = Guid), @p1='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (2ms) [Parameters=[@p='?' (DbType = Guid), @p1='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
           SELECT u.user_id, u.role_id
           FROM core.user_roles AS u
           WHERE u.user_id = @p AND u.role_id = @p1
           LIMIT 1
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (0ms) [Parameters=[@normalizedRoleName='?'], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (1ms) [Parameters=[@normalizedRoleName='?'], CommandType='Text', CommandTimeout='30']
           SELECT r.id, r.concurrency_stamp, r.description, r.is_system_role, r.name, r.normalized_name, r.revision
           FROM core.roles AS r
           WHERE r.normalized_name = @normalizedRoleName
@@ -147,7 +147,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           FROM core.user_claims AS u
           WHERE u.user_id = @user_Id
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (5ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (4ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
           SELECT r.name
           FROM core.user_roles AS u
           INNER JOIN core.roles AS r ON u.role_id = r.id
@@ -175,7 +175,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           Application is shutting down...
     
   Error output
-[m[31mfailed[m StaleRotationReturnsCurrentRevisionWithoutEchoingSubmittedValue [90m(743ms)[m
+[m[31mfailed[m StaleRotationReturnsCurrentRevisionWithoutEchoingSubmittedValue [90m(807ms)[m
   from /home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64)
 [31m  Assertion failed. Expected values to be equal.
   
@@ -268,7 +268,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           FROM core.permission_assignments AS p
           WHERE p.subject_kind = 'Role' AND p.subject_id = @administratorRoleId AND p.scope_kind = 'Global'
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (1ms) [Parameters=[@p2='?' (DbType = Int32), @p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (DbType = Guid), @p6='?', @p7='?', @p8='?', @p9='?' (DbType = Guid), @p10='?', @p11='?' (DbType = Guid), @p12='?' (DbType = DateTime), @p13='?' (DbType = Guid), @p14='?', @p15='?', @p16='?', @p17='?' (DbType = Guid), @p18='?', @p19='?' (DbType = Guid), @p20='?' (DbType = DateTime), @p21='?' (DbType = Guid), @p22='?', @p23='?', @p24='?', @p25='?' (DbType = Guid), @p26='?', @p27='?' (DbType = Guid), @p28='?' (DbType = DateTime), @p29='?' (DbType = Guid), @p30='?', @p31='?', @p32='?', @p33='?' (DbType = Guid), @p34='?', @p35='?' (DbType = Guid), @p36='?' (DbType = DateTime), @p37='?' (DbType = Guid), @p38='?', @p39='?', @p40='?', @p41='?' (DbType = Guid), @p42='?', @p43='?' (DbType = Guid), @p44='?' (DbType = DateTime), @p45='?' (DbType = Guid), @p46='?', @p47='?', @p48='?', @p49='?' (DbType = Guid), @p50='?', @p51='?' (DbType = Guid), @p52='?' (DbType = DateTime), @p53='?' (DbType = Guid), @p54='?', @p55='?', @p56='?', @p57='?' (DbType = Guid), @p58='?', @p59='?' (DbType = Guid), @p60='?' (DbType = DateTime), @p61='?' (DbType = Guid), @p62='?', @p63='?', @p64='?', @p65='?' (DbType = Guid), @p66='?'], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (2ms) [Parameters=[@p2='?' (DbType = Int32), @p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p3='?' (DbType = Guid), @p4='?' (DbType = DateTime), @p5='?' (DbType = Guid), @p6='?', @p7='?', @p8='?', @p9='?' (DbType = Guid), @p10='?', @p11='?' (DbType = Guid), @p12='?' (DbType = DateTime), @p13='?' (DbType = Guid), @p14='?', @p15='?', @p16='?', @p17='?' (DbType = Guid), @p18='?', @p19='?' (DbType = Guid), @p20='?' (DbType = DateTime), @p21='?' (DbType = Guid), @p22='?', @p23='?', @p24='?', @p25='?' (DbType = Guid), @p26='?', @p27='?' (DbType = Guid), @p28='?' (DbType = DateTime), @p29='?' (DbType = Guid), @p30='?', @p31='?', @p32='?', @p33='?' (DbType = Guid), @p34='?', @p35='?' (DbType = Guid), @p36='?' (DbType = DateTime), @p37='?' (DbType = Guid), @p38='?', @p39='?', @p40='?', @p41='?' (DbType = Guid), @p42='?', @p43='?' (DbType = Guid), @p44='?' (DbType = DateTime), @p45='?' (DbType = Guid), @p46='?', @p47='?', @p48='?', @p49='?' (DbType = Guid), @p50='?', @p51='?' (DbType = Guid), @p52='?' (DbType = DateTime), @p53='?' (DbType = Guid), @p54='?', @p55='?', @p56='?', @p57='?' (DbType = Guid), @p58='?', @p59='?' (DbType = Guid), @p60='?' (DbType = DateTime), @p61='?' (DbType = Guid), @p62='?', @p63='?', @p64='?', @p65='?' (DbType = Guid), @p66='?'], CommandType='Text', CommandTimeout='30']
           UPDATE core.authentication_setup SET administrator_user_id = @p0, completed_at_utc = @p1
           WHERE id = @p2;
           INSERT INTO core.permission_assignments (id, granted_at_utc, granted_by_user_id, permission, scope_id, scope_kind, subject_id, subject_kind)
@@ -293,7 +293,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           FROM core.user_claims AS u
           WHERE u.user_id = @user_Id
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (5ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (4ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
           SELECT r.name
           FROM core.user_roles AS u
           INNER JOIN core.roles AS r ON u.role_id = r.id
@@ -305,7 +305,7 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           WHERE r.normalized_name = @normalizedName
           LIMIT 1
     info: Microsoft.EntityFrameworkCore.Database.Command[20101]
-          Executed DbCommand (3ms) [Parameters=[@role_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+          Executed DbCommand (2ms) [Parameters=[@role_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
           SELECT r.claim_type, r.claim_value
           FROM core.role_claims AS r
           WHERE r.role_id = @role_Id
@@ -321,20 +321,20 @@ Running tests from /home/runner/work/julos/julos/tests/JulOS.Infrastructure.Test
           Application is shutting down...
     
   Error output
-[m[m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 2 error(s)[m [90m(21s 480ms)[m
+[m[m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 2 error(s)[m [90m(21s 563ms)[m
 Exit code: 2
 
 [31mTest run summary: Failed!
-  [m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 2 error(s)[m [90m(21s 480ms)[m
-  [m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 603ms)[m
-  [m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(2s 072ms)[m
-  [m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 040ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Integration.Tests/bin/Debug/net10.0/JulOS.Integration.Tests.dll (net10.0|x64) [31mfailed with 2 error(s)[m [90m(21s 563ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Domain.Tests/bin/Debug/net10.0/JulOS.Domain.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 164ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Infrastructure.Tests/bin/Debug/net10.0/JulOS.Infrastructure.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 978ms)[m
+  [m/home/runner/work/julos/julos/tests/JulOS.Architecture.Tests/bin/Debug/net10.0/JulOS.Architecture.Tests.dll (net10.0|x64) [32mpassed[m [90m(1s 670ms)[m
 
 [m  total: 282
 [31m  failed: 2
 [m  succeeded: 279
   skipped: 1
-  duration: 22s 076ms
+  duration: 21s 897ms
 Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
 
 Validation stage 'dotnet-test' failed: 'dotnet test --solution JulOS.slnx --no-build' exited with code 2
