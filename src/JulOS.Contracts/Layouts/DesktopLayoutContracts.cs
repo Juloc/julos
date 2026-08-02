@@ -28,13 +28,11 @@ public sealed record DesktopWindowContract(
 /// <summary>One persisted widget placement.</summary>
 public sealed record WidgetPlacementContract(
     Guid WidgetPlacementId,
-    string OwningPackageId,
     string WidgetKey,
     int GridColumn,
     int GridRow,
     int WidthUnits,
-    int HeightUnits,
-    string SettingsJson);
+    int HeightUnits);
 
 /// <summary>The default layout for one user and viewport class.</summary>
 public sealed record DesktopLayoutResponse(
