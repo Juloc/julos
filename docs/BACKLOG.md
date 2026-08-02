@@ -49,9 +49,15 @@ Status values:
 | DESK-003 | Window store | Done | Deterministic commands, gap-free z-order and all normal, minimized and maximized transitions work with five windows. |
 | DESK-004 | Drag, resize and bounds | Done | Mouse, touch and pen updates are frame-batched; minimum sizes and reachable title bars are enforced. |
 | DESK-005 | Snapping | Done | Pointer previews and keyboard commands share taskbar-aware half, quarter and maximize geometry. |
-| DESK-006 | Taskbar and window switcher | Done | Instance policies, grouped counts, minimized restore and frozen-order Alt+Tab behavior are implemented. |
-| Phase 3 | Desktop shell | In progress | `DESK-007` is next: searchable launcher and authorized command palette. |
-| Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
+| DESK-006 | Taskbar and window switcher | Done | Instance policies, grouped counts, minimized restore and predictable Alt+Tab behavior are implemented. |
+| DESK-007 | Launcher and command palette | Done | Permission-filtered indexed search and execution handle 1000 applications within the documented budget. |
+| DESK-008 | Layout persistence | Done | Debounced revisioned saves, viewport separation, reload restore and conflict handling are implemented. |
+| DESK-009 | Responsive desktop modes | Done | Desktop/tablet keep windows while mobile uses one-window task switching with separate layout keys. |
+| DESK-010 | Notifications and problem center | Done | Repeated observations deduplicate, resolved problems reopen and severity has text semantics. |
+| DESK-011 | Widget host | Done | Package ownership, size/status contracts and timestamped stale-state labels are enforced. |
+| DESK-012 | Accessibility and keyboard pass | Done | Keyboard commands, focus traversal, reduced motion and 50–400% zoom helpers are tested. |
+| Phase 3 | Desktop shell | Done | Gate passed: the shell, windows, launcher, persistence, responsive behavior, observability and widgets validate together. |
+| Phase 4 | Package platform | In progress | `PKG-001` is next: versioned package manifest schema and validator. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
@@ -61,37 +67,23 @@ Status values:
 
 ## Next issue
 
-### DESK-007 — Implement launcher and command palette
+### PKG-001 — Define package manifest schema
 
 Scope:
 
-- indexed application and launch-target discovery
-- authorized command registration and execution
-- deterministic search ranking for at least 1000 applications
-- launch through the instance-policy coordinator
+- versioned JSON schema and deterministic validation
+- mandatory permissions and runtime requirements
+- valid and invalid fixtures
+- clear rejection of unknown incompatible schema versions
 
 Acceptance:
 
-- unauthorized commands are not executable
-- 1000 applications remain searchable within performance budget
+- unknown incompatible schema fails clearly
+- permissions and runtime requirements are mandatory declarations
 
 ## Specification status
 
-Authoritative documents now cover:
-
-- complete product concept
-- desktop and window behavior
-- package artifact, worker and lifecycle
-- Runtime Manager boundary
-- Agent model
-- Browser and Remote model
-- core data entities
-- API and event conventions
-- security and permissions
-- deployment, backup, restore and safe mode
-- test strategy and definition of done
-- Julgate migration and archive criteria
-- phase gates and individual issue blueprint through JulOS 1.0
+Authoritative documents cover the complete product, architecture, UX, security, operations, testing, migration, phase gates and issue blueprint through JulOS 1.0.
 
 Implementation must not invent alternate behavior outside these specifications without updating `DECISIONS.md`.
 
