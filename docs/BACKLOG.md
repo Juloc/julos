@@ -34,8 +34,9 @@ Status values:
 | CORE-006 | Agent model | Done | Revocation is terminal; a heartbeat cannot carry a measurement. |
 | Phase 1 | Core platform model | Done | Gate passed: every domain invariant has tests and Domain references only base libraries. |
 | API-001 | PostgreSQL core persistence | Done | Core tables, constraints, migration command and real PostgreSQL integration tests. |
+| API-002 | Optimistic concurrency | Done | Revision tokens prevent stale writes; conflicts return HTTP 409 with the current revision. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` and `API-006` are done; `API-002` is next. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001`, `API-002` and `API-006` are done; `API-003` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -47,18 +48,18 @@ Status values:
 
 ## Next issue
 
-### API-002 — Add optimistic concurrency
+### API-003 — Add local authentication
 
 Scope:
 
-- revision handling for layouts, settings, packages and connections
-- conflict responses carrying the current revision
-- integration tests proving stale writes cannot overwrite newer state
+- forced initial administrator setup
+- local login and logout with secure cookies
+- account lockout, configurable session timeout and login rate limiting
 
 Acceptance:
 
-- stale update returns conflict with current revision
-- silent last-write-wins does not occur
+- desktop and APIs reject unauthenticated users
+- login rate limiting is tested
 
 ## Specification status
 
