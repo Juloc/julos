@@ -79,6 +79,8 @@ Continuous integration starts the pinned supported PostgreSQL image and sets `JU
 
 `API-001` covers clean migration, database enforcement of representative domain invariants, schema ownership and append-only audit storage. Later persistence work items extend the same real-database suite for concurrency, package isolation, upgrade fixtures and backup metadata.
 
+`API-002` adds a real two-writer PostgreSQL test that proves the second stale save fails and the first committed revision remains authoritative. A Server integration test separately verifies the HTTP 409 code and `currentRevision` extension, so storage and transport behavior cannot silently diverge.
+
 ### 2.5 API integration tests
 
 `tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.

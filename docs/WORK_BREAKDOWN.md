@@ -397,6 +397,8 @@ The committed migration is applied only through `JulOS.Server --migrate-database
 
 ### API-002 — Add optimistic concurrency
 
+Status: done.
+
 Depends on: API-001.
 
 Deliver revision handling for layouts, settings, packages and connections.
@@ -405,6 +407,10 @@ Acceptance:
 
 - stale update returns conflict with current revision
 - silent last-write-wins does not occur
+
+Implemented by mapping every currently persisted mutable row revision as an Entity Framework Core concurrency token. `CoreDbContext` translates provider conflicts into the transport-neutral `ConcurrencyConflictException`, reads the authoritative stored revision and never retries or overwrites automatically.
+
+The Server maps that exception through the existing API-006 error pipeline to HTTP 409 with `request.concurrency_conflict` and the `currentRevision` Problem Details extension. Real PostgreSQL integration tests prove that a stale package write fails, the newer row remains unchanged and the public error contract contains the current revision. Layout, window, widget, session, Agent and problem rows use the same model rule; settings receive it when API-005 introduces their persistence.
 
 ### API-003 — Add local authentication
 

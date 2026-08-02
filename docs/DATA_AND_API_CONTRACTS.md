@@ -17,6 +17,8 @@ The first core migration implements the Phase 1 entities that already have domai
 
 All these tables live in the `core` schema. The Entity Framework migration history is also schema-qualified. Package data remains in package-owned schemas introduced by `PKG-004`; no package table is mapped by `CoreDbContext`.
 
+Every currently persisted mutable row maps its numeric revision as a database concurrency token. A stale mutation is rejected rather than retried or merged implicitly. The HTTP representation is status 409 with code `request.concurrency_conflict` and `currentRevision` when the row still exists; a client refreshes authoritative state before deciding whether to reapply its intent.
+
 ## 2. Core entities
 
 ### 2.1 User
