@@ -13,6 +13,10 @@ This document defines the initial persistent model and transport conventions. Ex
 - Package schemas are isolated from core tables and from each other.
 - JSON columns are used only for genuinely versioned or package-defined structures, not to avoid normal relational modeling.
 
+The first core migration implements the Phase 1 entities that already have domain behavior: packages, applications and launch targets, layouts and placements, session references, Agents and capabilities, problems, notifications, audit events and permission assignments. Persistence ownership fields such as user identifiers and timestamps are stored where the contracts require them, but future authentication, package-manifest, secret and settings fields are not invented before their owning work items.
+
+All these tables live in the `core` schema. The Entity Framework migration history is also schema-qualified. Package data remains in package-owned schemas introduced by `PKG-004`; no package table is mapped by `CoreDbContext`.
+
 ## 2. Core entities
 
 ### 2.1 User

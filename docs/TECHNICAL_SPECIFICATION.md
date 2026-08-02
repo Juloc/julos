@@ -394,6 +394,12 @@ Julgate and guacd implementation details remain behind Remote package contracts.
 - soft deletion is used only when audit or recovery requires it
 - domain history is not duplicated from external systems
 
+`CoreDbContext` lives in Infrastructure and owns only the PostgreSQL `core` schema. It maps persistence-specific rows to the Phase 1 domain concepts instead of adding EF Core constructors or annotations to Domain. Package-owned schemas never enter this context.
+
+The migration history table is `core.__ef_migrations_history`. Schema changes run only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service. Normal Server startup does not call `Migrate`, and manual schema edits are unsupported.
+
+The first migration uses database keys, foreign keys, unique indexes and check constraints to enforce identities, valid revisions, fault metadata, scope shape, layout bounds and lifecycle timestamps. Audit events additionally have a PostgreSQL trigger that rejects updates and deletes.
+
 ## 13. Events and real-time updates
 
 Server publishes versioned events through SignalR:

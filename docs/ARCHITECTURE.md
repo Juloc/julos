@@ -105,6 +105,8 @@ It owns:
 
 Server remains functional when every optional package is disabled or faulted.
 
+Core persistence is implemented in Infrastructure. `CoreDbContext` owns the `core` schema and maps persistence-specific rows to Domain concepts; Domain contains no EF Core reference, persistence annotation or materialization-only constructor. Server only composes the context and invokes the explicit migration process. Package schemas are outside the context and cannot be reached through its model.
+
 ## 6. JulOS Desktop
 
 Desktop is a lightweight browser client shell. It owns immediate presentation state but not authorization or authoritative infrastructure state.

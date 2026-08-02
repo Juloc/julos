@@ -384,6 +384,8 @@ A release cannot be marked stable until a clean restore test succeeds.
 
 ### 20.1 Core update
 
+Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Compose runs it as a one-shot service before Server and refuses to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit `core.__ef_migrations_history` or core tables manually.
+
 - pull versioned images, never an unpinned `latest` deployment reference
 - verify release metadata
 - create backup checkpoint

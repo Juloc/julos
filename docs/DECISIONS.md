@@ -222,3 +222,11 @@ Reason: `TimeProvider` is the platform's clock abstraction and already has a mai
 `tests/JulOS.Infrastructure.Tests` holds unit tests for control-plane adapters that need no external dependency. `tests/JulOS.Integration.Tests` remains for tests that run against a real PostgreSQL instance or another live dependency.
 
 Reason: an adapter such as the identifier generator is pure logic and must not require a database container to run. Putting it in the integration project would make the fast test set depend on infrastructure it does not need.
+
+## D026 — Persistence rows stay outside Domain
+
+**Status:** Accepted
+
+Entity Framework Core maps relational storage rows in Infrastructure rather than materializing the Domain aggregates directly. Each row exposes only storage data and a one-way `FromDomain` conversion where a Domain aggregate already exists. It contains no lifecycle rule, authorization decision or alternate state transition.
+
+Reason: some Domain types deliberately require services such as `TimeProvider` or enforce creation through named operations. Adding persistence-only constructors, mutable setters or EF annotations would weaken those invariants and make Domain depend on PostgreSQL tooling. Separate rows keep the Domain persistence-neutral while database constraints provide an independent final enforcement layer.

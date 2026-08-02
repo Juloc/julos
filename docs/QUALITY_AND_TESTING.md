@@ -75,6 +75,10 @@ Run against a real supported PostgreSQL container or isolated database:
 
 SQLite is not used as a substitute for PostgreSQL behavior.
 
+Continuous integration starts the pinned supported PostgreSQL image and sets `JULOS_TEST_POSTGRES` to its maintenance database. Each persistence test creates an isolated database, applies committed migrations and drops the database afterward. A local run without that variable reports the PostgreSQL tests as inconclusive rather than pretending they passed.
+
+`API-001` covers clean migration, database enforcement of representative domain invariants, schema ownership and append-only audit storage. Later persistence work items extend the same real-database suite for concurrency, package isolation, upgrade fixtures and backup metadata.
+
 ### 2.5 API integration tests
 
 `tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.

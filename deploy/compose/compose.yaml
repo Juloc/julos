@@ -9,6 +9,16 @@
 
 name: julos-dev
 
+x-server-image: &server-image
+  build:
+    context: ../..
+    dockerfile: src/JulOS.Server/Dockerfile
+  environment: &server-environment
+    ASPNETCORE_ENVIRONMENT: Development
+    ASPNETCORE_HTTP_PORTS: 8080
+    ConnectionStrings__CoreDatabase: >-
+      Host=postgres;Port=5432;Database=${JULOS_POSTGRES_DB:-julos};Username=${JULOS_POSTGRES_USER:-julos};Password=${JULOS_POSTGRES_PASSWORD:?Set JULOS_POSTGRES_PASSWORD in deploy/compose/.env}
+
 services:
   postgres:
     image: postgres:18.2-alpine
@@ -29,18 +39,19 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  server:
-    build:
-      context: ../..
-      dockerfile: src/JulOS.Server/Dockerfile
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_HTTP_PORTS: 8080
-      ConnectionStrings__CoreDatabase: >-
-        Host=postgres;Port=5432;Database=${JULOS_POSTGRES_DB:-julos};Username=${JULOS_POSTGRES_USER:-julos};Password=${JULOS_POSTGRES_PASSWORD:?Set JULOS_POSTGRES_PASSWORD in deploy/compose/.env}
+  migrate:
+    <<: *server-image
+    command: ["--migrate-database"]
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  server:
+    <<: *server-image
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       # Bound to the loopback interface. The development stack is not a public deployment.
       - "127.0.0.1:${JULOS_SERVER_PORT:-8080}:8080"

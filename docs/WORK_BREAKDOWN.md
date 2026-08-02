@@ -161,7 +161,7 @@ Implemented as `.github/workflows/validation.yml`, which runs `sh tools/validate
 
 Only downloaded packages are cached, never build output or `node_modules`, and the run ends with `git diff --exit-code` so a tracked file modified by validation fails the build.
 
-PostgreSQL integration tests are added by `API-001` together with the persistence they cover. There is no integration test to run yet, so no database service is configured; a service that starts and tests nothing would report a check that did not happen.
+`API-001` adds the PostgreSQL service and real persistence integration tests. The workflow still invokes only `tools/validate.sh`; the service is an execution dependency, not a second validation command list.
 
 ### FND-007 — Add version and release metadata foundation
 
@@ -378,6 +378,8 @@ Default deny. An empty assignment set grants nothing, and a narrow grant never w
 
 ### API-001 — Add PostgreSQL core persistence
 
+Status: done.
+
 Depends on: CORE-002 through CORE-008, FND-005.
 
 Deliver DbContext, mappings, first migration and migration command.
@@ -386,6 +388,12 @@ Acceptance:
 
 - empty database migrates successfully
 - constraints reflect domain invariants
+
+Implemented as `CoreDbContext` and relational storage rows in `JulOS.Infrastructure.Persistence.Core`. The context owns only the `core` schema; package schemas remain outside it. Stable identifiers are never database-generated, mutable rows map `Revision` as a concurrency token, and PostgreSQL check constraints preserve domain invariants even when data enters below the application layer. Audit events are protected by an update/delete trigger as well as their immutable domain type.
+
+The committed migration is applied only through `JulOS.Server --migrate-database`. The development Compose stack runs that command in a one-shot service and starts Server only after it succeeds, so normal startup never changes the schema.
+
+`tests/JulOS.Integration.Tests` creates isolated databases on a real PostgreSQL service and proves that an empty database migrates, invalid states are rejected and audit rows are append-only. CI supplies the service through `JULOS_TEST_POSTGRES`; SQLite is not used.
 
 ### API-002 — Add optimistic concurrency
 

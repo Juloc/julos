@@ -86,6 +86,15 @@ pwsh tools/validate.ps1
 
 Both entry points call `tools/validate.mjs`, so they run identical checks. Add `--list` to see the stages, `--stage <name>` to run one. A failed stage exits non-zero and names itself. `node tools/normalize-encoding.mjs` corrects encoding-policy violations.
 
+The core database is migrated only by the explicit migration command:
+
+```bash
+dotnet tool restore
+dotnet run --project src/JulOS.Server -- --migrate-database
+```
+
+Normal Server startup never changes the schema. The development Compose stack runs this command in its one-shot `migrate` service before starting Server.
+
 ## Run locally
 
 ```bash

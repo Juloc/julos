@@ -15,7 +15,18 @@ Set `JULOS_POSTGRES_PASSWORD` in `.env`. The stack refuses to start without it, 
 docker compose up --build
 ```
 
+The one-shot `migrate` service applies committed Entity Framework Core migrations after PostgreSQL becomes healthy. Server starts only after migration succeeds. A migration failure therefore leaves Server stopped instead of running against an unknown schema.
+
 The server answers on `http://127.0.0.1:8080`.
+
+To apply migrations outside Compose, set `ConnectionStrings__CoreDatabase` and run:
+
+```bash
+dotnet tool restore
+dotnet run --project src/JulOS.Server -- --migrate-database
+```
+
+Do not edit core tables or migration history manually.
 
 ## Health
 

@@ -24,6 +24,23 @@ jobs:
     name: Validate the repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - name: Check out the repository
@@ -50,6 +67,9 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
 
       - name: Run repository validation
         run: sh tools/validate.sh
