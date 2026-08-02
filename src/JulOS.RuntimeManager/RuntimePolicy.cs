@@ -134,7 +134,7 @@ public sealed class RuntimePolicy
 
     private static bool IsAbsoluteContainerPath(string value)
     {
-        return value.StartsWith("/", StringComparison.Ordinal)
+        return value.StartsWith('/')
             && !value.Contains("..", StringComparison.Ordinal)
             && !value.Contains('\\')
             && value.Length <= 512;
