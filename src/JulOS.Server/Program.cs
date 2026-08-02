@@ -8,6 +8,7 @@ using JulOS.Server;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
+using JulOS.Server.Profile;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -69,6 +70,7 @@ app.MapHealthChecks(
 
 app.MapJulOsLocalAuthentication();
 app.MapJulOsAuthorization();
+app.MapJulOsProfile();
 
 app.MapGet(
     "/api/v1/system/version",

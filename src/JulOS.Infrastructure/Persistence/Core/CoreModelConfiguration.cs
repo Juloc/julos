@@ -44,8 +44,9 @@ internal static class CoreModelConfiguration
         users.ToTable("users", Schema, table =>
         {
             table.HasCheckConstraint("ck_users_revision", "revision >= 1");
-            table.HasCheckConstraint("ck_users_language", "char_length(preferred_language) BETWEEN 2 AND 32");
+            table.HasCheckConstraint("ck_users_language", "preferred_language IN ('en', 'de')");
             table.HasCheckConstraint("ck_users_theme", "theme IN ('system', 'light', 'dark')");
+            table.HasCheckConstraint("ck_users_motion", "motion IN ('enabled', 'reduced')");
         });
         users.Property(user => user.Id).HasColumnName("id").ValueGeneratedNever();
         users.Property(user => user.UserName).HasColumnName("user_name").HasMaxLength(128);
@@ -66,6 +67,7 @@ internal static class CoreModelConfiguration
         users.Property(user => user.PreferredLanguage).HasColumnName("preferred_language").HasMaxLength(32).IsRequired();
         users.Property(user => user.TimeZone).HasColumnName("time_zone").HasMaxLength(128).IsRequired();
         users.Property(user => user.Theme).HasColumnName("theme").HasMaxLength(16).IsRequired();
+        users.Property(user => user.Motion).HasColumnName("motion").HasMaxLength(16).IsRequired();
         users.Property(user => user.CreatedAtUtc).HasColumnName("created_at_utc");
         users.Property(user => user.UpdatedAtUtc).HasColumnName("updated_at_utc");
         users.Property(user => user.Revision).HasColumnName("revision").IsConcurrencyToken();

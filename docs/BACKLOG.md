@@ -37,8 +37,9 @@ Status values:
 | API-002 | Optimistic concurrency | Done | Revision tokens prevent stale writes; conflicts return HTTP 409 with the current revision. |
 | API-003 | Local authentication | Done | One-time administrator setup, secure cookie sessions, lockout, rate limiting and antiforgery logout. |
 | API-004 | Role and permission authorization | Done | Explicit scoped grants drive policies; administrator role and grant management are backend enforced. |
+| API-005 | Profile and preferences API | Done | Authenticated language, time-zone, theme and motion preferences use antiforgery and optimistic concurrency. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-004` and `API-006` are done; `API-005` is next. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-006` are done; `API-007` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -50,18 +51,18 @@ Status values:
 
 ## Next issue
 
-### API-005 — Add profile and preferences API
+### API-007 — Add operation-resource framework
 
 Scope:
 
-- authenticated profile read API
-- language, timezone, theme and motion preferences
-- validated optimistic-concurrency updates
+- persisted long-running operation records
+- cancellation and progress contracts
+- stable operation status and event representation
 
 Acceptance:
 
-- English and German are valid
-- invalid timezone and locale fail validation
+- operation status survives reconnect
+- cancellation reaches the owning worker or Agent
 
 ## Specification status
 

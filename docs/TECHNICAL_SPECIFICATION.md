@@ -448,6 +448,8 @@ Rules:
 - package manifests declare localization bundles
 - no user-facing string is hard-coded in TypeScript or backend response construction
 - date, time, number and storage formatting use the selected locale
+- profile preferences accept only `en` or `de`, a resolvable IANA time zone, `system`/`light`/`dark` theme and `enabled`/`reduced` motion
+- preference updates use the current user revision and never silently overwrite a concurrent change
 
 ## 16. Performance rules
 

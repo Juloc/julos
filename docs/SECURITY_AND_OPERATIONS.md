@@ -99,6 +99,7 @@ Rules:
 - role names never bypass permission checks; the administrator role receives explicit assignments
 - system roles cannot be renamed or deleted, and the last administrator cannot be removed
 - role, membership and grant mutations require both authorization and antiforgery validation
+- profile preference updates are limited to the authenticated account, require antiforgery validation and use optimistic concurrency
 - package workers receive only the user and scope claims required for one operation
 - read and control permissions are separate
 - destructive actions use narrower permissions where necessary

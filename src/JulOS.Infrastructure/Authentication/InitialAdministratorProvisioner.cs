@@ -59,91 +59,96 @@ public sealed class InitialAdministratorProvisioner
     {
         ValidateRequest(userName, displayName, password);
 
-        await using var transaction = await this.context.Database
-            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
-            .ConfigureAwait(false);
-
-        var setup = await this.context.AuthenticationSetup
-            .FromSqlRaw(
-                """
-                SELECT id, administrator_user_id, completed_at_utc
-                FROM core.authentication_setup
-                WHERE id = 1
-                FOR UPDATE
-                """)
-            .SingleAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (setup.CompletedAtUtc is not null)
+        var executionStrategy = this.context.Database.CreateExecutionStrategy();
+        return await executionStrategy.ExecuteAsync(async () =>
         {
-            throw new AuthenticationFailureException(
-                AuthenticationFailureReason.SetupAlreadyCompleted);
-        }
+            await using var transaction = await this.context.Database
+                .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+                .ConfigureAwait(false);
 
-        var administratorRole = await this.roleManager
-            .FindByNameAsync(LocalIdentityNames.AdministratorRole)
-            .ConfigureAwait(false);
+            var setup = await this.context.AuthenticationSetup
+                .FromSqlRaw(
+                    """
+                    SELECT id, administrator_user_id, completed_at_utc
+                    FROM core.authentication_setup
+                    WHERE id = 1
+                    FOR UPDATE
+                    """)
+                .SingleAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-        if (administratorRole is null)
-        {
-            administratorRole = new LocalRole
+            if (setup.CompletedAtUtc is not null)
             {
-                Id = Guid.CreateVersion7(this.timeProvider.GetUtcNow()),
-                Name = LocalIdentityNames.AdministratorRole,
-                Description = "Full control of the JulOS installation.",
-                IsSystemRole = true,
+                throw new AuthenticationFailureException(
+                    AuthenticationFailureReason.SetupAlreadyCompleted);
+            }
+
+            var administratorRole = await this.roleManager
+                .FindByNameAsync(LocalIdentityNames.AdministratorRole)
+                .ConfigureAwait(false);
+
+            if (administratorRole is null)
+            {
+                administratorRole = new LocalRole
+                {
+                    Id = Guid.CreateVersion7(this.timeProvider.GetUtcNow()),
+                    Name = LocalIdentityNames.AdministratorRole,
+                    Description = "Full control of the JulOS installation.",
+                    IsSystemRole = true,
+                    Revision = 1,
+                };
+
+                EnsureIdentitySucceeded(
+                    await this.roleManager.CreateAsync(administratorRole).ConfigureAwait(false),
+                    "The initial administrator role could not be created.");
+            }
+
+            var now = this.timeProvider.GetUtcNow();
+            var user = new LocalUser
+            {
+                Id = Guid.CreateVersion7(now),
+                UserName = userName,
+                DisplayName = displayName,
+                PreferredLanguage = "en",
+                TimeZone = "UTC",
+                Theme = "system",
+                Motion = "enabled",
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now,
                 Revision = 1,
             };
 
+            var createResult = await this.userManager
+                .CreateAsync(user, password)
+                .ConfigureAwait(false);
+
+            if (!createResult.Succeeded)
+            {
+                throw new AuthenticationFailureException(
+                    AuthenticationFailureReason.InvalidSetupRequest);
+            }
+
             EnsureIdentitySucceeded(
-                await this.roleManager.CreateAsync(administratorRole).ConfigureAwait(false),
-                "The initial administrator role could not be created.");
-        }
+                await this.userManager
+                    .AddToRoleAsync(user, LocalIdentityNames.AdministratorRole)
+                    .ConfigureAwait(false),
+                "The initial administrator role could not be assigned.");
 
-        var now = this.timeProvider.GetUtcNow();
-        var user = new LocalUser
-        {
-            Id = Guid.CreateVersion7(now),
-            UserName = userName,
-            DisplayName = displayName,
-            PreferredLanguage = "en",
-            TimeZone = "UTC",
-            Theme = "system",
-            CreatedAtUtc = now,
-            UpdatedAtUtc = now,
-            Revision = 1,
-        };
+            await SystemAuthorizationGrantSeeder.EnsureAdministratorPermissionsAsync(
+                this.context,
+                administratorRole.Id,
+                user.Id,
+                this.timeProvider,
+                cancellationToken).ConfigureAwait(false);
 
-        var createResult = await this.userManager
-            .CreateAsync(user, password)
-            .ConfigureAwait(false);
+            setup.AdministratorUserId = user.Id;
+            setup.CompletedAtUtc = now;
 
-        if (!createResult.Succeeded)
-        {
-            throw new AuthenticationFailureException(
-                AuthenticationFailureReason.InvalidSetupRequest);
-        }
+            await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        EnsureIdentitySucceeded(
-            await this.userManager
-                .AddToRoleAsync(user, LocalIdentityNames.AdministratorRole)
-                .ConfigureAwait(false),
-            "The initial administrator role could not be assigned.");
-
-        await SystemAuthorizationGrantSeeder.EnsureAdministratorPermissionsAsync(
-            this.context,
-            administratorRole.Id,
-            user.Id,
-            this.timeProvider,
-            cancellationToken).ConfigureAwait(false);
-
-        setup.AdministratorUserId = user.Id;
-        setup.CompletedAtUtc = now;
-
-        await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return user;
+            return user;
+        }).ConfigureAwait(false);
     }
 
     private static void ValidateRequest(

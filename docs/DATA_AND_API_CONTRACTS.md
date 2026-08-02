@@ -30,6 +30,7 @@ DisplayName
 PreferredLanguage
 TimeZone
 Theme
+Motion
 CreatedAtUtc
 UpdatedAtUtc
 Revision
@@ -480,7 +481,11 @@ PUT  /api/v1/profile/preferences
 
 `GET /api/v1/auth/antiforgery` requires a valid session and returns the request-header name and token. `POST /api/v1/auth/logout` requires that token and ends the session. Raw authentication tokens and password hashes never appear in an API response.
 
-Local-account login remains available until a later accepted decision explicitly introduces an OIDC-only mode. Profile persistence and mutation belong to `API-005`.
+Local-account login remains available until a later accepted decision explicitly introduces an OIDC-only mode.
+
+`GET /api/v1/profile` returns the authenticated account identifier, username, display name, supported language, IANA time-zone identifier, theme, motion mode and current revision. `PUT /api/v1/profile/preferences` changes only the current account and requires the session antiforgery token. The request carries `preferredLanguage`, `timeZone`, `theme`, `motion` and the caller's `revision`.
+
+Accepted language values are `en` and `de`. Themes are `system`, `light` and `dark`; motion is `enabled` or `reduced`. The time-zone identifier must resolve through the server's time-zone database and is persisted unchanged. Unsupported languages, unknown time zones, themes or motion values return HTTP 400 with `profile.preferences_invalid`. Stale revisions return the common HTTP 409 concurrency problem and `currentRevision`; the newer stored preferences remain authoritative.
 
 ### 5.2 Authorization administration
 

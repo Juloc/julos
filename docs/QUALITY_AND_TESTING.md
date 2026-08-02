@@ -392,6 +392,14 @@ Reviewers verify:
 - Markdown updates
 - backlog update
 
+Profile and preference integration coverage verifies:
+
+- authenticated reads return persisted defaults and revisions
+- English and German, valid IANA time zones and all documented theme and motion values round-trip
+- unsupported locale and time-zone values return the stable validation code
+- missing antiforgery tokens fail before mutation
+- stale revisions return HTTP 409 with the authoritative revision and do not overwrite newer preferences
+
 ## 15. Definition of done
 
 A work item is complete only when:

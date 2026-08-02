@@ -17,6 +17,9 @@ public sealed class LocalUser : IdentityUser<Guid>
     /// <summary>Gets or sets the requested shell theme.</summary>
     public string Theme { get; set; } = "system";
 
+    /// <summary>Gets or sets the requested shell motion mode.</summary>
+    public string Motion { get; set; } = "enabled";
+
     /// <summary>Gets or sets when the account was created.</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 

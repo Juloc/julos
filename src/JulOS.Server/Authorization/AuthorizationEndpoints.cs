@@ -1,14 +1,13 @@
 ﻿using System.Security.Claims;
 
-using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
 using JulOS.Contracts.Authorization;
 using JulOS.Domain;
 using JulOS.Domain.Packages;
 using JulOS.Domain.Permissions;
+using JulOS.Server.Authentication;
 
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace JulOS.Server.Authorization;
 
@@ -23,37 +22,35 @@ internal static class AuthorizationEndpoints
             .MapGroup("/api/v1/authorization")
             .WithTags("Authorization");
 
-        group.AddEndpointFilter(ValidateAntiforgeryAsync);
-
         group.MapGet("/roles", ListRolesAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationRead);
         group.MapPost("/roles", CreateRoleAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
         group.MapPut("/roles/{roleId:guid}", UpdateRoleAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
         group.MapDelete("/roles/{roleId:guid}", DeleteRoleAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
 
         group.MapGet("/roles/{roleId:guid}/members", ListRoleMembersAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationRead);
         group.MapPost("/roles/{roleId:guid}/members/{userId:guid}", AddRoleMemberAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
         group.MapDelete("/roles/{roleId:guid}/members/{userId:guid}", RemoveRoleMemberAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
 
         group.MapGet("/assignments", ListAssignmentsAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationRead);
         group.MapPost("/assignments", GrantPermissionAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
         group.MapDelete("/assignments/{assignmentId:guid}", RevokePermissionAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.AuthorizationManage)
-            .WithMetadata(RequiredAntiforgeryMetadata.Instance);
+            .RequireJulOsAntiforgery();
 
         return endpoints;
     }
@@ -67,10 +64,13 @@ internal static class AuthorizationEndpoints
     }
 
     private static async Task<IResult> CreateRoleAsync(
+        HttpContext context,
         CreateAuthorizationRoleRequest request,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(request);
         var role = await administration
             .CreateRoleAsync(request.Name, request.Description, cancellationToken)
@@ -79,11 +79,14 @@ internal static class AuthorizationEndpoints
     }
 
     private static async Task<IResult> UpdateRoleAsync(
+        HttpContext context,
         Guid roleId,
         UpdateAuthorizationRoleRequest request,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(request);
         var role = await administration
             .UpdateRoleAsync(
@@ -97,11 +100,14 @@ internal static class AuthorizationEndpoints
     }
 
     private static async Task<IResult> DeleteRoleAsync(
+        HttpContext context,
         Guid roleId,
         int revision,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.DeleteRoleAsync(roleId, revision, cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
@@ -121,21 +127,27 @@ internal static class AuthorizationEndpoints
     }
 
     private static async Task<IResult> AddRoleMemberAsync(
+        HttpContext context,
         Guid roleId,
         Guid userId,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.AddRoleMemberAsync(roleId, userId, cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
 
     private static async Task<IResult> RemoveRoleMemberAsync(
+        HttpContext context,
         Guid roleId,
         Guid userId,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.RemoveRoleMemberAsync(roleId, userId, cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
@@ -153,9 +165,11 @@ internal static class AuthorizationEndpoints
     private static async Task<IResult> GrantPermissionAsync(
         HttpContext context,
         GrantPermissionRequest request,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(request);
 
         try
@@ -181,10 +195,13 @@ internal static class AuthorizationEndpoints
     }
 
     private static async Task<IResult> RevokePermissionAsync(
+        HttpContext context,
         Guid assignmentId,
+        IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
         CancellationToken cancellationToken)
     {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         try
         {
             await administration.RevokePermissionAsync(
@@ -198,41 +215,6 @@ internal static class AuthorizationEndpoints
                 AuthorizationAdministrationFailureReason.InvalidAssignment,
                 exception);
         }
-    }
-
-    private static async ValueTask<object?> ValidateAntiforgeryAsync(
-        EndpointFilterInvocationContext context,
-        EndpointFilterDelegate next)
-    {
-        if (!HttpMethods.IsGet(context.HttpContext.Request.Method))
-        {
-            var antiforgery = context.HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
-            try
-            {
-                await antiforgery.ValidateRequestAsync(context.HttpContext).ConfigureAwait(false);
-            }
-            catch (AntiforgeryValidationException exception)
-            {
-                throw new AuthenticationFailureException(
-                    AuthenticationFailureReason.AntiforgeryInvalid,
-                    exception);
-            }
-            catch (InvalidOperationException exception)
-            {
-                throw new AuthenticationFailureException(
-                    AuthenticationFailureReason.AntiforgeryInvalid,
-                    exception);
-            }
-        }
-
-        return await next(context).ConfigureAwait(false);
-    }
-
-    private sealed class RequiredAntiforgeryMetadata : IAntiforgeryMetadata
-    {
-        internal static RequiredAntiforgeryMetadata Instance { get; } = new();
-
-        public bool RequiresValidation => true;
     }
 
     private static AuthorizationRoleResponse ToResponse(AuthorizationRole role) => new(

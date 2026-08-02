@@ -36,7 +36,8 @@ internal static class LocalAuthenticationEndpoints
             .RequireAuthorization();
 
         group.MapPost("/logout", LogoutAsync)
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .RequireJulOsAntiforgery();
 
         return endpoints;
     }
@@ -158,16 +159,7 @@ internal static class LocalAuthenticationEndpoints
         IAntiforgery antiforgery,
         SignInManager<LocalUser> signInManager)
     {
-        try
-        {
-            await antiforgery.ValidateRequestAsync(context).ConfigureAwait(false);
-        }
-        catch (AntiforgeryValidationException exception)
-        {
-            throw new AuthenticationFailureException(
-                AuthenticationFailureReason.AntiforgeryInvalid,
-                exception);
-        }
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
 
         await signInManager.SignOutAsync().ConfigureAwait(false);
         return TypedResults.NoContent();

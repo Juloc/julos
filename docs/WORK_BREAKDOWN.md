@@ -455,6 +455,8 @@ Migration `20260802131339_AddRoleAuthorization` adds role descriptions, makes gl
 
 ### API-005 — Add profile and preferences API
 
+Status: done.
+
 Depends on: API-003.
 
 Deliver language, timezone, theme and motion preferences.
@@ -463,6 +465,10 @@ Acceptance:
 
 - English and German are valid
 - invalid timezone and locale fail validation
+
+Implemented through versioned Profile contracts, an Application profile port, the Core-backed Infrastructure service and authenticated Server endpoints. The current user can read only their own profile and change only the supported preference fields. Mutations require the common antiforgery contract and the caller's current revision.
+
+Migration `AddProfilePreferences` adds the persisted motion mode and enforces the supported language and motion values in PostgreSQL. Integration tests cover defaults, valid German and `Europe/Berlin` updates, invalid locale and time-zone rejection, antiforgery, endpoint metadata and stale-revision conflicts.
 
 ### API-006 — Add common Problem Details and correlation IDs
 
