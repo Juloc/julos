@@ -25,7 +25,7 @@ public sealed class RuntimePolicy
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
         TimeSpan.FromMilliseconds(100));
 
-    private readonly IReadOnlySet<string> allowedNetworks;
+    private readonly HashSet<string> allowedNetworks;
 
     /// <summary>Creates a policy with the exact Docker networks packages may use.</summary>
     /// <param name="allowedNetworks">Allowlisted non-host networks.</param>
@@ -114,7 +114,7 @@ public sealed class RuntimePolicy
         foreach (var pair in request.Environment)
         {
             if (!IsEnvironmentName(pair.Key)
-                || pair.Value.IndexOf('\0') >= 0
+                || pair.Value.Contains('\0')
                 || LooksLikeSecretName(pair.Key))
             {
                 throw Failure(
@@ -134,9 +134,9 @@ public sealed class RuntimePolicy
 
     private static bool IsAbsoluteContainerPath(string value)
     {
-        return value.StartsWith('/', StringComparison.Ordinal)
+        return value.StartsWith("/", StringComparison.Ordinal)
             && !value.Contains("..", StringComparison.Ordinal)
-            && value.IndexOf('\\') < 0
+            && !value.Contains('\\')
             && value.Length <= 512;
     }
 
