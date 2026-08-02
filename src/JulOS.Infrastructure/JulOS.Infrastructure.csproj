@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JulOS.Application\JulOS.Application.csproj" />
+    <ProjectReference Include="..\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>
