@@ -13,12 +13,18 @@ public sealed class CapabilityBroker : ICapabilityClient
     private readonly TimeProvider timeProvider;
     private readonly object sync = new();
 
+    /// <summary>Creates a capability broker with audit and deadline dependencies.</summary>
+    /// <param name="audit">Append-only audit service.</param>
+    /// <param name="timeProvider">Authoritative clock.</param>
     public CapabilityBroker(IAuditService audit, TimeProvider timeProvider)
     {
-        this.audit = audit;
-        this.timeProvider = timeProvider;
+        this.audit = audit ?? throw new ArgumentNullException(nameof(audit));
+        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
+    /// <summary>Replaces the capabilities one package is allowed to invoke.</summary>
+    /// <param name="packageId">Caller package identity.</param>
+    /// <param name="capabilityNames">Explicitly granted capability names.</param>
     public void SetPackageGrants(string packageId, IEnumerable<string> capabilityNames)
     {
         ValidatePackageId(packageId);
@@ -29,6 +35,9 @@ public sealed class CapabilityBroker : ICapabilityClient
         }
     }
 
+    /// <summary>Registers or replaces one provider owned by the calling package.</summary>
+    /// <param name="actorPackageId">Package performing the registration.</param>
+    /// <param name="provider">Capability provider implementation.</param>
     public void Register(string actorPackageId, ICapabilityProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -58,6 +67,8 @@ public sealed class CapabilityBroker : ICapabilityClient
         }
     }
 
+    /// <summary>Removes all providers and invocation grants owned by one package.</summary>
+    /// <param name="packageId">Package identity.</param>
     public void UnregisterPackage(string packageId)
     {
         ValidatePackageId(packageId);
@@ -74,6 +85,8 @@ public sealed class CapabilityBroker : ICapabilityClient
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>The generic SDK interface cannot identify a package caller, so this overload always rejects the call.</remarks>
     public Task<CapabilityResponse> InvokeAsync(
         CapabilityRequest request,
         CancellationToken cancellationToken = default) =>
@@ -81,6 +94,11 @@ public sealed class CapabilityBroker : ICapabilityClient
             "capability.caller_required",
             "Capability invocation requires an explicit caller package identity.");
 
+    /// <summary>Invokes the highest-priority healthy compatible provider for an authorized package caller.</summary>
+    /// <param name="callerPackageId">Package invoking the capability.</param>
+    /// <param name="request">Versioned capability request with absolute deadline.</param>
+    /// <param name="cancellationToken">Caller cancellation.</param>
+    /// <returns>The provider response.</returns>
     public async Task<CapabilityResponse> InvokeAsync(
         string callerPackageId,
         CapabilityRequest request,
@@ -190,13 +208,18 @@ public sealed class CapabilityBroker : ICapabilityClient
     private static string Identity(string name, string version) => $"{name}\n{version}";
 }
 
+/// <summary>Stable caller-safe capability routing or authorization failure.</summary>
 public sealed class CapabilityBrokerException : Exception
 {
+    /// <summary>Creates a capability broker failure.</summary>
+    /// <param name="code">Stable machine-readable failure code.</param>
+    /// <param name="message">Caller-safe explanation.</param>
     public CapabilityBrokerException(string code, string message)
         : base(message)
     {
         this.Code = code;
     }
 
+    /// <summary>Gets the stable machine-readable failure code.</summary>
     public string Code { get; }
 }
