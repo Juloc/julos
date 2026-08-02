@@ -1,10 +1,12 @@
 ﻿using JulOS.Application.Auditing;
 using JulOS.Application.Authorization;
+using JulOS.Application.Layouts;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
 using JulOS.Infrastructure.Auditing;
 using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.Authorization;
+using JulOS.Infrastructure.Layouts;
 using JulOS.Infrastructure.Profile;
 using JulOS.Infrastructure.Operations;
 
@@ -29,6 +31,7 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IAuditService, PostgresAuditService>();
         services.AddScoped<IPermissionAssignmentReader, EfPermissionAssignmentReader>();
         services.AddScoped<IAuthorizationAdministration, IdentityAuthorizationAdministration>();
+        services.AddScoped<IDesktopLayoutService, PostgresDesktopLayoutService>();
         services.AddScoped<IProfileService, EfProfileService>();
         services.AddScoped<IOperationService, PostgresOperationService>();
 
