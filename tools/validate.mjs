@@ -10,6 +10,7 @@ import { join } from 'node:path';
 
 import { findUnpinnedExtensions, findViolations } from './lib/encoding-policy.mjs';
 import { findBrokenLinks } from './lib/markdown-links.mjs';
+import { readAndValidatePackageManifest } from './lib/package-manifest.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
 
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
@@ -194,13 +195,34 @@ const stages = [
     name: 'package-manifests',
     title: 'Validate package manifests',
     async run() {
-      const manifests = await findFiles((path) => path.endsWith('julos-package.json'));
+      const validFixture = join(repositoryRoot, 'tests', 'fixtures', 'package-manifests', 'valid.json');
+      const unsupportedFixture = join(
+        repositoryRoot,
+        'tests',
+        'fixtures',
+        'package-manifests',
+        'unsupported-schema.json',
+      );
+      const validErrors = await readAndValidatePackageManifest(validFixture);
+      if (validErrors.length > 0) {
+        return failed(`the valid manifest fixture failed:\n  ${validErrors.join('\n  ')}`);
+      }
 
-      return manifests.length === 0
-        ? skipped('no package manifest exists yet; the schema is defined by PKG-001')
-        : failed(
-            `${manifests.length} manifest(s) found but no validator exists yet. Implement this stage with PKG-001:\n  ${manifests.join('\n  ')}`,
-          );
+      const unsupportedErrors = await readAndValidatePackageManifest(unsupportedFixture);
+      if (!unsupportedErrors.some((error) => error.includes('unsupported schemaVersion'))) {
+        return failed('the unsupported schema fixture was not rejected with a clear schema-version error');
+      }
+
+      const manifests = await findFiles((path) => path.endsWith('julos-package.json'));
+      const manifestErrors = [];
+      for (const manifest of manifests) {
+        const errors = await readAndValidatePackageManifest(join(repositoryRoot, manifest));
+        manifestErrors.push(...errors);
+      }
+
+      return manifestErrors.length === 0
+        ? passed(`${manifests.length} package manifest(s) and compatibility fixtures validate`)
+        : failed(`${manifestErrors.length} package manifest error(s):\n  ${manifestErrors.join('\n  ')}`);
     },
   },
   {
@@ -224,9 +246,9 @@ const stages = [
         ['compose', '--file', 'deploy/compose/compose.yaml', 'config', '--quiet'],
         repositoryRoot,
         {
-  JULOS_POSTGRES_PASSWORD: 'validation-placeholder',
-  JULOS_SECRET_KEY_RING_PATH: './secret-keys',
-},
+          JULOS_POSTGRES_PASSWORD: 'validation-placeholder',
+          JULOS_SECRET_KEY_RING_PATH: './secret-keys',
+        },
       );
 
       if (composeCheck.status === 'failed') {
