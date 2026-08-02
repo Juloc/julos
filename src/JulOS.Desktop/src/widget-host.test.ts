@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { WidgetHostStore, WidgetOwnershipError, widgetObservationLabel } from './widget-host.js';

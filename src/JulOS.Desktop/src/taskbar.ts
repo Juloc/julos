@@ -1,4 +1,4 @@
-import {
+﻿import {
   WindowStore,
   type DesktopWindowSnapshot,
   type OpenWindowRequest,

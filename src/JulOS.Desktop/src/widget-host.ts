@@ -1,4 +1,4 @@
-export type WidgetSize = 'small' | 'medium' | 'wide' | 'large';
+﻿export type WidgetSize = 'small' | 'medium' | 'wide' | 'large';
 export type WidgetStatus = 'loading' | 'live' | 'stale' | 'offline' | 'unauthorized' | 'error';
 
 export interface WidgetRegistration {

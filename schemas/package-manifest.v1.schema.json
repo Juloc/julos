@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://os.juloc.de/schemas/package-manifest.v1.schema.json",
   "title": "JulOS Package Manifest v1",

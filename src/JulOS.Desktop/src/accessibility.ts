@@ -1,4 +1,4 @@
-export interface KeyboardCommand {
+﻿export interface KeyboardCommand {
   readonly id: string;
   readonly key: string;
   readonly alt?: boolean;

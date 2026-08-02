@@ -1,4 +1,4 @@
-export type ProblemSeverity = 'information' | 'warning' | 'error' | 'critical';
+﻿export type ProblemSeverity = 'information' | 'warning' | 'error' | 'critical';
 export type ProblemState = 'active' | 'acknowledged' | 'resolved';
 
 export interface ProblemObservation {

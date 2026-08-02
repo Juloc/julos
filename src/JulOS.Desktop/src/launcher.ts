@@ -1,4 +1,4 @@
-export interface LauncherEntry {
+﻿export interface LauncherEntry {
   readonly id: string;
   readonly kind: 'application' | 'target' | 'command';
   readonly title: string;
