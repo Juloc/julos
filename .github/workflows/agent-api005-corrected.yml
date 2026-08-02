@@ -86,9 +86,34 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('tests/JulOS.Integration.Tests/Profile/ProfileTests.cs')
-          text = path.read_text(encoding='utf-8-sig').replace('revision:', 'Revision:')
-          path.write_text('\ufeff' + text, encoding='utf-8')
+
+          tests_path = Path('tests/JulOS.Integration.Tests/Profile/ProfileTests.cs')
+          tests = tests_path.read_text(encoding='utf-8-sig').replace('revision:', 'Revision:')
+          tests_path.write_text('\ufeff' + tests, encoding='utf-8')
+
+          provisioner_path = Path(
+              'src/JulOS.Infrastructure/Authentication/InitialAdministratorProvisioner.cs')
+          provisioner = provisioner_path.read_text(encoding='utf-8-sig')
+          start_marker = '        ValidateRequest(userName, displayName, password);\n\n'
+          end_marker = '\n    private static void ValidateRequest('
+          start = provisioner.index(start_marker) + len(start_marker)
+          end = provisioner.index(end_marker, start)
+          transaction_block = provisioner[start:end]
+          if not transaction_block.endswith('    }\n'):
+              raise SystemExit('Initial administrator transaction block was not found.')
+          body = transaction_block[:-6]
+          indented = ''.join(
+              ('    ' + line if line.strip() else line)
+              for line in body.splitlines(keepends=True))
+          replacement = (
+              '        var executionStrategy = this.context.Database.CreateExecutionStrategy();\n'
+              '        return await executionStrategy.ExecuteAsync(async () =>\n'
+              '        {\n'
+              + indented
+              + '        }).ConfigureAwait(false);\n'
+              '    }\n')
+          provisioner = provisioner[:start] + replacement + provisioner[end:]
+          provisioner_path.write_text('\ufeff' + provisioner, encoding='utf-8')
           PY
 
           rm -rf .agent
@@ -125,25 +150,6 @@ jobs:
           path.write_text('\ufeff' + text, encoding='utf-8')
           PY
           node tools/normalize-encoding.mjs
-          sed -n '1,220p' "$migration"
-
-      - name: Diagnose integration failures
-        shell: bash
-        run: |
-          set -o pipefail
-          dotnet build JulOS.slnx --no-restore
-          if dotnet test tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj \
-              --no-build \
-              --logger 'console;verbosity=detailed' \
-              > /tmp/integration-test.log 2>&1; then
-            cat /tmp/integration-test.log
-          else
-            echo '--- setup-related exception context ---'
-            grep -n -B 40 -A 180 -E 'InitialSetupCreatesAdministratorAndProtectsTheApi|Unhandled exception|PostgresException|DbUpdateException|InternalServerError|column .* does not exist|violates check constraint' /tmp/integration-test.log | tail -n 500 || true
-            echo '--- integration test summary ---'
-            tail -n 120 /tmp/integration-test.log
-            exit 1
-          fi
 
       - name: Run full repository validation
         run: sh tools/validate.sh
