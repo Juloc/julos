@@ -14,6 +14,11 @@ public sealed class RuntimePolicy
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
         TimeSpan.FromMilliseconds(100));
 
+    private static readonly Regex VolumeNamePattern = new(
+        "^[a-z0-9][a-z0-9_.-]{0,254}$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        TimeSpan.FromMilliseconds(100));
+
     private static readonly Regex ImageDigestPattern = new(
         "^[^@\\s]+@sha256:[a-f0-9]{64}$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
@@ -84,7 +89,7 @@ public sealed class RuntimePolicy
         foreach (var volume in request.Volumes)
         {
             var requiredPrefix = $"julos-{request.PackageId.Replace('.', '-')}-";
-            if (!RuntimeIdentifierPattern.IsMatch(volume.Name)
+            if (!VolumeNamePattern.IsMatch(volume.Name)
                 || !volume.Name.StartsWith(requiredPrefix, StringComparison.Ordinal)
                 || !volumeNames.Add(volume.Name))
             {
@@ -103,11 +108,13 @@ public sealed class RuntimePolicy
 
         foreach (var pair in request.Environment)
         {
-            if (!IsEnvironmentName(pair.Key) || pair.Value.IndexOf('\0', StringComparison.Ordinal) >= 0)
+            if (!IsEnvironmentName(pair.Key)
+                || pair.Value.IndexOf('\0') >= 0
+                || LooksLikeSecretName(pair.Key))
             {
                 throw Failure(
                     "runtime.environment.invalid",
-                    "Runtime environment entries contain an invalid name or value.");
+                    "Runtime environment entries contain an invalid name, value or secret-like field.");
             }
         }
     }
@@ -122,7 +129,7 @@ public sealed class RuntimePolicy
     {
         return value.StartsWith('/', StringComparison.Ordinal)
             && !value.Contains("..", StringComparison.Ordinal)
-            && !value.Contains('\\', StringComparison.Ordinal)
+            && value.IndexOf('\\') < 0
             && value.Length <= 512;
     }
 
@@ -131,6 +138,14 @@ public sealed class RuntimePolicy
         return value.Length is > 0 and <= 128
             && (char.IsLetter(value[0]) || value[0] == '_')
             && value.All(character => char.IsLetterOrDigit(character) || character == '_');
+    }
+
+    private static bool LooksLikeSecretName(string value)
+    {
+        return value.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase);
     }
 
     private static RuntimeManagerException Failure(string code, string message) => new(code, message);
