@@ -34,15 +34,26 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f .agent/api004-code/part-00 ]; then
-            echo "Patch already applied."
+            echo "Code already applied."
             exit 0
           fi
+
           tr -d '[:space:]' < .agent/api004-code/part-00 \
             | base64 --decode | gzip -dc > /tmp/api004-code.patch
           echo "28825509d059cefc6b68ed09392a010925a16467ba8e405f3ce4b61b38d03eb0  /tmp/api004-code.patch" \
             | sha256sum --check
           git apply --check /tmp/api004-code.patch
           git apply /tmp/api004-code.patch
+
+          echo "d852837479e2e67632c596161fd3b9cdf9d4156d2745e670795ea8de711f5241  .agent/api004-new/part-00" | sha256sum --check
+          echo "066c1d5cc5b95240367876ac72929520ba0baaff78ec77e3a06789c6e5aa52bb  .agent/api004-new/part-01" | sha256sum --check
+          echo "b93c33e45dde518bce93b1d8c7cbd6594fe9e959a7eee070b9307ec4920b08d4  .agent/api004-new/part-02" | sha256sum --check
+          echo "935dbbf03a07f8a4ed1aa1d00a432ffffbcc0153a789b9e48ed2a975f929ac8b  .agent/api004-new/part-03" | sha256sum --check
+          cat .agent/api004-new/part-* | base64 --decode > /tmp/api004-new-files.tar.gz
+          echo "2d8abf5facde089a8300eba611b143060c61770d2916c41129ed1f617c69ac41  /tmp/api004-new-files.tar.gz" \
+            | sha256sum --check
+          tar -xzf /tmp/api004-new-files.tar.gz -C .
+
           rm -rf .agent
           node tools/normalize-encoding.mjs
           dotnet restore JulOS.slnx
