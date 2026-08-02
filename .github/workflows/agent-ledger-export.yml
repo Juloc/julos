@@ -1,0 +1,130 @@
+name: Agent ledger and source export
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-export:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the working branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Complete API-002 documentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8-sig")
+
+          def write(path: str, content: str) -> None:
+              Path(path).write_text("\ufeff" + content, encoding="utf-8", newline="\n")
+
+          backlog_path = "docs/BACKLOG.md"
+          backlog = read(backlog_path)
+          backlog = backlog.replace(
+              "| API-001 | PostgreSQL core persistence | Done | Core tables, constraints, migration command and real PostgreSQL integration tests. |\n| API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |\n| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` and `API-006` are done; `API-002` is next. |",
+              "| API-001 | PostgreSQL core persistence | Done | Core tables, constraints, migration command and real PostgreSQL integration tests. |\n| API-002 | Optimistic concurrency | Done | Revision tokens prevent stale writes; conflicts return HTTP 409 with the current revision. |\n| API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |\n| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001`, `API-002` and `API-006` are done; `API-003` is next. |")
+          old_next = """### API-002 — Add optimistic concurrency
+
+Scope:
+
+- revision handling for layouts, settings, packages and connections
+- conflict responses carrying the current revision
+- integration tests proving stale writes cannot overwrite newer state
+
+Acceptance:
+
+- stale update returns conflict with current revision
+- silent last-write-wins does not occur"""
+          new_next = """### API-003 — Add local authentication
+
+Scope:
+
+- forced initial administrator setup
+- local login and logout with secure cookies
+- account lockout, configurable session timeout and login rate limiting
+
+Acceptance:
+
+- desktop and APIs reject unauthenticated users
+- login rate limiting is tested"""
+          if old_next not in backlog:
+              raise SystemExit("BACKLOG next-issue block did not match")
+          write(backlog_path, backlog.replace(old_next, new_next))
+
+          breakdown_path = "docs/WORK_BREAKDOWN.md"
+          breakdown = read(breakdown_path)
+          old_breakdown = """### API-002 — Add optimistic concurrency
+
+Depends on: API-001.
+
+Deliver revision handling for layouts, settings, packages and connections.
+
+Acceptance:
+
+- stale update returns conflict with current revision
+- silent last-write-wins does not occur"""
+          new_breakdown = """### API-002 — Add optimistic concurrency
+
+Status: done.
+
+Depends on: API-001.
+
+Deliver revision handling for layouts, settings, packages and connections.
+
+Acceptance:
+
+- stale update returns conflict with current revision
+- silent last-write-wins does not occur
+
+Implemented by mapping every currently persisted mutable row revision as an Entity Framework Core concurrency token. `CoreDbContext` translates provider conflicts into the transport-neutral `ConcurrencyConflictException`, reads the authoritative stored revision and never retries or overwrites automatically.
+
+The Server maps that exception through the existing API-006 error pipeline to HTTP 409 with `request.concurrency_conflict` and the `currentRevision` Problem Details extension. Real PostgreSQL integration tests prove that a stale package write fails, the newer row remains unchanged and the public error contract contains the current revision. Layout, window, widget, session, Agent and problem rows use the same model rule; settings receive it when API-005 introduces their persistence."""
+          if old_breakdown not in breakdown:
+              raise SystemExit("WORK_BREAKDOWN API-002 block did not match")
+          write(breakdown_path, breakdown.replace(old_breakdown, new_breakdown))
+
+          contracts_path = "docs/DATA_AND_API_CONTRACTS.md"
+          contracts = read(contracts_path)
+          anchor = "All these tables live in the `core` schema. The Entity Framework migration history is also schema-qualified. Package data remains in package-owned schemas introduced by `PKG-004`; no package table is mapped by `CoreDbContext`."
+          addition = anchor + "\n\nEvery currently persisted mutable row maps its numeric revision as a database concurrency token. A stale mutation is rejected rather than retried or merged implicitly. The HTTP representation is status 409 with code `request.concurrency_conflict` and `currentRevision` when the row still exists; a client refreshes authoritative state before deciding whether to reapply its intent."
+          if anchor not in contracts:
+              raise SystemExit("DATA_AND_API_CONTRACTS anchor did not match")
+          write(contracts_path, contracts.replace(anchor, addition, 1))
+
+          quality_path = "docs/QUALITY_AND_TESTING.md"
+          quality = read(quality_path)
+          quality_anchor = "`API-001` covers clean migration, database enforcement of representative domain invariants, schema ownership and append-only audit storage. Later persistence work items extend the same real-database suite for concurrency, package isolation, upgrade fixtures and backup metadata."
+          quality_addition = quality_anchor + "\n\n`API-002` adds a real two-writer PostgreSQL test that proves the second stale save fails and the first committed revision remains authoritative. A Server integration test separately verifies the HTTP 409 code and `currentRevision` extension, so storage and transport behavior cannot silently diverge."
+          if quality_anchor not in quality:
+              raise SystemExit("QUALITY_AND_TESTING anchor did not match")
+          write(quality_path, quality.replace(quality_anchor, quality_addition, 1))
+
+      - name: Commit the ledger update
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/BACKLOG.md docs/WORK_BREAKDOWN.md docs/DATA_AND_API_CONTRACTS.md docs/QUALITY_AND_TESTING.md
+          git commit -m "Complete API-002 documentation"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
+      - name: Export the current source
+        run: tar --exclude=.git -czf /tmp/julos-current.tar.gz .
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: julos-current-source
+          path: /tmp/julos-current.tar.gz
+          retention-days: 1
