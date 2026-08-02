@@ -277,10 +277,33 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
         _ => throw new InvalidOperationException("Unknown desktop viewport class."),
     };
 
-    private static WindowState ParseWindowState(string state) =>
-        Enum.TryParse<WindowState>(state, ignoreCase: true, out var parsed)
-            ? parsed
-            : throw new ArgumentException("The desktop window state is invalid.", nameof(state));
+    private static WindowState ParseWindowState(string state) => state switch
+    {
+        "normal" => WindowState.Normal,
+        "minimized" => WindowState.Minimized,
+        "maximized" => WindowState.Maximized,
+        "snapped-left" => WindowState.SnappedLeft,
+        "snapped-right" => WindowState.SnappedRight,
+        "snapped-top-left" => WindowState.SnappedTopLeft,
+        "snapped-top-right" => WindowState.SnappedTopRight,
+        "snapped-bottom-left" => WindowState.SnappedBottomLeft,
+        "snapped-bottom-right" => WindowState.SnappedBottomRight,
+        "full-screen" => WindowState.FullScreen,
+        _ => throw new ArgumentException("The desktop window state is invalid.", nameof(state)),
+    };
 
-    private static string WindowStateName(WindowState state) => state.ToString().ToLowerInvariant();
+    private static string WindowStateName(WindowState state) => state switch
+    {
+        WindowState.Normal => "normal",
+        WindowState.Minimized => "minimized",
+        WindowState.Maximized => "maximized",
+        WindowState.SnappedLeft => "snapped-left",
+        WindowState.SnappedRight => "snapped-right",
+        WindowState.SnappedTopLeft => "snapped-top-left",
+        WindowState.SnappedTopRight => "snapped-top-right",
+        WindowState.SnappedBottomLeft => "snapped-bottom-left",
+        WindowState.SnappedBottomRight => "snapped-bottom-right",
+        WindowState.FullScreen => "full-screen",
+        _ => throw new InvalidOperationException("Unknown desktop window state."),
+    };
 }
