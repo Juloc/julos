@@ -18,7 +18,6 @@ public sealed class CoreDbContext : DbContext
     {
     }
 
-    internal DbSet<UserRow> Users => this.Set<UserRow>();
     internal DbSet<PermissionAssignmentRow> PermissionAssignments => this.Set<PermissionAssignmentRow>();
     internal DbSet<PackageInstallationRow> PackageInstallations => this.Set<PackageInstallationRow>();
     internal DbSet<ApplicationDefinitionRow> ApplicationDefinitions => this.Set<ApplicationDefinitionRow>();
@@ -103,7 +102,7 @@ public sealed class CoreDbContext : DbContext
 
         return revisionProperty is null || databaseValues is null
             ? null
-            : databaseValues.GetValue<int>(revisionProperty);
+            : databaseValues.GetValue<int>(revisionProperty.Name);
     }
 
     private static async Task<int?> ReadCurrentRevisionAsync(
@@ -115,6 +114,6 @@ public sealed class CoreDbContext : DbContext
 
         return revisionProperty is null || databaseValues is null
             ? null
-            : databaseValues.GetValue<int>(revisionProperty);
+            : databaseValues.GetValue<int>(revisionProperty.Name);
     }
 }
