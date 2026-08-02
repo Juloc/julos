@@ -1,0 +1,52 @@
+name: Agent API-007 diagnostic artifact
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api007-diagnostic-artifact-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - name: Reuse canonical apply step and capture build errors
+        shell: bash
+        run: |
+          set -u
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('.github/workflows/agent-api007-v2.yml').read_text().splitlines()
+          start = lines.index('      - name: Apply corrected API-007 source')
+          run = next(i for i in range(start, len(lines)) if lines[i] == '        run: |')
+          end = next(i for i in range(run + 1, len(lines)) if lines[i].startswith('      - name:'))
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines[run + 1:end])
+          Path('/tmp/apply-api007.sh').write_text('set -euo pipefail\n' + script + '\n')
+          PY
+          bash /tmp/apply-api007.sh
+          dotnet restore JulOS.slnx >/tmp/restore.log 2>&1
+          dotnet build JulOS.slnx --no-restore >/tmp/build.log 2>&1 || true
+          mkdir -p .agent-diagnostic
+          grep -E 'error (CS|CA|IDE|NETSDK)[0-9]+|Build FAILED|[0-9]+ Error\(s\)' /tmp/build.log | tail -n 300 > .agent-diagnostic/api007-build-errors.txt || true
+          if [ ! -s .agent-diagnostic/api007-build-errors.txt ]; then
+            echo 'Build succeeded.' > .agent-diagnostic/api007-build-errors.txt
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .agent-diagnostic/api007-build-errors.txt
+          git commit -m 'Record API-007 compiler diagnostic'
+          git push origin HEAD:${{ github.head_ref }}
