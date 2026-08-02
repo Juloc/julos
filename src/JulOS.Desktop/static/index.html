@@ -1,10 +1,11 @@
 ﻿<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system" data-motion="enabled">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>JulOS</title>
+    <link rel="stylesheet" href="./styles/design-tokens.css" />
     <script type="module" src="./scripts/main.js"></script>
     <script nomodule>
       document.addEventListener('DOMContentLoaded', function () {
@@ -16,11 +17,13 @@
     </script>
   </head>
   <body>
+    <julos-shell></julos-shell>
+
     <!--
       This notice is static and bilingual on purpose. It has to work before the
       localization service loads, and in a browser that cannot run the shell at all.
     -->
-    <section id="unsupported-browser" hidden lang="en">
+    <section id="unsupported-browser" class="unsupported-browser" hidden lang="en">
       <h1>JulOS cannot start in this browser</h1>
       <p>JulOS needs a current browser with support for ES modules, Custom Elements and Shadow DOM.</p>
       <p lang="de">
