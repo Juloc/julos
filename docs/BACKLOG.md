@@ -44,7 +44,8 @@ Status values:
 | API-009 | Audit service | Done | Security and authorization actions are append-only, sanitized and queryable with retention-safe cursor paging. |
 | API-010 | Real-time event hub | Done | Authenticated SignalR envelopes are versioned; Desktop deduplicates events and refreshes authoritative state after reconnect. |
 | Phase 2 | Persistence, authentication and core APIs | Done | Gate passed: PostgreSQL, authentication, authorization, APIs, audit, secrets, operations and real-time events validate together. |
-| Phase 3 | Desktop shell | In progress | `DESK-001` is next: shell, tokens, themes, localization and visible server version. |
+| DESK-001 | Shell and design tokens | Done | Responsive Fluent 2 shell, taskbar, themes, localization, About dialog and server version are built into the Server image. |
+| Phase 3 | Desktop shell | In progress | `DESK-002` is next: typed API failures, correlation display and reconnect behavior. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -55,20 +56,19 @@ Status values:
 
 ## Next issue
 
-### DESK-001 — Create shell and design tokens
+### DESK-002 — Implement client API and event services
 
 Scope:
 
-- responsive Desktop surface and taskbar
-- system, light and dark theme tokens
-- English and German localization foundation
-- visible running server version in the footer and About surface
+- typed same-origin API client
+- JulOS Problem Details mapping and correlation display
+- distinct offline, unauthorized and forbidden client states
+- reconnect refresh integration with the real-time service
 
 Acceptance:
 
-- all three theme modes work
-- shell strings exist in English and German
-- the server version is visible without developer tools
+- no raw authentication token is exposed to package modules
+- offline and unauthorized are distinct states
 
 ## Specification status
 
