@@ -1,1 +1,1 @@
-33:/home/runner/work/julos/julos/src/JulOS.Infrastructure/Health/PostgreSqlHealthCheck.cs(1,28): error CS0234: The type or namespace name 'Diagnostics' does not exist in the namespace 'Microsoft.Extensions' (are you miss
+4:Validation stage 'policy' failed: 2 file(s) violate the encoding policy:  
