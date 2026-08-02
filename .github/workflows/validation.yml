@@ -78,3 +78,13 @@ jobs:
       # generated artefact is committed out of date.
       - name: Verify the working tree is unchanged
         run: git diff --exit-code
+
+      - name: Create temporary source export
+        run: tar --exclude=.git -czf /tmp/julos-current.tar.gz .
+
+      - name: Upload temporary source export
+        uses: actions/upload-artifact@v6
+        with:
+          name: julos-current-source
+          path: /tmp/julos-current.tar.gz
+          retention-days: 1
