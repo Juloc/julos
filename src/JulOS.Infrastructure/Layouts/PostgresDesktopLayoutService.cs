@@ -3,6 +3,7 @@ using JulOS.Application.Layouts;
 using JulOS.Contracts.Layouts;
 using JulOS.Domain.Applications;
 using JulOS.Domain.Layouts;
+using JulOS.Domain.Primitives;
 using JulOS.Infrastructure.Persistence.Core;
 
 using Microsoft.EntityFrameworkCore;
