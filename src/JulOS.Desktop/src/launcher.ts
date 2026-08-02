@@ -14,9 +14,12 @@ export interface LauncherSearchResult {
 }
 
 export class LauncherAuthorizationError extends Error {
-  public constructor(public readonly entryId: string) {
+  public readonly entryId: string;
+
+  public constructor(entryId: string) {
     super(`Launcher entry '${entryId}' is not permitted.`);
     this.name = 'LauncherAuthorizationError';
+    this.entryId = entryId;
   }
 }
 
