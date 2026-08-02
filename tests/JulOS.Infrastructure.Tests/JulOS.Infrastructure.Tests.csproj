@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\JulOS.Infrastructure\JulOS.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\JulOS.RuntimeManager\JulOS.RuntimeManager.csproj" />
   </ItemGroup>
 
   <ItemGroup>
