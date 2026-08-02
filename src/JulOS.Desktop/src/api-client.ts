@@ -66,7 +66,9 @@ export class JulOsApiClient {
   }
 
   public get<T>(path: string, signal?: AbortSignal): Promise<T> {
-    return this.requestJson<T>(path, { method: 'GET', signal });
+    return signal === undefined
+      ? this.requestJson<T>(path, { method: 'GET' })
+      : this.requestJson<T>(path, { method: 'GET', signal });
   }
 
   public async requestJson<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -105,21 +107,24 @@ export class JulOsApiClient {
     }
 
     headers.set('Accept', 'application/json');
-    let body: BodyInit | undefined;
+    const request: RequestInit = {
+      method: options.method ?? 'GET',
+      credentials: 'same-origin',
+      headers,
+    };
+
     if (options.body !== undefined) {
       headers.set('Content-Type', 'application/json');
-      body = JSON.stringify(options.body);
+      request.body = JSON.stringify(options.body);
+    }
+
+    if (options.signal !== undefined) {
+      request.signal = options.signal;
     }
 
     let response: Response;
     try {
-      response = await this.#fetch(path, {
-        method: options.method ?? 'GET',
-        credentials: 'same-origin',
-        headers,
-        body,
-        signal: options.signal,
-      });
+      response = await this.#fetch(path, request);
     } catch (cause) {
       if (isAbort(cause)) {
         throw cause;
