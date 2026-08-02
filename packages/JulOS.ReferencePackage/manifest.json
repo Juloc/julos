@@ -63,7 +63,7 @@
   ],
   "Frontend": {
     "ModulePath": "frontend/reference-package.js",
-    "Sha256": "ea13ef194c09aa26dd538a9d7ea2eaf02dd6e1f55c694da5cab812ac0e6a2da9",
+    "Sha256": "0b1c90cb36e8411c88b082dbee9974f98839df48a4923d814f92653d38373533",
     "ExportedElements": [
       "julos-reference-app",
       "julos-reference-widget"
