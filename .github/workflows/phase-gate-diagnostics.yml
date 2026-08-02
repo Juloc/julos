@@ -1,0 +1,77 @@
+name: Phase 5 to 9 gate diagnostics
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phase-gate-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Run complete validation
+        run: |
+          set +e
+          sh tools/validate.sh > .github/phase-gate-error.txt 2>&1
+          status=$?
+          set -e
+          echo "$status" > .github/phase-gate-status.txt
+
+      - name: Commit gate result
+        run: |
+          status=$(cat .github/phase-gate-status.txt)
+          rm .github/phase-gate-status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$status" -eq 0 ]; then
+            rm -f .github/phase-gate-error.txt .github/validation-error.txt
+            mkdir -p docs/validation
+            printf '\357\273\277Phase 5-9 consolidated validation passed.\r\n' > docs/validation/PHASE-5-9-GATE.md
+            git rm .github/workflows/phase-gate-diagnostics.yml
+            git add docs/validation/PHASE-5-9-GATE.md
+            git commit -m "Pass consolidated Phase 5 to 9 gate"
+          else
+            git add .github/phase-gate-error.txt
+            git commit -m "Record consolidated phase gate failure"
+          fi
+          git pull --rebase origin agent/complete-julos-work-breakdown
+          git push origin HEAD:agent/complete-julos-work-breakdown
