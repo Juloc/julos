@@ -113,7 +113,32 @@ jobs:
         run: bash /tmp/api008-migrate.sh
 
       - name: Run full repository validation
-        run: sh tools/validate.sh
+        shell: bash
+        run: |
+          set +e
+          sh tools/validate.sh > /tmp/api008-validation.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/api008-validation.log
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+
+          mkdir -p .agent-diagnostic
+          grep -E -B 30 -A 180 \
+            'failed|Assertion failed|Exception|PostgresException|Validation stage|error (CS|CA|IDE|NETSDK)[0-9]+|Error:' \
+            /tmp/api008-validation.log | tail -n 1000 \
+            > .agent-diagnostic/api008-validation.txt || true
+          test -s .agent-diagnostic/api008-validation.txt \
+            || tail -n 800 /tmp/api008-validation.log \
+              > .agent-diagnostic/api008-validation.txt
+          node tools/normalize-encoding.mjs
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .agent-diagnostic/api008-validation.txt
+          git commit -m 'Record API-008 validation failure after policy fix' || true
+          git push origin HEAD:${{ github.head_ref }}
+          exit "$status"
 
       - name: Commit validated API-008 result
         shell: bash
