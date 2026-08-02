@@ -3,8 +3,13 @@
 /// <summary>Stable viewport names used to isolate desktop layouts.</summary>
 public static class DesktopViewportNames
 {
+    /// <summary>A wide desktop viewport.</summary>
     public const string Desktop = "desktop";
+
+    /// <summary>An intermediate tablet viewport.</summary>
     public const string Tablet = "tablet";
+
+    /// <summary>A narrow mobile viewport.</summary>
     public const string Mobile = "mobile";
 }
 
