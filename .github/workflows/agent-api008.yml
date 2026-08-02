@@ -1,0 +1,199 @@
+name: Agent API-008 validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api008-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Apply verified API-008 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          hashes=(
+            cf06e303a503423c0d63f88e0918d32ee07a447e8150dd7db36d5ed679dbee41
+            94ba9d05d66cf426cd70afb1f2d14025ee7f09fc2fd0c130676eb5488606b749
+            29e4bf2f2e4a274f0214be6af08910bbbdff19f75086fab6eb87fa1693986615
+            b79dbbb1c7f7e599397884ede92345a485d61a4844768321dd4b5b4858d6e964
+            2b5d4d43269d3b545273e852839f54fc850ee8fc28546aa8d8fd6574484d0152
+            a837894bbea09152794b2ea311afaf81e16e161c0933189edd18a7525f54dfc4
+            4df76824c0e51dc7778d82ee5390637382d8ac7d460865e408e2501238010f12
+            ac50892f00f57c5229ba30b99b3f666070afb89ca3996d0790b5269a37baacf9
+            a0a11b7180fe0109c5908728ea1c91611566d6503a4c7ce831893e3898a5d54a
+            7651a48f673de7fbbf67d98713f1ce38f4f60d583fdc7b65b285f4cc67cf0207
+            547809294a086e77ff85e8f57758bc9a31ffd29e5604c3332675215025ac1432
+            e58b6f5d104db910740dd7f8dc07c305974a5feda4e8991798e4ae76870a15de
+            08ebfc9b8786f9e39991cad74a0a93472ca1bf1dd6f27dae99be34c8c18cd72c
+            de2b2b2fec89ec6613b48fdbecdcff749563af4037ca0f786eca8a8233a34e3d
+            f72ae537fb60a7573dfddec560d3179d8bba99a9672a7b3f6275663827507875
+            6b44cbde49df3faec1faa2fbc1d64220d4c8f277b2967082704847cb7a002277
+          )
+
+          : > /tmp/api008.b64
+          for index in "${!hashes[@]}"; do
+            file=$(printf '.agent/api008/part-%02d' "$index")
+            normalized=$(printf '/tmp/api008-part-%02d' "$index")
+            tr -d '[:space:]' < "$file" > "$normalized"
+            echo "${hashes[$index]}  $normalized" | sha256sum --check
+            cat "$normalized" >> /tmp/api008.b64
+          done
+
+          base64 --decode /tmp/api008.b64 > /tmp/api008.tar.gz
+          echo "e95519ad713874ac223f758530fc6847a02cd79ba7c9e104dcac634438bfff01  /tmp/api008.tar.gz" | sha256sum --check
+          tar -xzf /tmp/api008.tar.gz -C .
+          node tools/normalize-encoding.mjs
+
+      - name: Compile the secret-reference service
+        run: |
+          dotnet restore JulOS.slnx
+          dotnet build JulOS.slnx --no-restore
+
+      - name: Generate the secret-reference migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet tool restore
+          dotnet ef migrations add AddSecretReferences \
+            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
+            --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
+            --output-dir Persistence/Core/Migrations
+
+          migration=$(find src/JulOS.Infrastructure/Persistence/Core/Migrations -maxdepth 1 -name '*_AddSecretReferences.cs' -print -quit)
+          test -n "$migration"
+          python3 - "$migration" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8-sig')
+          up_end = '\n        }\n\n        /// <inheritdoc />\n        protected override void Down'
+          if up_end not in text:
+              raise SystemExit('Generated migration Up boundary was not found.')
+
+          grant_sql = '''
+
+              migrationBuilder.Sql(
+                  """
+                  INSERT INTO core.permission_assignments
+                      (id, subject_kind, subject_id, permission, scope_kind, scope_id,
+                       granted_at_utc, granted_by_user_id)
+                  SELECT
+                      uuidv7(),
+                      'Role',
+                      role.id,
+                      permission.name,
+                      'Global',
+                      NULL,
+                      CURRENT_TIMESTAMP,
+                      setup.administrator_user_id
+                  FROM core.roles AS role
+                  CROSS JOIN core.authentication_setup AS setup
+                  CROSS JOIN (
+                      VALUES
+                          ('core.secret.read'),
+                          ('core.secret.manage')
+                  ) AS permission(name)
+                  WHERE role.normalized_name = 'ADMINISTRATOR'
+                    AND setup.id = 1
+                    AND setup.administrator_user_id IS NOT NULL
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM core.permission_assignments AS existing
+                        WHERE existing.subject_kind = 'Role'
+                          AND existing.subject_id = role.id
+                          AND existing.permission = permission.name
+                          AND existing.scope_kind = 'Global'
+                          AND existing.scope_id IS NULL
+                    );
+                  """);
+          '''
+          text = text.replace(up_end, grant_sql + up_end, 1)
+
+          down_start = '        protected override void Down(MigrationBuilder migrationBuilder)\n        {\n'
+          if down_start not in text:
+              raise SystemExit('Generated migration Down boundary was not found.')
+
+          revoke_sql = '''
+              migrationBuilder.Sql(
+                  """
+                  DELETE FROM core.permission_assignments AS assignment
+                  USING core.roles AS role, core.authentication_setup AS setup
+                  WHERE assignment.subject_kind = 'Role'
+                    AND assignment.subject_id = role.id
+                    AND assignment.permission IN (
+                        'core.secret.read',
+                        'core.secret.manage')
+                    AND assignment.scope_kind = 'Global'
+                    AND assignment.scope_id IS NULL
+                    AND assignment.granted_by_user_id = setup.administrator_user_id
+                    AND role.normalized_name = 'ADMINISTRATOR'
+                    AND setup.id = 1;
+                  """);
+
+          '''
+          text = text.replace(down_start, down_start + revoke_sql, 1)
+          path.write_text('\ufeff' + text, encoding='utf-8')
+          PY
+
+          node tools/normalize-encoding.mjs
+
+      - name: Run full repository validation
+        run: sh tools/validate.sh
+
+      - name: Commit validated API-008 result
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .agent .agent-diagnostic
+          rm -f \
+            .github/workflows/agent-api008.yml \
+            .github/workflows/agent-source-sync.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Complete API-008 secret-reference service"
+          git push origin HEAD:${{ github.head_ref }}
