@@ -1,15 +1,11 @@
 ﻿import { findMissingPlatformFeatures, probeBrowser } from './platform-support.js';
+import { defineJulOsShell } from './shell.js';
 
 /**
- * JulOS Desktop entry module.
- *
- * The shell surface, window manager and package host are added by the DESK work
- * items. Startup currently verifies the browser platform and reveals the static
- * bilingual notice in the document when a required feature is missing, because a
- * shell that cannot host Custom Elements must say so rather than render nothing.
+ * JulOS Desktop entry module. The static unsupported notice remains outside the
+ * shell because it must work when Custom Elements or Shadow DOM are unavailable.
  */
 const unsupportedNoticeId = 'unsupported-browser';
-
 const missingFeatures = findMissingPlatformFeatures(probeBrowser(window));
 
 if (missingFeatures.length > 0) {
@@ -23,4 +19,6 @@ if (missingFeatures.length > 0) {
 
   notice.hidden = false;
   notice.dataset['missingFeatures'] = missingFeatures.join(' ');
+} else {
+  defineJulOsShell();
 }
