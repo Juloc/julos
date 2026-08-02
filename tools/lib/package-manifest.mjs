@@ -1,38 +1,36 @@
 ﻿import { readFile } from 'node:fs/promises';
 
-const semanticVersion = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/;
-const packageIdentifier = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/;
-const dottedIdentifier = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/;
+const semanticVersion = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const packageIdentifier = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/;
+const identifier = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const stableKey = /^[a-z][a-z0-9._-]{0,63}$/;
+const resourceKey = /^[a-z][a-z0-9_.-]{0,127}$/;
+const permissionName = /^[a-z][a-z0-9._:-]{0,127}$/;
 const imageDigest = /^[^@\s]+@sha256:[a-f0-9]{64}$/;
-const integrity = /^sha256-[A-Za-z0-9+/=]+$/;
+const sha256 = /^[0-9a-f]{64}$/;
 const customElement = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
 
-const requiredFields = [
-  'schemaVersion',
-  'id',
-  'name',
-  'publisher',
-  'version',
-  'minimumCoreVersion',
-  'maximumCoreVersion',
-  'worker',
-  'capabilitiesProvided',
-  'capabilitiesRequired',
-  'permissions',
-  'applications',
-  'widgets',
-  'settings',
-  'migrations',
-  'runtimeProfiles',
-  'dependencies',
+const rootFields = [
+  'SchemaVersion',
+  'PackageId',
+  'Version',
+  'PublisherId',
+  'DisplayNameKey',
+  'DescriptionKey',
+  'Runtime',
+  'Permissions',
+  'Applications',
+  'Widgets',
+  'Capabilities',
+  'Migrations',
+  'Frontend',
 ];
-
-const allowedFields = new Set(requiredFields);
 
 export async function readAndValidatePackageManifest(path) {
   let manifest;
   try {
-    manifest = JSON.parse(await readFile(path, 'utf8'));
+    const text = (await readFile(path, 'utf8')).replace(/^\uFEFF/, '');
+    manifest = JSON.parse(text);
   } catch (error) {
     return [`${path}: invalid JSON (${error.message})`];
   }
@@ -46,185 +44,182 @@ export function validatePackageManifest(value, source = 'manifest') {
     return [`${source}: root must be an object`];
   }
 
-  for (const field of requiredFields) {
-    if (!(field in value)) {
-      errors.push(`${source}: missing required field '${field}'`);
-    }
+  checkExactFields(value, rootFields, 'root', source, errors);
+  if (value.SchemaVersion !== '1') {
+    errors.push(`${source}: unsupported SchemaVersion '${String(value.SchemaVersion)}'; supported: 1`);
   }
-  for (const field of Object.keys(value)) {
-    if (!allowedFields.has(field)) {
-      errors.push(`${source}: unknown field '${field}'`);
-    }
-  }
-
-  if (value.schemaVersion !== 1) {
-    errors.push(`${source}: unsupported schemaVersion '${String(value.schemaVersion)}'; supported: 1`);
-  }
-  checkString(value.id, 'id', source, errors, packageIdentifier, 200);
-  checkString(value.name, 'name', source, errors, null, 100);
-  checkString(value.publisher, 'publisher', source, errors, null, 100);
-  checkVersion(value.version, 'version', source, errors);
-  checkVersion(value.minimumCoreVersion, 'minimumCoreVersion', source, errors);
-  if (value.maximumCoreVersion !== null) {
-    checkVersion(value.maximumCoreVersion, 'maximumCoreVersion', source, errors);
-  }
-
-  validateWorker(value.worker, source, errors);
-  validateCapabilities(value.capabilitiesProvided, false, source, errors);
-  validateCapabilities(value.capabilitiesRequired, true, source, errors);
-  validateUniqueStrings(value.permissions, 'permissions', source, errors, dottedIdentifier);
-  validateFrontendComponents(value.applications, 'applications', true, source, errors);
-  validateFrontendComponents(value.widgets, 'widgets', false, source, errors);
-  validateObjectArray(value.settings, 'settings', source, errors);
-  validateObjectArray(value.migrations, 'migrations', source, errors);
-  validateRuntimeProfiles(value.runtimeProfiles, source, errors);
-  validateDependencies(value.dependencies, source, errors);
-
+  checkString(value.PackageId, 'PackageId', source, errors, packageIdentifier, 200);
+  checkString(value.Version, 'Version', source, errors, semanticVersion, 100);
+  checkString(value.PublisherId, 'PublisherId', source, errors, identifier, 128);
+  checkString(value.DisplayNameKey, 'DisplayNameKey', source, errors, resourceKey, 128);
+  checkString(value.DescriptionKey, 'DescriptionKey', source, errors, resourceKey, 128);
+  validateRuntime(value.Runtime, source, errors);
+  validateUniqueStrings(value.Permissions, 'Permissions', source, errors, permissionName, true);
+  validateApplications(value.Applications, source, errors);
+  validateWidgets(value.Widgets, source, errors);
+  validateCapabilities(value.Capabilities, source, errors);
+  validateMigrations(value.Migrations, source, errors);
+  validateFrontend(value.Frontend, source, errors);
   return errors;
 }
 
-function validateWorker(value, source, errors) {
+function validateRuntime(value, source, errors) {
+  if (!isRecord(value)) {
+    errors.push(`${source}: Runtime must be an object`);
+    return;
+  }
+  checkExactFields(
+    value,
+    ['Kind', 'Image', 'EntryPoint', 'MemoryLimitMegabytes', 'CpuLimit', 'StartupTimeoutSeconds', 'NetworkAccess'],
+    'Runtime',
+    source,
+    errors,
+  );
+  if (!['none', 'container', 'process'].includes(value.Kind)) {
+    errors.push(`${source}: Runtime.Kind is invalid`);
+  }
+  if (value.Image !== null && typeof value.Image !== 'string') {
+    errors.push(`${source}: Runtime.Image must be a string or null`);
+  }
+  if (value.EntryPoint !== null && typeof value.EntryPoint !== 'string') {
+    errors.push(`${source}: Runtime.EntryPoint must be a string or null`);
+  }
+  if (value.Kind === 'container' && (typeof value.Image !== 'string' || !imageDigest.test(value.Image))) {
+    errors.push(`${source}: Runtime.Image must be pinned by sha256 digest for container runtimes`);
+  }
+  if (value.Kind === 'process' && (typeof value.EntryPoint !== 'string' || value.EntryPoint.trim().length === 0)) {
+    errors.push(`${source}: Runtime.EntryPoint is required for process runtimes`);
+  }
+  checkInteger(value.MemoryLimitMegabytes, 'Runtime.MemoryLimitMegabytes', source, errors, 16, 32768);
+  checkNumber(value.CpuLimit, 'Runtime.CpuLimit', source, errors, 0, 32);
+  checkInteger(value.StartupTimeoutSeconds, 'Runtime.StartupTimeoutSeconds', source, errors, 1, 300);
+  if (typeof value.NetworkAccess !== 'boolean') {
+    errors.push(`${source}: Runtime.NetworkAccess must be boolean`);
+  }
+}
+
+function validateApplications(value, source, errors) {
+  validateObjectArray(value, 'Applications', source, errors, (application, index) => {
+    const field = `Applications[${index}]`;
+    checkExactFields(
+      application,
+      ['StableKey', 'DisplayNameKey', 'InstancePolicy', 'DefaultWidth', 'DefaultHeight', 'MinimumWidth', 'MinimumHeight', 'Viewports'],
+      field,
+      source,
+      errors,
+    );
+    checkString(application.StableKey, `${field}.StableKey`, source, errors, stableKey, 64);
+    checkString(application.DisplayNameKey, `${field}.DisplayNameKey`, source, errors, resourceKey, 128);
+    if (!['single-instance-per-user', 'single-instance-per-target', 'multiple-instances'].includes(application.InstancePolicy)) {
+      errors.push(`${source}: ${field}.InstancePolicy is invalid`);
+    }
+    checkInteger(application.DefaultWidth, `${field}.DefaultWidth`, source, errors, 120, 16384);
+    checkInteger(application.DefaultHeight, `${field}.DefaultHeight`, source, errors, 120, 16384);
+    checkInteger(application.MinimumWidth, `${field}.MinimumWidth`, source, errors, 120, 16384);
+    checkInteger(application.MinimumHeight, `${field}.MinimumHeight`, source, errors, 120, 16384);
+    if (Number.isInteger(application.DefaultWidth) && Number.isInteger(application.MinimumWidth)
+        && application.DefaultWidth < application.MinimumWidth) {
+      errors.push(`${source}: ${field}.DefaultWidth is smaller than MinimumWidth`);
+    }
+    if (Number.isInteger(application.DefaultHeight) && Number.isInteger(application.MinimumHeight)
+        && application.DefaultHeight < application.MinimumHeight) {
+      errors.push(`${source}: ${field}.DefaultHeight is smaller than MinimumHeight`);
+    }
+    validateEnumArray(application.Viewports, `${field}.Viewports`, ['desktop', 'tablet', 'mobile'], source, errors, true);
+  }, 'StableKey');
+}
+
+function validateWidgets(value, source, errors) {
+  validateObjectArray(value, 'Widgets', source, errors, (widget, index) => {
+    const field = `Widgets[${index}]`;
+    checkExactFields(widget, ['StableKey', 'DisplayNameKey', 'ElementName', 'Sizes', 'DefaultSize'], field, source, errors);
+    checkString(widget.StableKey, `${field}.StableKey`, source, errors, stableKey, 64);
+    checkString(widget.DisplayNameKey, `${field}.DisplayNameKey`, source, errors, resourceKey, 128);
+    checkString(widget.ElementName, `${field}.ElementName`, source, errors, customElement, 200);
+    validateEnumArray(widget.Sizes, `${field}.Sizes`, ['small', 'medium', 'wide', 'large'], source, errors, true);
+    if (!Array.isArray(widget.Sizes) || !widget.Sizes.includes(widget.DefaultSize)) {
+      errors.push(`${source}: ${field}.DefaultSize must be one of Sizes`);
+    }
+  }, 'StableKey');
+}
+
+function validateCapabilities(value, source, errors) {
+  validateObjectArray(value, 'Capabilities', source, errors, (capability, index) => {
+    const field = `Capabilities[${index}]`;
+    checkExactFields(capability, ['Name', 'Direction', 'ContractVersion', 'Required'], field, source, errors);
+    checkString(capability.Name, `${field}.Name`, source, errors, permissionName, 128);
+    if (!['provides', 'requires'].includes(capability.Direction)) {
+      errors.push(`${source}: ${field}.Direction is invalid`);
+    }
+    checkString(capability.ContractVersion, `${field}.ContractVersion`, source, errors, semanticVersion, 100);
+    if (typeof capability.Required !== 'boolean') {
+      errors.push(`${source}: ${field}.Required must be boolean`);
+    }
+  }, (item) => `${item.Direction}:${item.Name}`);
+}
+
+function validateMigrations(value, source, errors) {
+  validateObjectArray(value, 'Migrations', source, errors, (migration, index) => {
+    const field = `Migrations[${index}]`;
+    checkExactFields(migration, ['MigrationId', 'Resource', 'Reversible', 'Digest'], field, source, errors);
+    checkString(migration.MigrationId, `${field}.MigrationId`, source, errors, identifier, 128);
+    if (!['core-registration', 'package-database', 'runtime-data'].includes(migration.Resource)) {
+      errors.push(`${source}: ${field}.Resource is invalid`);
+    }
+    if (typeof migration.Reversible !== 'boolean') {
+      errors.push(`${source}: ${field}.Reversible must be boolean`);
+    }
+    checkString(migration.Digest, `${field}.Digest`, source, errors, sha256, 64);
+  }, 'MigrationId');
+}
+
+function validateFrontend(value, source, errors) {
   if (value === null) {
     return;
   }
   if (!isRecord(value)) {
-    errors.push(`${source}: worker must be an object or null`);
+    errors.push(`${source}: Frontend must be an object or null`);
     return;
   }
-  checkExactFields(value, ['image', 'cpuLimit', 'memoryLimitMb'], 'worker', source, errors);
-  checkString(value.image, 'worker.image', source, errors, imageDigest, 500);
-  checkPositiveNumber(value.cpuLimit, 'worker.cpuLimit', source, errors, 64);
-  checkInteger(value.memoryLimitMb, 'worker.memoryLimitMb', source, errors, 16, 262144);
-}
-
-function validateCapabilities(value, required, source, errors) {
-  const name = required ? 'capabilitiesRequired' : 'capabilitiesProvided';
-  if (!Array.isArray(value)) {
-    errors.push(`${source}: ${name} must be an array`);
-    return;
+  checkExactFields(value, ['ModulePath', 'Sha256', 'ExportedElements'], 'Frontend', source, errors);
+  if (typeof value.ModulePath !== 'string'
+      || !value.ModulePath.startsWith('frontend/')
+      || !value.ModulePath.endsWith('.js')
+      || value.ModulePath.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    errors.push(`${source}: Frontend.ModulePath is invalid`);
   }
-  const seen = new Set();
-  value.forEach((item, index) => {
-    if (!isRecord(item)) {
-      errors.push(`${source}: ${name}[${index}] must be an object`);
-      return;
-    }
-    const fields = required ? ['name', 'version', 'optional'] : ['name', 'version'];
-    checkExactFields(item, fields, `${name}[${index}]`, source, errors);
-    checkString(item.name, `${name}[${index}].name`, source, errors, dottedIdentifier, 200);
-    checkInteger(item.version, `${name}[${index}].version`, source, errors, 1, Number.MAX_SAFE_INTEGER);
-    if (required && typeof item.optional !== 'boolean') {
-      errors.push(`${source}: ${name}[${index}].optional must be boolean`);
-    }
-    const key = `${String(item.name)}:${String(item.version)}`;
-    if (seen.has(key)) {
-      errors.push(`${source}: ${name} contains duplicate '${key}'`);
-    }
-    seen.add(key);
-  });
+  checkString(value.Sha256, 'Frontend.Sha256', source, errors, sha256, 64);
+  validateUniqueStrings(value.ExportedElements, 'Frontend.ExportedElements', source, errors, customElement, true);
 }
 
-function validateFrontendComponents(value, name, application, source, errors) {
-  if (!Array.isArray(value)) {
-    errors.push(`${source}: ${name} must be an array`);
-    return;
-  }
-  const seen = new Set();
-  value.forEach((item, index) => {
-    if (!isRecord(item)) {
-      errors.push(`${source}: ${name}[${index}] must be an object`);
-      return;
-    }
-    const fields = application
-      ? ['key', 'module', 'integrity', 'customElement', 'localization', 'contractVersion', 'permissions', 'instancePolicy', 'minimumWidth', 'minimumHeight']
-      : ['key', 'module', 'integrity', 'customElement', 'localization', 'contractVersion', 'permissions', 'sizes'];
-    checkExactFields(item, fields, `${name}[${index}]`, source, errors);
-    checkString(item.key, `${name}[${index}].key`, source, errors, dottedIdentifier, 200);
-    checkString(item.module, `${name}[${index}].module`, source, errors, /^frontend\/.+\.js$/, 500);
-    checkString(item.integrity, `${name}[${index}].integrity`, source, errors, integrity, 500);
-    checkString(item.customElement, `${name}[${index}].customElement`, source, errors, customElement, 200);
-    checkString(item.localization, `${name}[${index}].localization`, source, errors, /^frontend\/.+\.json$/, 500);
-    checkInteger(item.contractVersion, `${name}[${index}].contractVersion`, source, errors, 1, Number.MAX_SAFE_INTEGER);
-    validateUniqueStrings(item.permissions, `${name}[${index}].permissions`, source, errors, dottedIdentifier);
-    if (application) {
-      if (!['single-user', 'single-target', 'multiple'].includes(item.instancePolicy)) {
-        errors.push(`${source}: ${name}[${index}].instancePolicy is invalid`);
-      }
-      checkInteger(item.minimumWidth, `${name}[${index}].minimumWidth`, source, errors, 240, 10000);
-      checkInteger(item.minimumHeight, `${name}[${index}].minimumHeight`, source, errors, 160, 10000);
-    } else {
-      validateEnumArray(item.sizes, `${name}[${index}].sizes`, ['small', 'medium', 'wide', 'large'], source, errors);
-    }
-    if (seen.has(item.key)) {
-      errors.push(`${source}: ${name} contains duplicate key '${String(item.key)}'`);
-    }
-    seen.add(item.key);
-  });
-}
-
-function validateRuntimeProfiles(value, source, errors) {
-  if (!Array.isArray(value)) {
-    errors.push(`${source}: runtimeProfiles must be an array`);
-    return;
-  }
-  const seen = new Set();
-  value.forEach((item, index) => {
-    if (!isRecord(item)) {
-      errors.push(`${source}: runtimeProfiles[${index}] must be an object`);
-      return;
-    }
-    checkExactFields(item, ['name', 'image', 'networks', 'volumes', 'cpuLimit', 'memoryLimitMb'], `runtimeProfiles[${index}]`, source, errors);
-    checkString(item.name, `runtimeProfiles[${index}].name`, source, errors, dottedIdentifier, 200);
-    checkString(item.image, `runtimeProfiles[${index}].image`, source, errors, imageDigest, 500);
-    validateUniqueStrings(item.networks, `runtimeProfiles[${index}].networks`, source, errors, null);
-    validateUniqueStrings(item.volumes, `runtimeProfiles[${index}].volumes`, source, errors, null);
-    checkPositiveNumber(item.cpuLimit, `runtimeProfiles[${index}].cpuLimit`, source, errors, 64);
-    checkInteger(item.memoryLimitMb, `runtimeProfiles[${index}].memoryLimitMb`, source, errors, 16, 262144);
-    if (seen.has(item.name)) {
-      errors.push(`${source}: runtimeProfiles contains duplicate '${String(item.name)}'`);
-    }
-    seen.add(item.name);
-  });
-}
-
-function validateDependencies(value, source, errors) {
-  if (!Array.isArray(value)) {
-    errors.push(`${source}: dependencies must be an array`);
-    return;
-  }
-  const seen = new Set();
-  value.forEach((item, index) => {
-    if (!isRecord(item)) {
-      errors.push(`${source}: dependencies[${index}] must be an object`);
-      return;
-    }
-    checkExactFields(item, ['id', 'minimumVersion', 'optional'], `dependencies[${index}]`, source, errors);
-    checkString(item.id, `dependencies[${index}].id`, source, errors, dottedIdentifier, 200);
-    checkVersion(item.minimumVersion, `dependencies[${index}].minimumVersion`, source, errors);
-    if (typeof item.optional !== 'boolean') {
-      errors.push(`${source}: dependencies[${index}].optional must be boolean`);
-    }
-    if (seen.has(item.id)) {
-      errors.push(`${source}: dependencies contains duplicate '${String(item.id)}'`);
-    }
-    seen.add(item.id);
-  });
-}
-
-function validateObjectArray(value, field, source, errors) {
-  if (!Array.isArray(value) || value.some((item) => !isRecord(item))) {
-    errors.push(`${source}: ${field} must be an array of objects`);
-  }
-}
-
-function validateUniqueStrings(value, field, source, errors, pattern) {
+function validateObjectArray(value, field, source, errors, validateItem, identityField) {
   if (!Array.isArray(value)) {
     errors.push(`${source}: ${field} must be an array`);
     return;
   }
   const seen = new Set();
   value.forEach((item, index) => {
-    checkString(item, `${field}[${index}]`, source, errors, pattern, 500);
+    if (!isRecord(item)) {
+      errors.push(`${source}: ${field}[${index}] must be an object`);
+      return;
+    }
+    validateItem(item, index);
+    const key = typeof identityField === 'function' ? identityField(item) : item[identityField];
+    if (seen.has(key)) {
+      errors.push(`${source}: ${field} contains duplicate identity '${String(key)}'`);
+    }
+    seen.add(key);
+  });
+}
+
+function validateUniqueStrings(value, field, source, errors, pattern, requireNonEmpty = false) {
+  if (!Array.isArray(value) || (requireNonEmpty && value.length === 0)) {
+    errors.push(`${source}: ${field} must be${requireNonEmpty ? ' a non-empty' : ' an'} array`);
+    return;
+  }
+  const seen = new Set();
+  value.forEach((item, index) => {
+    checkString(item, `${field}[${index}]`, source, errors, pattern, 512);
     if (seen.has(item)) {
       errors.push(`${source}: ${field} contains duplicate '${String(item)}'`);
     }
@@ -232,8 +227,8 @@ function validateUniqueStrings(value, field, source, errors, pattern) {
   });
 }
 
-function validateEnumArray(value, field, allowed, source, errors) {
-  if (!Array.isArray(value) || value.length === 0) {
+function validateEnumArray(value, field, allowed, source, errors, requireNonEmpty) {
+  if (!Array.isArray(value) || (requireNonEmpty && value.length === 0)) {
     errors.push(`${source}: ${field} must be a non-empty array`);
     return;
   }
@@ -262,25 +257,25 @@ function checkExactFields(value, fields, field, source, errors) {
   }
 }
 
-function checkVersion(value, field, source, errors) {
-  checkString(value, field, source, errors, semanticVersion, 100);
-}
-
-function checkString(value, field, source, errors, pattern, maxLength) {
-  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value || value.length > maxLength || (pattern && !pattern.test(value))) {
+function checkString(value, field, source, errors, pattern, maximumLength) {
+  if (typeof value !== 'string'
+      || value.length === 0
+      || value.trim() !== value
+      || value.length > maximumLength
+      || !pattern.test(value)) {
     errors.push(`${source}: ${field} is invalid`);
-  }
-}
-
-function checkPositiveNumber(value, field, source, errors, maximum) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > maximum) {
-    errors.push(`${source}: ${field} must be greater than zero and at most ${maximum}`);
   }
 }
 
 function checkInteger(value, field, source, errors, minimum, maximum) {
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
     errors.push(`${source}: ${field} must be an integer from ${minimum} through ${maximum}`);
+  }
+}
+
+function checkNumber(value, field, source, errors, exclusiveMinimum, maximum) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= exclusiveMinimum || value > maximum) {
+    errors.push(`${source}: ${field} must be greater than ${exclusiveMinimum} and at most ${maximum}`);
   }
 }
 
