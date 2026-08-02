@@ -1,11 +1,14 @@
 ﻿using System.Security.Claims;
 
+using JulOS.Application.Auditing;
 using JulOS.Application.Authorization;
 using JulOS.Contracts.Authorization;
 using JulOS.Domain;
+using JulOS.Domain.Observability;
 using JulOS.Domain.Packages;
 using JulOS.Domain.Permissions;
 using JulOS.Server.Authentication;
+using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Antiforgery;
 
@@ -68,6 +71,7 @@ internal static class AuthorizationEndpoints
         CreateAuthorizationRoleRequest request,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
@@ -75,6 +79,14 @@ internal static class AuthorizationEndpoints
         var role = await administration
             .CreateRoleAsync(request.Name, request.Description, cancellationToken)
             .ConfigureAwait(false);
+        await AppendAuthorizationAuditAsync(
+            context,
+            auditService,
+            "authorization.role.create",
+            "role",
+            role.Id.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+            "Authorization role created.",
+            cancellationToken).ConfigureAwait(false);
         return TypedResults.Created($"/api/v1/authorization/roles/{role.Id}", ToResponse(role));
     }
 
@@ -84,6 +96,7 @@ internal static class AuthorizationEndpoints
         UpdateAuthorizationRoleRequest request,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
@@ -96,6 +109,14 @@ internal static class AuthorizationEndpoints
                 request.Revision,
                 cancellationToken)
             .ConfigureAwait(false);
+        await AppendAuthorizationAuditAsync(
+            context,
+            auditService,
+            "authorization.role.update",
+            "role",
+            role.Id.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+            "Authorization role updated.",
+            cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(ToResponse(role));
     }
 
@@ -105,10 +126,19 @@ internal static class AuthorizationEndpoints
         int revision,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.DeleteRoleAsync(roleId, revision, cancellationToken).ConfigureAwait(false);
+        await AppendAuthorizationAuditAsync(
+            context,
+            auditService,
+            "authorization.role.delete",
+            "role",
+            roleId.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+            "Authorization role deleted.",
+            cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
 
@@ -132,10 +162,19 @@ internal static class AuthorizationEndpoints
         Guid userId,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.AddRoleMemberAsync(roleId, userId, cancellationToken).ConfigureAwait(false);
+        await AppendAuthorizationAuditAsync(
+            context,
+            auditService,
+            "authorization.role_member.add",
+            "role_membership",
+            $"{roleId:D}/{userId:D}",
+            "Authorization role membership added.",
+            cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
 
@@ -145,10 +184,19 @@ internal static class AuthorizationEndpoints
         Guid userId,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
         await administration.RemoveRoleMemberAsync(roleId, userId, cancellationToken).ConfigureAwait(false);
+        await AppendAuthorizationAuditAsync(
+            context,
+            auditService,
+            "authorization.role_member.remove",
+            "role_membership",
+            $"{roleId:D}/{userId:D}",
+            "Authorization role membership removed.",
+            cancellationToken).ConfigureAwait(false);
         return TypedResults.NoContent();
     }
 
@@ -167,6 +215,7 @@ internal static class AuthorizationEndpoints
         GrantPermissionRequest request,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
@@ -182,6 +231,14 @@ internal static class AuthorizationEndpoints
                 cancellationToken).ConfigureAwait(false);
 
             var response = ToResponse(assignment);
+            await AppendAuthorizationAuditAsync(
+                context,
+                auditService,
+                "authorization.permission.grant",
+                "permission_assignment",
+                response.AssignmentId.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+                "Permission assignment granted.",
+                cancellationToken).ConfigureAwait(false);
             return TypedResults.Created(
                 $"/api/v1/authorization/assignments/{response.AssignmentId}",
                 response);
@@ -199,6 +256,7 @@ internal static class AuthorizationEndpoints
         Guid assignmentId,
         IAntiforgery antiforgery,
         IAuthorizationAdministration administration,
+        IAuditService auditService,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
@@ -206,6 +264,14 @@ internal static class AuthorizationEndpoints
         {
             await administration.RevokePermissionAsync(
                 new PermissionAssignmentId(assignmentId),
+                cancellationToken).ConfigureAwait(false);
+            await AppendAuthorizationAuditAsync(
+                context,
+                auditService,
+                "authorization.permission.revoke",
+                "permission_assignment",
+                assignmentId.ToString("D", System.Globalization.CultureInfo.InvariantCulture),
+                "Permission assignment revoked.",
                 cancellationToken).ConfigureAwait(false);
             return TypedResults.NoContent();
         }
@@ -216,6 +282,28 @@ internal static class AuthorizationEndpoints
                 exception);
         }
     }
+
+    private static Task AppendAuthorizationAuditAsync(
+        HttpContext context,
+        IAuditService auditService,
+        string action,
+        string targetType,
+        string targetId,
+        string summary,
+        CancellationToken cancellationToken) => auditService.AppendAsync(
+            new AuditRecord(
+                CurrentUserId(context.User),
+                AgentId: null,
+                SourcePackageId: null,
+                action,
+                targetType,
+                targetId,
+                AuditOutcome.Succeeded,
+                CorrelationId.Get(context),
+                context.Connection.RemoteIpAddress?.ToString(),
+                summary,
+                "Submitted role and permission values omitted."),
+            cancellationToken);
 
     private static AuthorizationRoleResponse ToResponse(AuthorizationRole role) => new(
         role.Id,
