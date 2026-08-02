@@ -1,0 +1,53 @@
+﻿{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.browser",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-official",
+  "DisplayNameKey": "package.browser.name",
+  "DescriptionKey": "package.browser.description",
+  "Runtime": {
+    "Kind": "process",
+    "Image": null,
+    "EntryPoint": "worker/JulOS.Browser.Worker.dll",
+    "MemoryLimitMegabytes": 256,
+    "CpuLimit": 1.0,
+    "StartupTimeoutSeconds": 30,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [
+    {
+      "StableKey": "browser",
+      "DisplayNameKey": "app.browser.name",
+      "InstancePolicy": "multiple-instances",
+      "DefaultWidth": 1180,
+      "DefaultHeight": 780,
+      "MinimumWidth": 640,
+      "MinimumHeight": 420,
+      "Viewports": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    }
+  ],
+  "Widgets": [],
+  "Capabilities": [
+    {
+      "Name": "browser.session",
+      "Direction": "requires",
+      "ContractVersion": "1.0.0",
+      "Required": true
+    }
+  ],
+  "Migrations": [],
+  "Frontend": {
+    "ModulePath": "frontend/browser.js",
+    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "ExportedElements": [
+      "julos-browser-app"
+    ]
+  }
+}
