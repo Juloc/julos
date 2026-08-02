@@ -1,6 +1,4 @@
-﻿import { JulOsApiClient } from './api-client.js';
-
-export interface PackageFrontendDescriptor {
+﻿export interface PackageFrontendDescriptor {
   readonly packageId: string;
   readonly version: string;
   readonly moduleUrl: string;
@@ -22,11 +20,11 @@ export interface PackageFrontendModule {
 
 /** Loads package modules only after same-origin fetch and SHA-256 integrity verification. */
 export class PackageFrontendHost {
-  readonly #api: JulOsApiClient;
+  readonly #fetch: typeof fetch;
   readonly #loaded = new Map<string, Promise<void>>();
 
   public constructor(fetchImplementation: typeof fetch = globalThis.fetch.bind(globalThis)) {
-    this.#api = new JulOsApiClient(fetchImplementation);
+    this.#fetch = fetchImplementation;
   }
 
   public load(
@@ -70,7 +68,7 @@ export class PackageFrontendHost {
     descriptor: PackageFrontendDescriptor,
     context: PackageFrontendContext,
   ): Promise<void> {
-    const response = await fetch(descriptor.moduleUrl, {
+    const response = await this.#fetch(descriptor.moduleUrl, {
       credentials: 'same-origin',
       headers: { Accept: 'text/javascript' },
     });
