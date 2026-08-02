@@ -1,3 +1,0 @@
-exit=1
-4:Validation stage 'policy' failed: 2 file(s) violate the encoding policy:
-10:  failed  policy
