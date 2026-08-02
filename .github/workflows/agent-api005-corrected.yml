@@ -89,6 +89,39 @@ jobs:
 
           tests_path = Path('tests/JulOS.Integration.Tests/Profile/ProfileTests.cs')
           tests = tests_path.read_text(encoding='utf-8-sig').replace('revision:', 'Revision:')
+          tests = tests.replace(
+              '        Assert.AreEqual(1, initial.Revision);',
+              '        Assert.IsTrue(initial.Revision > 0);')
+          tests = tests.replace(
+              '        Assert.AreEqual(2, updated.Revision);',
+              '        Assert.AreEqual(initial.Revision + 1, updated.Revision);')
+
+          method_start = tests.index(
+              '    public async Task PreferenceMutationRequiresAntiforgeryAndRejectsStaleRevision()')
+          method_end = tests.index(
+              '    private static async Task<AuthenticatedUserResponse>',
+              method_start)
+          method = tests[method_start:method_end]
+          setup_anchor = (
+              '        _ = await SetupAdministratorAsync(client).ConfigureAwait(false);\n\n'
+              '        using var missingToken')
+          setup_replacement = (
+              '        _ = await SetupAdministratorAsync(client).ConfigureAwait(false);\n'
+              '        var initial = await client\n'
+              '            .GetFromJsonAsync<ProfileResponse>("/api/v1/profile")\n'
+              '            .ConfigureAwait(false)\n'
+              '            ?? throw new AssertFailedException("The profile endpoint returned no profile.");\n\n'
+              '        using var missingToken')
+          if setup_anchor not in method:
+              raise SystemExit('Profile concurrency test setup anchor was not found.')
+          method = method.replace(setup_anchor, setup_replacement, 1)
+          method = method.replace('Revision: 1)', 'Revision: initial.Revision)')
+          method = method.replace(
+              '            2,\n'
+              '            document.RootElement.GetProperty(ProblemExtensionNames.CurrentRevision).GetInt32());',
+              '            initial.Revision + 1,\n'
+              '            document.RootElement.GetProperty(ProblemExtensionNames.CurrentRevision).GetInt32());')
+          tests = tests[:method_start] + method + tests[method_end:]
           tests_path.write_text('\ufeff' + tests, encoding='utf-8')
 
           provisioner_path = Path(
