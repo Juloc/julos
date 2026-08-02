@@ -313,7 +313,7 @@ internal sealed class PostgresAuditService : IAuditService
     private static byte[] FromBase64Url(string value)
     {
         var padded = value.Replace('-', '+').Replace('_', '/');
-        padded += padded.Length % 4 switch
+        padded += (padded.Length % 4) switch
         {
             0 => string.Empty,
             2 => "==",
