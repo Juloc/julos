@@ -1,11 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <Description>Core persistence, secret storage and control-plane adapters implementing JulOS.Application ports.</Description>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\JulOS.Application\JulOS.Application.csproj" />
+    <ProjectReference Include="..\JulOS.Domain\JulOS.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -13,13 +10,13 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
-  <ItemGroup Label="Persistence model tests inspect internal relational mappings.">
+  <ItemGroup>
     <InternalsVisibleTo Include="JulOS.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="JulOS.Integration.Tests" />
   </ItemGroup>
 
 </Project>

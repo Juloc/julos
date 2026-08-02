@@ -1,29 +1,35 @@
 ﻿namespace JulOS.Contracts.Errors;
 
 /// <summary>
-/// The error codes the platform itself produces.
+/// Stable platform-owned error codes used by Problem Details responses.
 /// </summary>
 /// <remarks>
-/// A feature declares its own codes next to the rule that raises them. Only failures
-/// that no feature owns belong here, so this list stays short.
+/// Package-owned codes use the <c>package.&lt;package-id&gt;.*</c> namespace and do
+/// not belong in this type.
 /// </remarks>
 public static class PlatformErrorCodes
 {
-    /// <summary>The request did not match any route.</summary>
+    /// <summary>An unhandled server failure whose details are available only in server logs.</summary>
+    public const string InternalError = "platform.internal_error";
+
+    /// <summary>The requested endpoint or resource does not exist.</summary>
     public const string NotFound = "request.not_found";
 
-    /// <summary>The request was rejected before any rule ran, for example by model validation.</summary>
-    public const string Invalid = "request.invalid";
+    /// <summary>The request is malformed or violates a transport-level requirement.</summary>
+    public const string InvalidRequest = "request.invalid";
 
-    /// <summary>The caller is not authenticated.</summary>
-    public const string Unauthenticated = "request.unauthenticated";
+    /// <summary>A Domain invariant refused the requested operation.</summary>
+    public const string DomainRuleViolation = "request.domain_rule_violation";
 
-    /// <summary>The caller is authenticated but not permitted.</summary>
-    public const string Forbidden = "request.forbidden";
+    /// <summary>A mutation used a stale resource revision and was not applied.</summary>
+    public const string ConcurrencyConflict = "request.concurrency_conflict";
 
-    /// <summary>A domain rule refused the operation and supplied no more specific code.</summary>
-    public const string RuleViolation = "request.rule_violation";
+    /// <summary>The caller has not established an authenticated session.</summary>
+    public const string AuthenticationRequired = "security.authentication_required";
 
-    /// <summary>The server failed in a way it does not recognise. The cause stays server-side.</summary>
-    public const string Unexpected = "server.unexpected";
+    /// <summary>The authenticated caller is not permitted to perform the request.</summary>
+    public const string PermissionDenied = "security.permission_denied";
+
+    /// <summary>The request rate exceeded a configured limit.</summary>
+    public const string RateLimitExceeded = "request.rate_limit_exceeded";
 }

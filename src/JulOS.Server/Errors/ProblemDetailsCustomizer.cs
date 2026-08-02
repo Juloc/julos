@@ -1,87 +1,117 @@
-﻿using JulOS.Contracts.Errors;
+﻿namespace JulOS.Server.Errors;
 
-using JulOS.Domain;
+using JulOS.Application.Concurrency;
+using JulOS.Contracts.Errors;
+using JulOS.Domain.Primitives;
 
 using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 
-namespace JulOS.Server.Errors;
-
-/// <summary>
-/// Turns every failing response into the JulOS problem shape.
-/// </summary>
-/// <remarks>
-/// This runs for handled failures and for unhandled exceptions alike, so no failure path
-/// can return a differently shaped body. It is a plain static method rather than a
-/// lambda inside the composition root so that the mapping is directly testable.
-/// </remarks>
-internal static class ProblemDetailsCustomizer
+/// <summary>Applies the public JulOS failure contract to every Problem Details response.</summary>
+internal sealed partial class ProblemDetailsCustomizer
 {
-    private const string ProblemTypePrefix = "https://os.juloc.de/problems/";
+    private readonly ILogger<ProblemDetailsCustomizer> logger;
 
-    /// <summary>Fills in the JulOS members of one problem response.</summary>
-    internal static void Apply(ProblemDetailsContext context)
+    public ProblemDetailsCustomizer(ILogger<ProblemDetailsCustomizer> logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        this.logger = logger;
+    }
+
+    public void Customize(ProblemDetailsContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var status = context.ProblemDetails.Status ?? context.HttpContext.Response.StatusCode;
         var exception = context.HttpContext.Features.Get<IExceptionHandlerFeature>()?.Error;
+        var correlationId = CorrelationIdentifier.Resolve(context.HttpContext);
+        var classification = Classify(context, exception);
 
-        var (code, retryable) = Classify(status, exception);
+        context.HttpContext.Response.StatusCode = classification.Status;
+        context.ProblemDetails.Status = classification.Status;
+        context.ProblemDetails.Title = classification.Title;
+        context.ProblemDetails.Detail = classification.Detail;
+        context.ProblemDetails.Instance = context.HttpContext.Request.Path.Value;
+        context.ProblemDetails.Extensions[ProblemExtensionNames.Code] = classification.Code;
+        context.ProblemDetails.Extensions[ProblemExtensionNames.CorrelationId] = correlationId;
+        context.ProblemDetails.Extensions[ProblemExtensionNames.Retryable] = classification.Retryable;
 
-        context.ProblemDetails.Status = status;
-        context.ProblemDetails.Type = ProblemTypePrefix + code.Replace('.', '-').Replace('_', '-');
-        context.ProblemDetails.Title ??= TitleFor(status);
-
-        // An unhandled exception message can carry a connection string, a file path or a
-        // credential, so nothing derived from it reaches the client. The correlation
-        // identifier is how the caller and the server-side log entry are matched up.
-        if (exception is DomainRuleViolationException ruleViolation)
+        if (exception is ConcurrencyConflictException { CurrentRevision: int currentRevision })
         {
-            context.ProblemDetails.Detail = ruleViolation.Message;
-        }
-        else if (exception is not null)
-        {
-            context.ProblemDetails.Detail = null;
+            context.ProblemDetails.Extensions[ProblemExtensionNames.CurrentRevision] = currentRevision;
         }
 
-        context.ProblemDetails.Extensions[ProblemExtensionNames.Code] = code;
-        context.ProblemDetails.Extensions[ProblemExtensionNames.CorrelationId] =
-            CorrelationId.Get(context.HttpContext);
-        context.ProblemDetails.Extensions[ProblemExtensionNames.Retryable] = retryable;
+        context.HttpContext.Response.Headers[CorrelationIdentifier.HeaderName] = correlationId;
+        context.HttpContext.TraceIdentifier = correlationId;
+
+        if (exception is not null)
+        {
+            LogUnhandledFailure(
+                this.logger,
+                correlationId,
+                context.HttpContext.Request.Method,
+                context.HttpContext.Request.Path.Value ?? string.Empty,
+                exception);
+        }
     }
 
-    private static (string Code, bool Retryable) Classify(int status, Exception? exception)
+    private static FailureClassification Classify(
+        ProblemDetailsContext context,
+        Exception? exception)
     {
-        if (exception is DomainRuleViolationException ruleViolation)
+        return exception switch
         {
-            return (ruleViolation.Code, false);
-        }
+            DomainRuleViolationException domainFailure => new(
+                domainFailure.Code,
+                "The request violates a platform rule.",
+                StatusCodes.Status400BadRequest,
+                domainFailure.Message,
+                Retryable: false),
 
-        return status switch
-        {
-            StatusCodes.Status400BadRequest => (PlatformErrorCodes.Invalid, false),
-            StatusCodes.Status401Unauthorized => (PlatformErrorCodes.Unauthenticated, false),
-            StatusCodes.Status403Forbidden => (PlatformErrorCodes.Forbidden, false),
-            StatusCodes.Status404NotFound => (PlatformErrorCodes.NotFound, false),
-            StatusCodes.Status409Conflict => (PlatformErrorCodes.RuleViolation, false),
-            StatusCodes.Status503ServiceUnavailable => (PlatformErrorCodes.Unexpected, true),
-            _ when status >= StatusCodes.Status500InternalServerError => (PlatformErrorCodes.Unexpected, false),
-            _ => (PlatformErrorCodes.Invalid, false),
+            ConcurrencyConflictException => new(
+                PlatformErrorCodes.ConcurrencyConflict,
+                "The resource changed.",
+                StatusCodes.Status409Conflict,
+                "Refresh the resource before retrying the intended change.",
+                Retryable: false),
+
+            _ when context.ProblemDetails.Status == StatusCodes.Status404NotFound => new(
+                PlatformErrorCodes.NotFound,
+                "The requested resource was not found.",
+                StatusCodes.Status404NotFound,
+                "The requested endpoint or resource does not exist.",
+                Retryable: false),
+
+            _ when context.ProblemDetails.Status is >= 400 and < 500 => new(
+                PlatformErrorCodes.InvalidRequest,
+                "The request could not be processed.",
+                context.ProblemDetails.Status.Value,
+                "Review the request and try again.",
+                Retryable: false),
+
+            _ => new(
+                PlatformErrorCodes.InternalError,
+                "The server could not complete the request.",
+                StatusCodes.Status500InternalServerError,
+                "Use the correlation ID to locate the server-side failure.",
+                Retryable: false),
         };
     }
 
-    private static string TitleFor(int status)
-    {
-        return status switch
-        {
-            StatusCodes.Status400BadRequest => "The request is invalid.",
-            StatusCodes.Status401Unauthorized => "Authentication is required.",
-            StatusCodes.Status403Forbidden => "The request is not permitted.",
-            StatusCodes.Status404NotFound => "The resource does not exist.",
-            StatusCodes.Status409Conflict => "The request conflicts with the current state.",
-            StatusCodes.Status503ServiceUnavailable => "A required dependency is unavailable.",
-            _ => "The request failed.",
-        };
-    }
+    [LoggerMessage(
+        EventId = 1500,
+        Level = LogLevel.Error,
+        Message = "Request failed. CorrelationId={CorrelationId} Method={Method} Path={Path}")]
+    private static partial void LogUnhandledFailure(
+        ILogger logger,
+        string correlationId,
+        string method,
+        string path,
+        Exception exception);
+
+    private sealed record FailureClassification(
+        string Code,
+        string Title,
+        int Status,
+        string Detail,
+        bool Retryable);
 }
