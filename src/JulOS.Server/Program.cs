@@ -85,6 +85,7 @@ app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsDesktopLayouts();
 app.MapJulOsPackages();
+app.MapJulOsPackageUpdates();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
 app.MapJulOsAudit();
