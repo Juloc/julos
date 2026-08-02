@@ -10,6 +10,7 @@ using JulOS.Server.Auditing;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
+using JulOS.Server.Events;
 using JulOS.Server.Profile;
 using JulOS.Server.Operations;
 using JulOS.Server.Secrets;
@@ -45,6 +46,7 @@ builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();
+builder.Services.AddJulOsRealtimeEvents();
 var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
 builder.Services.AddJulOsSecretReferences(
     secretOptions.ActiveKeyId,
@@ -83,6 +85,7 @@ app.MapJulOsProfile();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
 app.MapJulOsAudit();
+app.MapJulOsRealtimeEvents();
 
 app.MapGet(
     "/api/v1/system/version",
