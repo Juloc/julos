@@ -65,7 +65,7 @@ internal sealed record InstalledPackageMetadata(
     PackageDatabaseIdentity? Database);
 
 /// <summary>Coordinates verified artifacts, isolated storage and worker lifecycle.</summary>
-internal sealed class PostgresPackageManagementService : IPackageManagementService
+internal sealed class PostgresPackageManagementService : IPackageManagementService, IDisposable
 {
     private const long MaximumArtifactBytes = 1024L * 1024 * 1024;
     private readonly CoreDbContext context;
@@ -440,7 +440,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         }
     }
 
-    private PackageInstallationSnapshot ToSnapshot(
+    private static PackageInstallationSnapshot ToSnapshot(
         PackageInstallationRow row,
         InstalledPackageMetadata metadata) => new(
         row.Id,
@@ -481,7 +481,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         File.Move(temporary, path, overwrite: true);
     }
 
-    private async Task<MemoryStream> BufferArtifactAsync(Stream source, CancellationToken cancellationToken)
+    private static async Task<MemoryStream> BufferArtifactAsync(Stream source, CancellationToken cancellationToken)
     {
         var target = new MemoryStream();
         var buffer = new byte[64 * 1024];
@@ -527,7 +527,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             {
                 throw Failure("package.archive_path_escape", "Package archive path escapes its package root.");
             }
-            if (entry.FullName.EndsWith('/', StringComparison.Ordinal))
+            if (entry.FullName.EndsWith('/'))
             {
                 Directory.CreateDirectory(destination);
                 continue;
@@ -565,4 +565,9 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
 
     private static PackageManagementException Failure(string code, string message, Exception? inner = null) =>
         new(code, message, inner);
+
+    public void Dispose()
+    {
+        this.lifecycleLock.Dispose();
+    }
 }

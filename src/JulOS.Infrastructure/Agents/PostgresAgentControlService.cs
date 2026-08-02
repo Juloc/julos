@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -87,7 +88,7 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
                 correlationId,
                 remoteAddress,
                 "Agent enrollment token created.",
-                $"expiresAtUtc={row.ExpiresAtUtc:O}"));
+                "expiresAtUtc=" + row.ExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture)));
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new AgentEnrollmentTokenResponse(row.Id, token, row.ExpiresAtUtc);
         }
@@ -170,7 +171,8 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
                 correlationId,
                 remoteAddress,
                 "Agent enrolled.",
-                $"tokenId={token.Id:D};machineIdentityHash={HashLabel(request.MachineIdentity)}"));
+                "tokenId=" + token.Id.ToString("D", CultureInfo.InvariantCulture)
+                    + ";machineIdentityHash=" + HashLabel(request.MachineIdentity)));
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new AgentCredential(agentId, Base64Url(credentialBytes), now);
@@ -425,7 +427,8 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
             correlationId,
             remoteAddress,
             "Agent command queued.",
-            $"type={request.CommandType};expiresAtUtc={row.ExpiresAtUtc:O}"));
+            "type=" + request.CommandType
+                + ";expiresAtUtc=" + row.ExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture)));
         await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return ToResponse(row);
     }

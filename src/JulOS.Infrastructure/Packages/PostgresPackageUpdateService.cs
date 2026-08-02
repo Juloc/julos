@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace JulOS.Infrastructure.Packages;
 
 /// <summary>Validates updates before changing package state and preserves one rollback version.</summary>
-internal sealed class PostgresPackageUpdateService : IPackageUpdateService
+internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDisposable
 {
     private const long MaximumArtifactBytes = 1024L * 1024 * 1024;
     private readonly CoreDbContext context;
@@ -366,7 +366,7 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService
             {
                 throw Failure("package.archive_path_escape", "Package archive path escapes its root.");
             }
-            if (entry.FullName.EndsWith('/', StringComparison.Ordinal))
+            if (entry.FullName.EndsWith('/'))
             {
                 Directory.CreateDirectory(destination);
                 continue;
@@ -414,7 +414,7 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService
         }
     }
 
-    private PackageInstallationSnapshot Snapshot(
+    private static PackageInstallationSnapshot Snapshot(
         PackageInstallationRow row,
         InstalledPackageMetadata metadata) => new(
         row.Id,
@@ -445,6 +445,11 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService
         string code,
         string message,
         Exception? inner = null) => new(code, message, inner);
+
+    public void Dispose()
+    {
+        this.updateLock.Dispose();
+    }
 
     private sealed record CandidateArtifact(
         MemoryStream Buffer,
