@@ -1,4 +1,5 @@
-﻿import type { MotionMode, ThemeMode } from './appearance.js';
+﻿import { JulOsApiClient } from './api-client.js';
+import type { MotionMode, ThemeMode } from './appearance.js';
 import type { SupportedLanguage } from './localization.js';
 
 export interface AuthenticatedUser {
@@ -30,34 +31,21 @@ export interface ServerVersion {
 }
 
 export class ShellApiClient {
-  readonly #fetch: typeof fetch;
+  readonly #api: JulOsApiClient;
 
   public constructor(fetchImplementation: typeof fetch = globalThis.fetch.bind(globalThis)) {
-    this.#fetch = fetchImplementation;
+    this.#api = new JulOsApiClient(fetchImplementation);
   }
 
   public readAuthenticationStatus(): Promise<AuthenticationStatus> {
-    return this.#getJson<AuthenticationStatus>('/api/v1/auth/status');
+    return this.#api.get<AuthenticationStatus>('/api/v1/auth/status');
   }
 
   public readProfile(): Promise<UserProfile> {
-    return this.#getJson<UserProfile>('/api/v1/profile');
+    return this.#api.get<UserProfile>('/api/v1/profile');
   }
 
   public readServerVersion(): Promise<ServerVersion> {
-    return this.#getJson<ServerVersion>('/api/v1/system/version');
-  }
-
-  async #getJson<T>(path: string): Promise<T> {
-    const response = await this.#fetch(path, {
-      credentials: 'same-origin',
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`The shell request '${path}' failed with status ${response.status}.`);
-    }
-
-    return (await response.json()) as T;
+    return this.#api.get<ServerVersion>('/api/v1/system/version');
   }
 }
