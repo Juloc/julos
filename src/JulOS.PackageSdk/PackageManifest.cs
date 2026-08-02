@@ -7,9 +7,24 @@ namespace JulOS.PackageSdk;
 /// <summary>The only manifest schema supported by JulOS 1.0.</summary>
 public static class PackageManifestSchema
 {
+    /// <summary>The supported schema version.</summary>
     public const string Version = "1";
 }
 
+/// <summary>The signed declaration of one JulOS package.</summary>
+/// <param name="SchemaVersion">Manifest schema version.</param>
+/// <param name="PackageId">Stable reverse-DNS package identity.</param>
+/// <param name="Version">Package semantic version.</param>
+/// <param name="PublisherId">Trusted publisher identity.</param>
+/// <param name="DisplayNameKey">Localized display-name resource key.</param>
+/// <param name="DescriptionKey">Localized description resource key.</param>
+/// <param name="Runtime">Declared runtime requirements.</param>
+/// <param name="Permissions">Explicitly requested permission names.</param>
+/// <param name="Applications">Applications exported by the package.</param>
+/// <param name="Widgets">Widgets exported by the package.</param>
+/// <param name="Capabilities">Capabilities provided or required by the package.</param>
+/// <param name="Migrations">Versioned package migration declarations.</param>
+/// <param name="Frontend">Optional signed frontend module declaration.</param>
 public sealed record PackageManifest(
     string SchemaVersion,
     string PackageId,
@@ -25,6 +40,14 @@ public sealed record PackageManifest(
     IReadOnlyList<PackageMigrationManifest> Migrations,
     PackageFrontendManifest? Frontend);
 
+/// <summary>Runtime requirements declared by a package.</summary>
+/// <param name="Kind">Runtime kind: none, container or process.</param>
+/// <param name="Image">Immutable container image reference when applicable.</param>
+/// <param name="EntryPoint">Package-owned process entry point when applicable.</param>
+/// <param name="MemoryLimitMegabytes">Maximum runtime memory in MiB.</param>
+/// <param name="CpuLimit">Maximum runtime CPU allocation.</param>
+/// <param name="StartupTimeoutSeconds">Maximum startup duration.</param>
+/// <param name="NetworkAccess">Whether the approved runtime network is required.</param>
 public sealed record PackageRuntimeManifest(
     string Kind,
     string? Image,
@@ -34,6 +57,15 @@ public sealed record PackageRuntimeManifest(
     int StartupTimeoutSeconds,
     bool NetworkAccess);
 
+/// <summary>One application exported by a package.</summary>
+/// <param name="StableKey">Package-scoped stable application key.</param>
+/// <param name="DisplayNameKey">Localized display-name resource key.</param>
+/// <param name="InstancePolicy">Single-user, single-target or multiple-instance policy.</param>
+/// <param name="DefaultWidth">Default window width.</param>
+/// <param name="DefaultHeight">Default window height.</param>
+/// <param name="MinimumWidth">Minimum usable window width.</param>
+/// <param name="MinimumHeight">Minimum usable window height.</param>
+/// <param name="Viewports">Supported desktop viewport classes.</param>
 public sealed record PackageApplicationManifest(
     string StableKey,
     string DisplayNameKey,
@@ -44,6 +76,12 @@ public sealed record PackageApplicationManifest(
     int MinimumHeight,
     IReadOnlyList<string> Viewports);
 
+/// <summary>One widget exported by a package.</summary>
+/// <param name="StableKey">Package-scoped stable widget key.</param>
+/// <param name="DisplayNameKey">Localized display-name resource key.</param>
+/// <param name="ElementName">Registered custom-element name.</param>
+/// <param name="Sizes">Supported widget size variants.</param>
+/// <param name="DefaultSize">Default widget size.</param>
 public sealed record PackageWidgetManifest(
     string StableKey,
     string DisplayNameKey,
@@ -51,31 +89,51 @@ public sealed record PackageWidgetManifest(
     IReadOnlyList<string> Sizes,
     string DefaultSize);
 
+/// <summary>One capability provided or required by a package.</summary>
+/// <param name="Name">Capability identity.</param>
+/// <param name="Direction">Provides or requires direction.</param>
+/// <param name="ContractVersion">Capability contract version.</param>
+/// <param name="Required">Whether absence blocks package enablement.</param>
 public sealed record PackageCapabilityManifest(
     string Name,
     string Direction,
     string ContractVersion,
     bool Required);
 
+/// <summary>One package migration declaration.</summary>
+/// <param name="MigrationId">Stable migration identity.</param>
+/// <param name="Resource">Migrated resource type.</param>
+/// <param name="Reversible">Whether automatic rollback is safe.</param>
+/// <param name="Digest">SHA-256 digest of the migration content.</param>
 public sealed record PackageMigrationManifest(
     string MigrationId,
     string Resource,
     bool Reversible,
     string Digest);
 
+/// <summary>Signed browser frontend exported by a package.</summary>
+/// <param name="ModulePath">Package-relative JavaScript module path.</param>
+/// <param name="Sha256">Expected module SHA-256 digest.</param>
+/// <param name="ExportedElements">Custom elements registered by the module.</param>
 public sealed record PackageFrontendManifest(
     string ModulePath,
     string Sha256,
     IReadOnlyList<string> ExportedElements);
 
+/// <summary>Raised when a package manifest violates the public schema or rules.</summary>
 public sealed class PackageManifestException : Exception
 {
+    /// <summary>Creates a package manifest validation failure.</summary>
+    /// <param name="code">Stable machine-readable failure code.</param>
+    /// <param name="message">Caller-safe explanation.</param>
+    /// <param name="innerException">Optional parsing cause retained server-side.</param>
     public PackageManifestException(string code, string message, Exception? innerException = null)
         : base(message, innerException)
     {
         this.Code = code;
     }
 
+    /// <summary>Gets the stable machine-readable failure code.</summary>
     public string Code { get; }
 }
 
@@ -89,6 +147,9 @@ public static partial class PackageManifestReader
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
+    /// <summary>Reads and validates one manifest stream.</summary>
+    /// <param name="stream">UTF-8 JSON manifest stream.</param>
+    /// <returns>The validated manifest.</returns>
     public static PackageManifest Read(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -115,6 +176,8 @@ public static partial class PackageManifestReader
         return manifest;
     }
 
+    /// <summary>Validates one materialized package manifest.</summary>
+    /// <param name="manifest">Manifest to validate.</param>
     public static void Validate(PackageManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
