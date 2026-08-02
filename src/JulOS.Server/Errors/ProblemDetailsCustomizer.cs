@@ -1,4 +1,5 @@
 ﻿using JulOS.Application.Authentication;
+using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Contracts.Errors;
 using JulOS.Domain;
@@ -45,6 +46,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = authenticationFailure.Message;
         }
+        else if (exception is AuthorizationAdministrationException authorizationFailure)
+        {
+            context.ProblemDetails.Detail = authorizationFailure.Message;
+        }
         else if (exception is not null)
         {
             context.ProblemDetails.Detail = null;
@@ -71,6 +76,11 @@ internal static class ProblemDetailsCustomizer
         if (exception is AuthenticationFailureException authenticationFailure)
         {
             return (authenticationFailure.Code, false);
+        }
+
+        if (exception is AuthorizationAdministrationException authorizationFailure)
+        {
+            return (authorizationFailure.Code, false);
         }
 
         if (exception is DomainRuleViolationException ruleViolation)

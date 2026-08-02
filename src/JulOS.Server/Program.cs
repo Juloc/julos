@@ -6,6 +6,7 @@ using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Server;
 using JulOS.Server.Authentication;
+using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -38,6 +39,7 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
+builder.Services.AddJulOsAuthorization();
 
 builder.Services
     .AddHealthChecks()
@@ -66,12 +68,12 @@ app.MapHealthChecks(
     .AllowAnonymous();
 
 app.MapJulOsLocalAuthentication();
+app.MapJulOsAuthorization();
 
-// The fallback policy requires a session. API-004 replaces this with the
-// narrower permission policy once role management and permission grants exist.
 app.MapGet(
     "/api/v1/system/version",
-    () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current));
+    () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current))
+    .RequireAuthorization(JulOsAuthorizationPolicies.SystemVersionRead);
 
 // An unknown path has no protected resource behind it. Keep the platform's
 // common 404 problem response instead of challenging an unauthenticated caller.

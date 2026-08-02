@@ -1,4 +1,6 @@
-﻿using JulOS.Infrastructure.Authentication;
+﻿using JulOS.Application.Authorization;
+using JulOS.Infrastructure.Authentication;
+using JulOS.Infrastructure.Authorization;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +20,8 @@ public static class CorePersistenceServiceCollectionExtensions
 
         services.AddDbContext<CoreDbContext>(options => Configure(options, connectionString));
         services.AddScoped<InitialAdministratorProvisioner>();
+        services.AddScoped<IPermissionAssignmentReader, EfPermissionAssignmentReader>();
+        services.AddScoped<IAuthorizationAdministration, IdentityAuthorizationAdministration>();
 
         return services;
     }

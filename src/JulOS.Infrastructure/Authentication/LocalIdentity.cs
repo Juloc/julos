@@ -30,6 +30,9 @@ public sealed class LocalUser : IdentityUser<Guid>
 /// <summary>A JulOS role stored by ASP.NET Core Identity.</summary>
 public sealed class LocalRole : IdentityRole<Guid>
 {
+    /// <summary>Gets or sets the operator-facing purpose of the role.</summary>
+    public required string Description { get; set; }
+
     /// <summary>Gets or sets whether the role is part of the platform contract.</summary>
     public bool IsSystemRole { get; set; }
 

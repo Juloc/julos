@@ -1,4 +1,5 @@
 ﻿using JulOS.Application.Authentication;
+using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Domain;
 
@@ -57,6 +58,18 @@ internal static class ErrorHandling
                 AuthenticationFailureReason.InvalidSetupRequest => StatusCodes.Status400BadRequest,
                 AuthenticationFailureReason.InvalidCredentials => StatusCodes.Status401Unauthorized,
                 AuthenticationFailureReason.AntiforgeryInvalid => StatusCodes.Status400BadRequest,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            AuthorizationAdministrationException authorization => authorization.Reason switch
+            {
+                AuthorizationAdministrationFailureReason.InvalidRole => StatusCodes.Status400BadRequest,
+                AuthorizationAdministrationFailureReason.InvalidAssignment => StatusCodes.Status400BadRequest,
+                AuthorizationAdministrationFailureReason.RoleNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.UserNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.AssignmentNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.SystemRoleImmutable => StatusCodes.Status409Conflict,
+                AuthorizationAdministrationFailureReason.LastAdministrator => StatusCodes.Status409Conflict,
+                AuthorizationAdministrationFailureReason.DuplicateAssignment => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
             },
             ConcurrencyConflictException => StatusCodes.Status409Conflict,

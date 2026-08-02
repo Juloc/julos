@@ -1,6 +1,7 @@
 ﻿using System.Data;
 
 using JulOS.Application.Authentication;
+using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Persistence.Core;
 
 using Microsoft.AspNetCore.Identity;
@@ -89,6 +90,7 @@ public sealed class InitialAdministratorProvisioner
             {
                 Id = Guid.CreateVersion7(this.timeProvider.GetUtcNow()),
                 Name = LocalIdentityNames.AdministratorRole,
+                Description = "Full control of the JulOS installation.",
                 IsSystemRole = true,
                 Revision = 1,
             };
@@ -127,6 +129,13 @@ public sealed class InitialAdministratorProvisioner
                 .AddToRoleAsync(user, LocalIdentityNames.AdministratorRole)
                 .ConfigureAwait(false),
             "The initial administrator role could not be assigned.");
+
+        await SystemAuthorizationGrantSeeder.EnsureAdministratorPermissionsAsync(
+            this.context,
+            administratorRole.Id,
+            user.Id,
+            this.timeProvider,
+            cancellationToken).ConfigureAwait(false);
 
         setup.AdministratorUserId = user.Id;
         setup.CompletedAtUtc = now;

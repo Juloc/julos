@@ -1,0 +1,11 @@
+﻿using JulOS.Contracts.Authorization;
+
+namespace JulOS.Server.Authorization;
+
+/// <summary>Named backend policies used by Core endpoints.</summary>
+internal static class JulOsAuthorizationPolicies
+{
+    internal const string SystemVersionRead = "permission:" + AuthorizationPermissionNames.SystemVersionRead;
+    internal const string AuthorizationRead = "permission:" + AuthorizationPermissionNames.AuthorizationRead;
+    internal const string AuthorizationManage = "permission:" + AuthorizationPermissionNames.AuthorizationManage;
+}

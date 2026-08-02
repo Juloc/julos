@@ -84,6 +84,7 @@ internal static class CoreModelConfiguration
         roles.Property(role => role.Name).HasColumnName("name").HasMaxLength(128);
         roles.Property(role => role.NormalizedName).HasColumnName("normalized_name").HasMaxLength(128);
         roles.Property(role => role.ConcurrencyStamp).HasColumnName("concurrency_stamp").IsConcurrencyToken();
+        roles.Property(role => role.Description).HasColumnName("description").HasMaxLength(512).IsRequired();
         roles.Property(role => role.IsSystemRole).HasColumnName("is_system_role");
         roles.Property(role => role.Revision).HasColumnName("revision").IsConcurrencyToken();
         roles.HasIndex(role => role.NormalizedName)
@@ -536,6 +537,7 @@ internal static class CoreModelConfiguration
 
         entity.HasIndex(row => new { row.SubjectKind, row.SubjectId, row.Permission, row.ScopeKind, row.ScopeId })
             .IsUnique()
+            .AreNullsDistinct(false)
             .HasDatabaseName("ux_permission_assignments_grant");
     }
 }
