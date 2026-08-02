@@ -50,15 +50,15 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
-      - name: Prepare corrected API-008 source
+      - name: Prepare corrected API-008 source and policies
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          lines = Path('.github/workflows/agent-api008-v4.yml').read_text().splitlines()
-          marker = '      - name: Apply verified source and compiler corrections'
+          lines = Path('.github/workflows/agent-api008-v5.yml').read_text().splitlines()
+          marker = '      - name: Apply corrected API-008 source and policies'
           start = lines.index(marker)
           run = next(i for i in range(start, len(lines)) if lines[i] == '        run: |')
           end = next(i for i in range(run + 1, len(lines)) if lines[i].startswith('      - name:'))
@@ -86,18 +86,18 @@ jobs:
           fi
 
           mkdir -p .agent-diagnostic
-          grep -E -B 30 -A 160 \
+          grep -E -B 30 -A 180 \
             'failed|Assertion failed|Exception|PostgresException|Validation stage|error (CS|CA|IDE|NETSDK)[0-9]+|Error:' \
-            /tmp/api008-validation.log | tail -n 900 \
+            /tmp/api008-validation.log | tail -n 1000 \
             > .agent-diagnostic/api008-validation.txt || true
           test -s .agent-diagnostic/api008-validation.txt \
-            || tail -n 700 /tmp/api008-validation.log \
+            || tail -n 800 /tmp/api008-validation.log \
               > .agent-diagnostic/api008-validation.txt
 
           node tools/normalize-encoding.mjs
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .agent-diagnostic/api008-validation.txt
-          git commit -m 'Record API-008 validation failure' || true
+          git commit -m 'Record API-008 validation failure after policy fix' || true
           git push origin HEAD:${{ github.head_ref }}
           exit "$status"
