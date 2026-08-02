@@ -14,6 +14,9 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
     private readonly RuntimePolicy policy;
     private readonly string dockerExecutable;
 
+    /// <summary>Creates a Docker CLI backend with the mandatory isolation policy.</summary>
+    /// <param name="policy">Runtime validation policy.</param>
+    /// <param name="dockerExecutable">Docker CLI executable.</param>
     public DockerCliRuntimeBackend(RuntimePolicy policy, string dockerExecutable = "docker")
     {
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
@@ -25,6 +28,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         this.dockerExecutable = dockerExecutable;
     }
 
+    /// <inheritdoc />
     public async Task<RuntimeResource> CreateAsync(
         RuntimeCreateRequest request,
         CancellationToken cancellationToken)
@@ -92,6 +96,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             request.Image);
     }
 
+    /// <inheritdoc />
     public async Task<RuntimeResource?> ReadAsync(string runtimeId, CancellationToken cancellationToken)
     {
         ValidateRuntimeId(runtimeId);
@@ -131,6 +136,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         return new RuntimeResource(runtimeId, columns[3], columns[0], columns[1], columns[2]);
     }
 
+    /// <inheritdoc />
     public async Task<RuntimeResource> StartAsync(string runtimeId, CancellationToken cancellationToken)
     {
         var runtime = await this.RequireAsync(runtimeId, cancellationToken).ConfigureAwait(false);
@@ -140,6 +146,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             ?? throw Failure("runtime.disappeared", "The runtime disappeared after it was started.");
     }
 
+    /// <inheritdoc />
     public async Task<RuntimeResource> StopAsync(string runtimeId, CancellationToken cancellationToken)
     {
         var runtime = await this.RequireAsync(runtimeId, cancellationToken).ConfigureAwait(false);
@@ -149,6 +156,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             ?? throw Failure("runtime.disappeared", "The runtime disappeared after it was stopped.");
     }
 
+    /// <inheritdoc />
     public async Task RemoveAsync(string runtimeId, CancellationToken cancellationToken)
     {
         var runtime = await this.RequireAsync(runtimeId, cancellationToken).ConfigureAwait(false);
