@@ -61,7 +61,7 @@ jobs:
           echo "95b35ef6aa47cb66bd9ee139335be4f98e0699c2c9c1d00aa4f96a7625c820b1  .agent/api004-final/part-00" | sha256sum --check
           echo "4a8d18a6243580de207e25204044a1b77218c9b8aa0890448e32e16034eb2e6e  .agent/api004-final/part-01" | sha256sum --check
           echo "4f4e62d2f6c5410605f36e2d881cd609ee12e1ea2ceb70095bdfcc412ecd559b  .agent/api004-final/part-02" | sha256sum --check
-          echo "7003bc37211debeb6a0478eb89ea7bbfa8fa5babb5e45ae7e4d7b9b391bf4036  .agent/api004-final/part-03" | sha256sum --check
+          echo "7003bc37211debeb89ea7bbfa8fa5babb5e45ae7e4d7b9b391bf4036  .agent/api004-final/part-03" | sha256sum --check
           cat .agent/api004-final/part-* | base64 --decode | gzip -dc > /tmp/api004-final.patch
           echo "e035dc4d4f3a401c8384265c9271eeb7764bfb254afd04bf2868e36a3c7b594c  /tmp/api004-final.patch" | sha256sum --check
           git apply --check /tmp/api004-final.patch
@@ -71,6 +71,27 @@ jobs:
           base64 --decode .agent/api004-migration.b64 > /tmp/api004-migration.tar.gz
           echo "e9044483d15942419ba03143fbd0b9193c4a338e35d1d225003b3342ebc1cf1d  /tmp/api004-migration.tar.gz" | sha256sum --check
           tar -xzf /tmp/api004-migration.tar.gz -C .
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/JulOS.Server/Authorization/AuthorizationEndpoints.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          text = text.replace(
+              'using Microsoft.AspNetCore.Antiforgery;\n',
+              'using Microsoft.AspNetCore.Builder;\n')
+          text = text.replace(
+              '.WithMetadata(RequiredAntiforgeryMetadata.Instance);',
+              '.RequireAntiforgery();')
+          start = text.find('    private sealed class RequiredAntiforgeryMetadata')
+          end_marker = '    private static AuthorizationRoleResponse ToResponse('
+          if start >= 0:
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit('Authorization response mapper anchor not found.')
+              text = text[:start] + text[end:]
+          path.write_text('\ufeff' + text, encoding='utf-8')
+          PY
 
           rm -rf .agent
           node tools/normalize-encoding.mjs
