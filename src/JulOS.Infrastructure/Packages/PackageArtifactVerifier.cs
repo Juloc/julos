@@ -30,7 +30,7 @@ public sealed class PackageArtifactVerificationException : Exception
 /// </summary>
 public sealed class PackageArtifactVerifier
 {
-    private readonly IReadOnlyDictionary<string, TrustedPackagePublisher> trustedPublishers;
+    private readonly Dictionary<string, TrustedPackagePublisher> trustedPublishers;
 
     public PackageArtifactVerifier(IEnumerable<TrustedPackagePublisher> trustedPublishers)
     {
