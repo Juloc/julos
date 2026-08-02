@@ -34,6 +34,7 @@ jobs:
         run: |
           dotnet tool restore
           dotnet restore JulOS.slnx
+          dotnet build src/JulOS.Infrastructure/JulOS.Infrastructure.csproj --no-restore
 
       - name: Generate migration
         run: >-
