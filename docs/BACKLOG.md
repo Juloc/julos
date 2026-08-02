@@ -49,7 +49,8 @@ Status values:
 | DESK-003 | Window store | Done | Deterministic commands, gap-free z-order and all normal, minimized and maximized transitions work with five windows. |
 | DESK-004 | Drag, resize and bounds | Done | Mouse, touch and pen updates are frame-batched; minimum sizes and reachable title bars are enforced. |
 | DESK-005 | Snapping | Done | Pointer previews and keyboard commands share taskbar-aware half, quarter and maximize geometry. |
-| Phase 3 | Desktop shell | In progress | `DESK-006` is next: grouped taskbar state, instance policy and Alt+Tab. |
+| DESK-006 | Taskbar and window switcher | Done | Instance policies, grouped counts, minimized restore and frozen-order Alt+Tab behavior are implemented. |
+| Phase 3 | Desktop shell | In progress | `DESK-007` is next: searchable launcher and authorized command palette. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -60,19 +61,19 @@ Status values:
 
 ## Next issue
 
-### DESK-006 — Implement taskbar and window switcher
+### DESK-007 — Implement launcher and command palette
 
 Scope:
 
-- grouped running applications and instance counts
-- single-user, single-target and multi-instance launch behavior
-- minimized-window activation
-- frozen-order Alt+Tab selection and predictable focus commit
+- indexed application and launch-target discovery
+- authorized command registration and execution
+- deterministic search ranking for at least 1000 applications
+- launch through the instance-policy coordinator
 
 Acceptance:
 
-- single-instance and multi-instance applications behave correctly
-- keyboard focus is predictable
+- unauthorized commands are not executable
+- 1000 applications remain searchable within performance budget
 
 ## Specification status
 
