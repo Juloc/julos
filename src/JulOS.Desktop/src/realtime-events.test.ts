@@ -56,7 +56,9 @@ test('duplicate delivery changes client state once', async () => {
   const received: RealtimeEventEnvelope[] = [];
   const service = new RealtimeEventService(
     connection,
-    (receivedEvent) => received.push(receivedEvent),
+    (receivedEvent) => {
+      received.push(receivedEvent);
+    },
     () => undefined,
   );
 
