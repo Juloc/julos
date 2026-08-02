@@ -12,9 +12,15 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
 {
     private readonly TimeProvider timeProvider;
 
+    /// <summary>PostgreSQL schema containing all Core-owned tables.</summary>
     public const string SchemaName = "core";
+
+    /// <summary>Entity Framework migration-history table inside the Core schema.</summary>
     public const string MigrationHistoryTableName = "__ef_migrations_history";
 
+    /// <summary>Creates a Core database context.</summary>
+    /// <param name="options">Entity Framework database options.</param>
+    /// <param name="timeProvider">Clock used for identity revision timestamps.</param>
     public CoreDbContext(
         DbContextOptions<CoreDbContext> options,
         TimeProvider? timeProvider = null)
@@ -45,6 +51,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<OperationProgressEventRow> OperationProgressEvents => this.Set<OperationProgressEventRow>();
     internal DbSet<SecretReferenceRow> SecretReferences => this.Set<SecretReferenceRow>();
 
+    /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         try
@@ -58,6 +65,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         }
     }
 
+    /// <inheritdoc />
     public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
@@ -75,6 +83,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         }
     }
 
+    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
