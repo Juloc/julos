@@ -1,19 +1,25 @@
 ﻿{
-  "schemaVersion": 1,
-  "id": "de.juloc.julos.test",
-  "name": "Test Package",
-  "publisher": "Juloc",
-  "version": "1.0.0",
-  "minimumCoreVersion": "1.0.0",
-  "maximumCoreVersion": null,
-  "worker": null,
-  "capabilitiesProvided": [],
-  "capabilitiesRequired": [],
-  "permissions": [],
-  "applications": [],
-  "widgets": [],
-  "settings": [],
-  "migrations": [],
-  "runtimeProfiles": [],
-  "dependencies": []
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.test",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-test",
+  "DisplayNameKey": "package.test.name",
+  "DescriptionKey": "package.test.description",
+  "Runtime": {
+    "Kind": "none",
+    "Image": null,
+    "EntryPoint": null,
+    "MemoryLimitMegabytes": 16,
+    "CpuLimit": 0.1,
+    "StartupTimeoutSeconds": 10,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [],
+  "Widgets": [],
+  "Capabilities": [],
+  "Migrations": [],
+  "Frontend": null
 }
