@@ -1,0 +1,68 @@
+name: Finalize Phase 6 packages
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-phase-six-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Normalize, hash and add package workers
+        run: |
+          node tools/normalize-encoding.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          packages = [
+              ('JulOS.Remote', 'remote.js', 'JulOS.Remote.Worker.csproj'),
+              ('JulOS.Browser', 'browser.js', 'JulOS.Browser.Worker.csproj'),
+          ]
+          solution = Path('JulOS.slnx')
+          solution_data = solution.read_bytes()
+          anchor = b'  </Folder>\r\n  <Folder Name="/tests/">'
+          for package, frontend_name, project_name in packages:
+              frontend = Path(f'packages/{package}/frontend/{frontend_name}').read_bytes()
+              digest = hashlib.sha256(frontend).hexdigest().encode()
+              manifest = Path(f'packages/{package}/manifest.json')
+              data = manifest.read_bytes()
+              placeholder = b'0' * 64
+              if placeholder in data:
+                  manifest.write_bytes(data.replace(placeholder, digest, 1))
+              project = f'    <Project Path="packages/{package}/worker/{project_name}" />\r\n'.encode()
+              if project not in solution_data:
+                  if anchor not in solution_data:
+                      raise SystemExit('Solution package folder anchor is missing.')
+                  solution_data = solution_data.replace(anchor, project + anchor, 1)
+          solution.write_bytes(solution_data)
+          PY
+          node tools/normalize-encoding.mjs
+
+      - name: Commit permanent package files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-phase-six-packages.yml
+          git add JulOS.slnx packages/JulOS.Remote packages/JulOS.Browser
+          git commit -m "Finalize Remote and Browser packages"
+          git pull --rebase origin agent/complete-julos-work-breakdown
+          git push origin HEAD:agent/complete-julos-work-breakdown
