@@ -95,8 +95,8 @@ const stages = [
 
       if (unpinned.length > 0) {
         return failed(
-          'git would check these out with the platform line ending, so the policy would ' +
-            `hold on one operating system and fail on another:\n  ${unpinned.join('\n  ')}`,
+          'git would check these out with the platform line ending, so the policy would '
+            + `hold on one operating system and fail on another:\n  ${unpinned.join('\n  ')}`,
         );
       }
 
@@ -105,8 +105,8 @@ const stages = [
       return violations.length === 0
         ? passed('every file matches decision D012')
         : failed(
-            `${violations.length} file(s) violate the encoding policy:\n  ${violations.join('\n  ')}\n` +
-              'Run tools/normalize-encoding.mjs to correct them.',
+            `${violations.length} file(s) violate the encoding policy:\n  ${violations.join('\n  ')}\n`
+              + 'Run tools/normalize-encoding.mjs to correct them.',
           );
     },
   },
@@ -209,11 +209,13 @@ const stages = [
       }
 
       const unsupportedErrors = await readAndValidatePackageManifest(unsupportedFixture);
-      if (!unsupportedErrors.some((error) => error.includes('unsupported schemaVersion'))) {
+      if (!unsupportedErrors.some((error) => error.includes('unsupported SchemaVersion'))) {
         return failed('the unsupported schema fixture was not rejected with a clear schema-version error');
       }
 
-      const manifests = await findFiles((path) => path.endsWith('julos-package.json'));
+      const manifests = await findFiles(
+        (path) => path.startsWith('packages/') && path.endsWith('/manifest.json'),
+      );
       const manifestErrors = [];
       for (const manifest of manifests) {
         const errors = await readAndValidatePackageManifest(join(repositoryRoot, manifest));
