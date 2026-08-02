@@ -128,12 +128,13 @@ export class SignalRJsonConnection implements RealtimeConnection {
   #reconnectedHandler: () => void | Promise<void> = () => undefined;
   #socket: RealtimeSocket | null = null;
   #stopped = true;
-  #connectionAttempt: Promise<void> | null = null;
+  #startAttempt: Promise<void> | null = null;
+  #reconnectAttempt: Promise<void> | null = null;
 
   public constructor(
     hubPath = '/hubs/events',
     fetchImplementation: RealtimeFetch = globalThis.fetch.bind(globalThis),
-    socketFactory: RealtimeSocketFactory = (url) => new WebSocket(url),
+    socketFactory: RealtimeSocketFactory = (url) => new WebSocket(url) as RealtimeSocket,
     delay: ReconnectDelay = async (milliseconds) =>
       new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds)),
   ) {
@@ -157,15 +158,15 @@ export class SignalRJsonConnection implements RealtimeConnection {
 
   public async start(): Promise<void> {
     if (!this.#stopped) {
-      return this.#connectionAttempt ?? Promise.resolve();
+      return this.#startAttempt ?? Promise.resolve();
     }
 
     this.#stopped = false;
-    this.#connectionAttempt = this.#connect(isReconnect: false);
+    this.#startAttempt = this.#connect(false);
     try {
-      await this.#connectionAttempt;
+      await this.#startAttempt;
     } finally {
-      this.#connectionAttempt = null;
+      this.#startAttempt = null;
     }
   }
 
@@ -204,23 +205,27 @@ export class SignalRJsonConnection implements RealtimeConnection {
           return;
         }
 
-        for (const frame of splitSignalRFrames(message.data)) {
-          if (!handshakeComplete) {
-            const handshake = JSON.parse(frame) as { readonly error?: unknown };
-            if (typeof handshake.error === 'string') {
-              fail(new Error('The real-time hub rejected the protocol handshake.'));
-              return;
+        try {
+          for (const frame of splitSignalRFrames(message.data)) {
+            if (!handshakeComplete) {
+              const handshake = JSON.parse(frame) as { readonly error?: unknown };
+              if (typeof handshake.error === 'string') {
+                fail(new Error('The real-time hub rejected the protocol handshake.'));
+                return;
+              }
+
+              handshakeComplete = true;
+              if (!settled) {
+                settled = true;
+                resolve();
+              }
+              continue;
             }
 
-            handshakeComplete = true;
-            if (!settled) {
-              settled = true;
-              resolve();
-            }
-            continue;
+            this.#handleProtocolFrame(frame);
           }
-
-          this.#handleProtocolFrame(frame);
+        } catch {
+          fail(new Error('The real-time hub returned an invalid protocol frame.'));
         }
       });
 
@@ -243,21 +248,22 @@ export class SignalRJsonConnection implements RealtimeConnection {
   }
 
   async #reconnect(): Promise<void> {
-    if (this.#connectionAttempt !== null || this.#stopped) {
+    if (this.#reconnectAttempt !== null || this.#stopped) {
       return;
     }
 
-    this.#connectionAttempt = (async () => {
+    this.#reconnectAttempt = (async () => {
       let attempt = 0;
       while (!this.#stopped) {
-        const delay = reconnectDelays[Math.min(attempt, reconnectDelays.length - 1)];
-        await this.#delay(delay);
+        const delayIndex = Math.min(attempt, reconnectDelays.length - 1);
+        const delayMilliseconds = reconnectDelays[delayIndex] ?? 30_000;
+        await this.#delay(delayMilliseconds);
         if (this.#stopped) {
           return;
         }
 
         try {
-          await this.#connect(isReconnect: true);
+          await this.#connect(true);
           return;
         } catch {
           attempt += 1;
@@ -266,9 +272,9 @@ export class SignalRJsonConnection implements RealtimeConnection {
     })();
 
     try {
-      await this.#connectionAttempt;
+      await this.#reconnectAttempt;
     } finally {
-      this.#connectionAttempt = null;
+      this.#reconnectAttempt = null;
     }
   }
 
