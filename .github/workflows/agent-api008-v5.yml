@@ -50,7 +50,7 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
-      - name: Apply corrected API-008 source and policies
+      - name: Apply corrected API-008 source, policies, and web JSON tests
         shell: bash
         run: |
           set -euo pipefail
@@ -74,8 +74,8 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path('src/JulOS.Server/Authorization/AuthorizationServices.cs')
-          text = path.read_text(encoding='utf-8-sig')
+          authorization = Path('src/JulOS.Server/Authorization/AuthorizationServices.cs')
+          text = authorization.read_text(encoding='utf-8-sig')
           if 'JulOsAuthorizationPolicies.SecretManage,' not in text:
               pattern = re.compile(
                   r'(?m)^(?P<indent>[ \t]*)AddPermissionPolicy\(\s*'
@@ -99,8 +99,25 @@ jobs:
               text, count = pattern.subn(add_secret_policies, text, count=1)
               if count != 1:
                   raise SystemExit('The operation-cancel policy registration was not found exactly once.')
-          path.write_text('\ufeff' + text, encoding='utf-8')
+          authorization.write_text('\ufeff' + text, encoding='utf-8')
+
+          tests = Path('tests/JulOS.Integration.Tests/Secrets/SecretReferenceTests.cs')
+          text = tests.read_text(encoding='utf-8-sig')
+          pattern = re.compile(
+              r'JsonSerializer\.Deserialize<SecretReferenceResponse>\('
+              r'(?P<body>createdBody|rotatedBody)\)')
+          text, count = pattern.subn(
+              lambda match: (
+                  'JsonSerializer.Deserialize<SecretReferenceResponse>('
+                  f"{match.group('body')}, JsonSerializerOptions.Web)"),
+              text)
+          if count != 2:
+              raise SystemExit(
+                  f'Expected two secret-response JSON deserializations, found {count}.')
+          tests.write_text('\ufeff' + text, encoding='utf-8')
           PY
+
+          rm -rf .agent-diagnostic
           node tools/normalize-encoding.mjs
 
       - name: Compile the corrected secret-reference service
@@ -136,7 +153,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .agent-diagnostic/api008-validation.txt
-          git commit -m 'Record API-008 validation failure after policy fix' || true
+          git commit -m 'Record API-008 validation failure after web JSON correction' || true
           git push origin HEAD:${{ github.head_ref }}
           exit "$status"
 
