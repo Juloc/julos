@@ -1,6 +1,7 @@
 ﻿using JulOS.Application.Concurrency;
 using JulOS.Application.Layouts;
 using JulOS.Contracts.Layouts;
+using JulOS.Domain.Applications;
 using JulOS.Domain.Layouts;
 using JulOS.Infrastructure.Persistence.Core;
 
