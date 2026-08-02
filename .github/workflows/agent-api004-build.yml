@@ -66,6 +66,12 @@ jobs:
           echo "e035dc4d4f3a401c8384265c9271eeb7764bfb254afd04bf2868e36a3c7b594c  /tmp/api004-final.patch" | sha256sum --check
           git apply --check /tmp/api004-final.patch
           git apply /tmp/api004-final.patch
+
+          echo "2f0c2fb8a4030cef8add689a7deb7578661a176ac093f3bcc30f478965124464  .agent/api004-migration.b64" | sha256sum --check
+          base64 --decode .agent/api004-migration.b64 > /tmp/api004-migration.tar.gz
+          echo "e9044483d15942419ba03143fbd0b9193c4a338e35d1d225003b3342ebc1cf1d  /tmp/api004-migration.tar.gz" | sha256sum --check
+          tar -xzf /tmp/api004-migration.tar.gz -C .
+
           rm -rf .agent
           node tools/normalize-encoding.mjs
 
