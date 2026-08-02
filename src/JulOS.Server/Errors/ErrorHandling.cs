@@ -1,39 +1,58 @@
-﻿namespace JulOS.Server.Errors;
+﻿using JulOS.Application.Concurrency;
+using JulOS.Domain;
 
-using JulOS.Application.Concurrency;
-using JulOS.Domain.Primitives;
+namespace JulOS.Server.Errors;
 
-using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
-
-/// <summary>Registers the single JulOS failure-response pipeline.</summary>
+/// <summary>
+/// Wires the single error-handling path of JulOS Server.
+/// </summary>
 internal static class ErrorHandling
 {
-    internal static IServiceCollection AddJulOSProblemDetails(this IServiceCollection services)
+    /// <summary>Registers the JulOS problem shape for every failing response.</summary>
+    internal static IServiceCollection AddJulOsErrorHandling(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddProblemDetails(options =>
-            options.CustomizeProblemDetails = context =>
-                context.HttpContext.RequestServices
-                    .GetRequiredService<ProblemDetailsCustomizer>()
-                    .Customize(context));
-        services.AddSingleton<ProblemDetailsCustomizer>();
+        services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsCustomizer.Apply);
+
         return services;
     }
 
-    internal static void UseJulOSExceptionHandler(this WebApplication application)
+    /// <summary>
+    /// Installs correlation identifiers and the failure pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Order matters. Correlation runs first so that a failure handled further down still
+    /// has an identifier to report. The developer exception page is never used, because a
+    /// response shape that differs between environments hides exactly the production
+    /// behaviour that needs testing.
+    /// </remarks>
+    internal static WebApplication UseJulOsErrorHandling(this WebApplication app)
     {
-        ArgumentNullException.ThrowIfNull(application);
+        ArgumentNullException.ThrowIfNull(app);
 
-        application.UseExceptionHandler(new ExceptionHandlerOptions
+        app.UseMiddleware<CorrelationIdMiddleware>();
+
+        app.UseExceptionHandler(new ExceptionHandlerOptions
         {
-            StatusCodeSelector = exception => exception switch
-            {
-                DomainRuleViolationException => StatusCodes.Status400BadRequest,
-                ConcurrencyConflictException => StatusCodes.Status409Conflict,
-                _ => StatusCodes.Status500InternalServerError,
-            },
+            StatusCodeSelector = SelectStatusCode,
+            AllowStatusCode404Response = true,
         });
+
+        app.UseStatusCodePages();
+
+        return app;
+    }
+
+    /// <summary>Maps an unhandled exception to the status code it deserves.</summary>
+    private static int SelectStatusCode(Exception exception)
+    {
+        return exception switch
+        {
+            ConcurrencyConflictException => StatusCodes.Status409Conflict,
+            DomainRuleViolationException => StatusCodes.Status409Conflict,
+            ArgumentException => StatusCodes.Status400BadRequest,
+            _ => StatusCodes.Status500InternalServerError,
+        };
     }
 }
