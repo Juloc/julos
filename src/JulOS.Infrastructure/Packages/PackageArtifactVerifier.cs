@@ -3,9 +3,16 @@
 namespace JulOS.Infrastructure.Packages;
 
 /// <summary>One administrator-trusted package publisher signing key.</summary>
+/// <param name="Publisher">Trusted publisher identity.</param>
+/// <param name="KeyId">Signing-key identity.</param>
+/// <param name="PublicKeyPem">ECDSA P-256 public key in PEM format.</param>
 public sealed record TrustedPackagePublisher(string Publisher, string KeyId, string PublicKeyPem);
 
 /// <summary>The verified immutable identity of a package artifact.</summary>
+/// <param name="Publisher">Verified publisher identity.</param>
+/// <param name="KeyId">Verified signing-key identity.</param>
+/// <param name="DigestSha256">Lowercase SHA-256 artifact digest.</param>
+/// <param name="ManifestLength">Verified artifact byte length.</param>
 public sealed record VerifiedPackageArtifact(
     string Publisher,
     string KeyId,
@@ -15,12 +22,16 @@ public sealed record VerifiedPackageArtifact(
 /// <summary>A stable refusal raised before an untrusted package reaches installation.</summary>
 public sealed class PackageArtifactVerificationException : Exception
 {
+    /// <summary>Creates an artifact verification failure.</summary>
+    /// <param name="code">Stable machine-readable failure code.</param>
+    /// <param name="message">Caller-safe explanation.</param>
     public PackageArtifactVerificationException(string code, string message)
         : base(message)
     {
         this.Code = code;
     }
 
+    /// <summary>Gets the stable machine-readable failure code.</summary>
     public string Code { get; }
 }
 
@@ -32,6 +43,8 @@ public sealed class PackageArtifactVerifier
 {
     private readonly Dictionary<string, TrustedPackagePublisher> trustedPublishers;
 
+    /// <summary>Creates a verifier from the installation's explicit publisher trust store.</summary>
+    /// <param name="trustedPublishers">Trusted publisher keys.</param>
     public PackageArtifactVerifier(IEnumerable<TrustedPackagePublisher> trustedPublishers)
     {
         ArgumentNullException.ThrowIfNull(trustedPublishers);
@@ -52,6 +65,13 @@ public sealed class PackageArtifactVerifier
         this.trustedPublishers = indexed;
     }
 
+    /// <summary>Verifies digest, publisher trust and signature for one immutable package artifact.</summary>
+    /// <param name="manifest">Exact signed artifact bytes.</param>
+    /// <param name="signature">ECDSA signature bytes.</param>
+    /// <param name="expectedDigestSha256">Declared lowercase or uppercase SHA-256 digest.</param>
+    /// <param name="publisher">Publisher identity.</param>
+    /// <param name="keyId">Signing-key identity.</param>
+    /// <returns>The verified immutable artifact identity.</returns>
     public VerifiedPackageArtifact Verify(
         ReadOnlySpan<byte> manifest,
         ReadOnlySpan<byte> signature,
