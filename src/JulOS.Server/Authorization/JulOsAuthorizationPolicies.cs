@@ -13,4 +13,6 @@ internal static class JulOsAuthorizationPolicies
     internal const string OperationCancel = "permission:" + AuthorizationPermissionNames.OperationCancel;
     internal const string SecretRead = "permission:" + AuthorizationPermissionNames.SecretRead;
     internal const string SecretManage = "permission:" + AuthorizationPermissionNames.SecretManage;
+    internal const string PackageRead = "permission:" + AuthorizationPermissionNames.PackageRead;
+    internal const string PackageManage = "permission:" + AuthorizationPermissionNames.PackageManage;
 }
