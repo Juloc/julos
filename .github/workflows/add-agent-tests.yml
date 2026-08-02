@@ -1,0 +1,54 @@
+name: Add Agent tests to solution
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: add-agent-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - name: Add Agent tests to build graph
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new):
+              file = Path(path)
+              data = file.read_bytes()
+              if old not in data:
+                  raise SystemExit(f'missing expected text in {path}: {old!r}')
+              file.write_bytes(data.replace(old, new, 1))
+
+          patch(
+              'JulOS.slnx',
+              b'    <Project Path="tests/JulOS.Architecture.Tests/JulOS.Architecture.Tests.csproj" />\r\n',
+              b'    <Project Path="tests/JulOS.Agent.Tests/JulOS.Agent.Tests.csproj" />\r\n    <Project Path="tests/JulOS.Architecture.Tests/JulOS.Architecture.Tests.csproj" />\r\n')
+          patch(
+              'tests/JulOS.Architecture.Tests/ProjectReferenceTests.cs',
+              b'        [PlatformProjects.ArchitectureTests] = [],\r\n',
+              b'        [PlatformProjects.ArchitectureTests] = [],\r\n        ["tests/JulOS.Agent.Tests/JulOS.Agent.Tests.csproj"] = [PlatformProjects.Agent],\r\n')
+          PY
+
+      - name: Commit permanent changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-agent-tests.yml
+          git add JulOS.slnx tests/JulOS.Architecture.Tests/ProjectReferenceTests.cs
+          git commit -m "Build and enforce Agent tests"
+          git push origin HEAD:agent/complete-julos-work-breakdown
