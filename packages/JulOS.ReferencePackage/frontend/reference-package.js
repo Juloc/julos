@@ -1,4 +1,4 @@
-export async function register(context) {
+﻿export async function register(context) {
   class JulOsReferenceApp extends HTMLElement {
     connectedCallback() {
       const shadow = this.attachShadow({ mode: 'open' });
