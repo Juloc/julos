@@ -6,6 +6,11 @@ using Npgsql;
 
 namespace JulOS.Infrastructure.Packages;
 
+/// <summary>Restricted database identity created for one package.</summary>
+/// <param name="PackageId">Owning package identity.</param>
+/// <param name="Schema">Package-owned schema name.</param>
+/// <param name="Role">Restricted login role.</param>
+/// <param name="Password">New plaintext password returned only to the caller.</param>
 public sealed record PackageDatabaseIdentity(
     string PackageId,
     string Schema,
@@ -17,12 +22,18 @@ public sealed partial class PostgresPackageStorageProvisioner
 {
     private readonly string administrativeConnectionString;
 
+    /// <summary>Creates a package storage provisioner using an administrative database connection.</summary>
+    /// <param name="administrativeConnectionString">Connection capable of creating schemas and roles.</param>
     public PostgresPackageStorageProvisioner(string administrativeConnectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(administrativeConnectionString);
         this.administrativeConnectionString = administrativeConnectionString;
     }
 
+    /// <summary>Creates or reactivates the isolated schema and rotates its restricted login password.</summary>
+    /// <param name="packageId">Stable package identity.</param>
+    /// <param name="cancellationToken">Operation cancellation.</param>
+    /// <returns>The restricted database identity, including the newly rotated password.</returns>
     public async Task<PackageDatabaseIdentity> ProvisionAsync(
         string packageId,
         CancellationToken cancellationToken = default)
@@ -31,7 +42,9 @@ public sealed partial class PostgresPackageStorageProvisioner
         var suffix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(packageId)))[..20];
         var schema = $"pkg_{suffix}";
         var role = $"julos_pkg_{suffix}";
-        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+        var passwordBytes = RandomNumberGenerator.GetBytes(48);
+        var password = Convert.ToBase64String(passwordBytes);
+        CryptographicOperations.ZeroMemory(passwordBytes);
 
         await using var connection = new NpgsqlConnection(this.administrativeConnectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -53,38 +66,49 @@ public sealed partial class PostgresPackageStorageProvisioner
             await ExecuteAsync(
                 connection,
                 transaction,
-                $"ALTER ROLE {Quote(role)} PASSWORD {Literal(password)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION",
+                $"ALTER ROLE {Quote(role)} LOGIN PASSWORD {Literal(password)} NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION",
                 cancellationToken).ConfigureAwait(false);
         }
 
-        await ExecuteAsync(connection, transaction, $"REVOKE ALL ON SCHEMA public FROM {Quote(role)}", cancellationToken)
-            .ConfigureAwait(false);
-        await ExecuteAsync(connection, transaction, $"REVOKE ALL ON DATABASE current_database() FROM {Quote(role)}", cancellationToken)
-            .ConfigureAwait(false);
-        await ExecuteAsync(connection, transaction, $"GRANT CONNECT ON DATABASE {Quote(connection.Database)} TO {Quote(role)}", cancellationToken)
-            .ConfigureAwait(false);
-        await ExecuteAsync(connection, transaction, $"GRANT USAGE, CREATE ON SCHEMA {Quote(schema)} TO {Quote(role)}", cancellationToken)
-            .ConfigureAwait(false);
         await ExecuteAsync(
             connection,
             transaction,
-            $"ALTER ROLE {Quote(role)} SET search_path = {Quote(schema)}",
+            $"REVOKE ALL ON DATABASE {Quote(connection.Database)} FROM {Quote(role)}",
             cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(
             connection,
             transaction,
-            $"ALTER DEFAULT PRIVILEGES IN SCHEMA {Quote(schema)} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {Quote(role)}",
+            $"GRANT CONNECT ON DATABASE {Quote(connection.Database)} TO {Quote(role)}",
             cancellationToken).ConfigureAwait(false);
         await ExecuteAsync(
             connection,
             transaction,
-            $"ALTER DEFAULT PRIVILEGES IN SCHEMA {Quote(schema)} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {Quote(role)}",
+            $"REVOKE ALL ON SCHEMA public FROM {Quote(role)}",
+            cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"REVOKE ALL ON SCHEMA {Quote(schema)} FROM PUBLIC",
+            cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"GRANT USAGE, CREATE ON SCHEMA {Quote(schema)} TO {Quote(role)}",
+            cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"ALTER ROLE {Quote(role)} SET search_path = {Quote(schema)}, pg_catalog",
             cancellationToken).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new PackageDatabaseIdentity(packageId, schema, role, password);
     }
 
+    /// <summary>Disables package access and optionally destroys all isolated package data.</summary>
+    /// <param name="packageId">Stable package identity.</param>
+    /// <param name="deleteData">Whether the schema and its contents are permanently deleted.</param>
+    /// <param name="cancellationToken">Operation cancellation.</param>
     public async Task DropAsync(
         string packageId,
         bool deleteData,
@@ -97,13 +121,48 @@ public sealed partial class PostgresPackageStorageProvisioner
         await using var connection = new NpgsqlConnection(this.administrativeConnectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        if (deleteData)
+
+        if (!await RoleExistsAsync(connection, transaction, role, cancellationToken).ConfigureAwait(false))
         {
-            await ExecuteAsync(connection, transaction, $"DROP SCHEMA IF EXISTS {Quote(schema)} CASCADE", cancellationToken)
-                .ConfigureAwait(false);
+            if (deleteData)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    $"DROP SCHEMA IF EXISTS {Quote(schema)} CASCADE",
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return;
         }
-        await ExecuteAsync(connection, transaction, $"DROP ROLE IF EXISTS {Quote(role)}", cancellationToken)
-            .ConfigureAwait(false);
+
+        if (!deleteData)
+        {
+            await ExecuteAsync(
+                connection,
+                transaction,
+                $"ALTER ROLE {Quote(role)} NOLOGIN PASSWORD NULL",
+                cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"DROP SCHEMA IF EXISTS {Quote(schema)} CASCADE",
+            cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"DROP OWNED BY {Quote(role)}",
+            cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            $"DROP ROLE {Quote(role)}",
+            cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
