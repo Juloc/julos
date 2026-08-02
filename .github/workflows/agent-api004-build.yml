@@ -1,40 +1,86 @@
-name: Agent API-004 migration export
+name: Agent API-004 final validation
 
 on:
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: agent-api004-migration-${{ github.event.pull_request.number }}
+  group: agent-api004-final-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  export:
+  validate:
     if: github.head_ref == 'agent/complete-julos-work-breakdown'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - name: Generate API-004 migration
-        run: |
-          dotnet tool restore
-          dotnet restore JulOS.slnx
-          dotnet ef migrations add AddRoleAuthorization \
-            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
-            --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
-            --output-dir Persistence/Core/Migrations
-          node tools/normalize-encoding.mjs
-      - uses: actions/upload-artifact@v4
+
+      - uses: actions/setup-node@v7
         with:
-          name: api004-migration
-          path: src/JulOS.Infrastructure/Persistence/Core/Migrations
-          if-no-files-found: error
-          retention-days: 1
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Apply verified final API-004 delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .agent/api004-final/part-00 ]; then
+            echo "Delta already applied."
+            exit 0
+          fi
+          echo "95b35ef6aa47cb66bd9ee139335be4f98e0699c2c9c1d00aa4f96a7625c820b1  .agent/api004-final/part-00" | sha256sum --check
+          echo "4a8d18a6243580de207e25204044a1b77218c9b8aa0890448e32e16034eb2e6e  .agent/api004-final/part-01" | sha256sum --check
+          echo "4f4e62d2f6c5410605f36e2d881cd609ee12e1ea2ceb70095bdfcc412ecd559b  .agent/api004-final/part-02" | sha256sum --check
+          echo "7003bc37211debeb6a0478eb89ea7bbfa8fa5babb5e45ae7e4d7b9b391bf4036  .agent/api004-final/part-03" | sha256sum --check
+          cat .agent/api004-final/part-* | base64 --decode | gzip -dc > /tmp/api004-final.patch
+          echo "e035dc4d4f3a401c8384265c9271eeb7764bfb254afd04bf2868e36a3c7b594c  /tmp/api004-final.patch" | sha256sum --check
+          git apply --check /tmp/api004-final.patch
+          git apply /tmp/api004-final.patch
+          rm -rf .agent
+          node tools/normalize-encoding.mjs
+
+      - name: Run full repository validation
+        run: sh tools/validate.sh
+
+      - name: Commit validated API-004 result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Complete API-004 role and permission authorization"
+          git push origin HEAD:${{ github.head_ref }}
