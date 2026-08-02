@@ -111,6 +111,8 @@ Local account records, password hashes, roles, setup completion and profile pref
 
 Authorization keeps three owners separate. Domain owns pure permission and scope evaluation. Application owns the stable Core permission catalog and role-administration ports. Infrastructure resolves direct user assignments and inherited role assignments from PostgreSQL, while Server maps named policies and administrator endpoints. No role name bypasses permission evaluation; even the system administrator role is authorized through explicit global assignments.
 
+Operation resources follow the same inward dependency direction. Contracts define the public queued/running/terminal and progress representations. Application owns lifecycle transitions and the executor-facing port. Infrastructure persists authoritative state, idempotency fingerprints, progress events and cancellation requests in the Core schema. Server only authenticates the user, enforces operation permissions and maps the versioned HTTP resources. Package workers and Agents advance operations through the Application port; they do not update Core tables directly.
+
 ## 6. JulOS Desktop
 
 Desktop is a lightweight browser client shell. It owns immediate presentation state but not authorization or authoritative infrastructure state.

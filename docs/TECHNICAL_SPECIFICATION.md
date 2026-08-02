@@ -313,6 +313,13 @@ Request flow:
 
 Packages never obtain another package's service instance.
 
+
+## 8.1 Durable operation execution
+
+`IOperationService` is the Core-owned boundary for long-running work. A caller creates a queued operation with a user-scoped idempotency key. The owning executor explicitly marks it running, appends progress, and reaches exactly one terminal state. Current status and every accepted progress event are committed in PostgreSQL, so reconnects and Server restarts do not invent completion or lose cancellation intent.
+
+A cancellation request for queued work cancels it immediately. A running request sets a durable cancellation timestamp; the worker or Agent must observe that flag and later acknowledge cancellation through the same lifecycle port. Failure completion accepts only a stable code and sanitized safe detail. Raw exceptions remain inside the executor boundary.
+
 ## 9. Window manager implementation
 
 The desktop maintains an in-memory window store synchronized with persisted layout revisions.

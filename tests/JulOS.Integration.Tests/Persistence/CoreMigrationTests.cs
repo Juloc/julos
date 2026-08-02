@@ -129,12 +129,15 @@ public sealed class CoreMigrationTests
               AND permission IN (
                   'core.system.version.read',
                   'core.authorization.read',
-                  'core.authorization.manage')
+                  'core.authorization.manage',
+                  'core.operation.create',
+                  'core.operation.read',
+                  'core.operation.cancel')
             """,
             verification);
         grantCommand.Parameters.AddWithValue("role_id", administratorRoleId);
         Assert.AreEqual(
-            3L,
+            6L,
             Convert.ToInt64(
                 await grantCommand.ExecuteScalarAsync().ConfigureAwait(false),
                 System.Globalization.CultureInfo.InvariantCulture));

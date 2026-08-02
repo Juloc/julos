@@ -2,6 +2,7 @@
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Profile;
+using JulOS.Application.Operations;
 using JulOS.Domain;
 
 namespace JulOS.Server.Errors;
@@ -71,6 +72,15 @@ internal static class ErrorHandling
                 AuthorizationAdministrationFailureReason.SystemRoleImmutable => StatusCodes.Status409Conflict,
                 AuthorizationAdministrationFailureReason.LastAdministrator => StatusCodes.Status409Conflict,
                 AuthorizationAdministrationFailureReason.DuplicateAssignment => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            OperationFailureException operation => operation.Reason switch
+            {
+                OperationFailureReason.Invalid => StatusCodes.Status400BadRequest,
+                OperationFailureReason.NotFound => StatusCodes.Status404NotFound,
+                OperationFailureReason.IdempotencyConflict => StatusCodes.Status409Conflict,
+                OperationFailureReason.InvalidTransition => StatusCodes.Status409Conflict,
+                OperationFailureReason.NotCancellable => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
             },
             ProfileFailureException profile => profile.Reason switch

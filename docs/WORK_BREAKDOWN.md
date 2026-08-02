@@ -504,6 +504,14 @@ Acceptance:
 - background work is not reported as success before completion
 - operation failure retains a safe cause
 
+Status: done.
+
+Implemented through versioned operation and progress contracts, an Application lifecycle port, PostgreSQL-backed Infrastructure storage and permission-protected Server endpoints. Creation is idempotent per user and key. Queued resources remain queued until an owning executor explicitly starts them; only the executor can mark verified work as succeeded. Progress events are immutable and update the current summary atomically.
+
+Running cancellation is a durable request observed by the owning worker or Agent through the Application service; queued cancellation becomes terminal immediately. Failed operations persist only a stable code and caller-safe detail. Migration `AddOperationResources` creates the operation and progress tables and backfills the three explicit operation permissions for an existing administrator role.
+
+Integration tests cover antiforgery, idempotency conflict, reconnect-safe reads, progress ordering, persistent cancellation and safe failed-operation causes against real PostgreSQL.
+
 ### API-008 — Add secret-reference service
 
 Depends on: API-001, API-004.

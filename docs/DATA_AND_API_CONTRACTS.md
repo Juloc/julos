@@ -635,7 +635,7 @@ Payloads remain small. Events tell clients what changed; APIs return authoritati
 
 ## 7. Background operations
 
-Long actions such as package installation, image pull, backup, large file transfer or session startup use an operation resource.
+Long actions such as package installation, image pull, backup, large file transfer or session startup use a durable operation resource.
 
 ```text
 OperationId
@@ -650,7 +650,10 @@ CreatedAtUtc
 StartedAtUtc
 CompletedAtUtc
 FailureCode
+FailureDetail
 CorrelationId
+CancellationRequested
+Revision
 ```
 
 Operation states:
@@ -663,7 +666,26 @@ Failed
 Cancelled
 ```
 
-An operation is not reported as successful until the requested state is verifiably reached.
+Progress is an immutable ordered stream:
+
+```text
+EventId
+OperationId
+ProgressPercent
+CurrentStep
+OccurredAtUtc
+```
+
+Initial HTTP endpoints:
+
+```text
+POST /api/v1/operations
+GET  /api/v1/operations/{operationId}
+GET  /api/v1/operations/{operationId}/events
+POST /api/v1/operations/{operationId}/cancellation
+```
+
+Creation returns `202 Accepted` and requires an idempotency key. Reusing the same key with the same canonical request returns the original resource; reusing it for different work returns `409 Conflict`. An operation is not reported as successful until its owning executor explicitly verifies the requested state. A running cancellation is stored durably until the worker or Agent acknowledges it. Failed operations expose only a stable code and sanitized safe detail, never an exception, stack trace or credential.
 
 ## 8. App discovery contracts
 

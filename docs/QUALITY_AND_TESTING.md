@@ -83,6 +83,9 @@ Continuous integration starts the pinned supported PostgreSQL image and sets `JU
 
 `API-003` extends the migrated PostgreSQL suite with the real Identity schema and drives the production HTTP host. It verifies serialized one-time administrator setup, protected API fallback, secure cookie attributes, indistinguishable credential failures, account lockout, per-IP rate limiting, antiforgery-protected logout and configured session expiry.
 
+
+`API-007` adds real PostgreSQL and production-host tests for queued state, user-scoped idempotency, immutable progress events, durable cancellation requests and safe failure causes. The suite proves that no creation response reports success and that a new HTTP request reads the same authoritative state.
+
 ### 2.5 API integration tests
 
 `tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.

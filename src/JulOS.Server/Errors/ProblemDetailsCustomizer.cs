@@ -2,6 +2,7 @@
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Profile;
+using JulOS.Application.Operations;
 using JulOS.Contracts.Errors;
 using JulOS.Domain;
 
@@ -51,6 +52,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = authorizationFailure.Message;
         }
+        else if (exception is OperationFailureException operationFailure)
+        {
+            context.ProblemDetails.Detail = operationFailure.Message;
+        }
         else if (exception is ProfileFailureException profileFailure)
         {
             context.ProblemDetails.Detail = profileFailure.Message;
@@ -91,6 +96,11 @@ internal static class ProblemDetailsCustomizer
         if (exception is DomainRuleViolationException ruleViolation)
         {
             return (ruleViolation.Code, false);
+        }
+
+        if (exception is OperationFailureException operationFailure)
+        {
+            return (operationFailure.Code, false);
         }
 
         if (exception is ProfileFailureException profileFailure)

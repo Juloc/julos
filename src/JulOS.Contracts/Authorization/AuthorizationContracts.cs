@@ -11,6 +11,15 @@ public static class AuthorizationPermissionNames
 
     /// <summary>Creates, changes and removes roles, memberships and permission assignments.</summary>
     public const string AuthorizationManage = "core.authorization.manage";
+
+    /// <summary>Creates durable background-operation resources.</summary>
+    public const string OperationCreate = "core.operation.create";
+
+    /// <summary>Reads durable operations and their progress events.</summary>
+    public const string OperationRead = "core.operation.read";
+
+    /// <summary>Requests cancellation of durable operations.</summary>
+    public const string OperationCancel = "core.operation.cancel";
 }
 
 /// <summary>Stable subject names used by the authorization API.</summary>

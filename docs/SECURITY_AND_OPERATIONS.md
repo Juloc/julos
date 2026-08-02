@@ -101,6 +101,8 @@ Rules:
 - role, membership and grant mutations require both authorization and antiforgery validation
 - profile preference updates are limited to the authenticated account, require antiforgery validation and use optimistic concurrency
 - package workers receive only the user and scope claims required for one operation
+- operation failures store only stable codes and sanitized safe details
+- operation target references and progress steps never contain credentials
 - read and control permissions are separate
 - destructive actions use narrower permissions where necessary
 - a package cannot grant permissions to itself

@@ -39,7 +39,8 @@ Status values:
 | API-004 | Role and permission authorization | Done | Explicit scoped grants drive policies; administrator role and grant management are backend enforced. |
 | API-005 | Profile and preferences API | Done | Authenticated language, time-zone, theme and motion preferences use antiforgery and optimistic concurrency. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-006` are done; `API-007` is next. |
+| API-007 | Operation-resource framework | Done | Durable queued/running/terminal state, idempotent creation, progress events and persistent cancellation requests. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-007` are done; `API-008` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -51,18 +52,18 @@ Status values:
 
 ## Next issue
 
-### API-007 — Add operation-resource framework
+### API-008 — Add secret-reference service
 
 Scope:
 
-- persisted long-running operation records
-- cancellation and progress contracts
-- stable operation status and event representation
+- encrypted Core-owned secret storage
+- opaque references that never expose stored values after creation
+- create, rotate, delete and operation-scoped lease port
 
 Acceptance:
 
-- operation status survives reconnect
-- cancellation reaches the owning worker or Agent
+- secret values are never returned after creation
+- logs, audit details and API errors contain no plaintext secret
 
 ## Specification status
 

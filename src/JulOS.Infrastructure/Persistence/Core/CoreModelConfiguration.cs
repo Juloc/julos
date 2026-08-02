@@ -36,6 +36,7 @@ internal static class CoreModelConfiguration
         ConfigureNotifications(modelBuilder.Entity<NotificationRow>());
         ConfigureAuditEvents(modelBuilder.Entity<AuditEventRow>());
         ConfigurePermissionAssignments(modelBuilder.Entity<PermissionAssignmentRow>());
+        OperationModelConfiguration.Configure(modelBuilder);
     }
 
     private static void ConfigureIdentity(ModelBuilder modelBuilder)
