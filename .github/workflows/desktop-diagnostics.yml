@@ -1,0 +1,68 @@
+name: Diagnose Desktop validation
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Correct callback and run Desktop validation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/JulOS.Desktop/src/layout-persistence.test.ts')
+          data = path.read_bytes()
+          old = b'onConflict: (conflict) => conflicts.push(conflict),'
+          new = b'onConflict: (conflict) => {\r\n      conflicts.push(conflict);\r\n    },'
+          if old in data:
+              data = data.replace(old, new, 1)
+              path.write_bytes(data)
+          PY
+          cd src/JulOS.Desktop
+          npm ci
+          set +e
+          npm run typecheck > ../../.github/desktop-error.txt 2>&1
+          typecheck_status=$?
+          if [ "$typecheck_status" -eq 0 ]; then
+            npm test >> ../../.github/desktop-error.txt 2>&1
+            test_status=$?
+          else
+            test_status=1
+          fi
+          set -e
+          if [ "$typecheck_status" -eq 0 ] && [ "$test_status" -eq 0 ]; then
+            rm ../../.github/desktop-error.txt
+          fi
+
+      - name: Commit correction or diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/JulOS.Desktop/src/layout-persistence.test.ts .github/desktop-error.txt || true
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Fix or diagnose Desktop validation"
+          git push origin HEAD:agent/complete-julos-work-breakdown
