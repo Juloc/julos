@@ -1,0 +1,110 @@
+name: Agent API-008 final diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api008-final-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Reuse validated v4 preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lines = Path('.github/workflows/agent-api008-v4.yml').read_text().splitlines()
+          names = [
+              'Apply verified source and compiler corrections',
+              'Compile the corrected secret-reference service',
+              'Generate the secret-reference migration',
+          ]
+          for index, name in enumerate(names):
+              marker = f'      - name: {name}'
+              start = lines.index(marker)
+              run = next(i for i in range(start, len(lines)) if lines[i] == '        run: |')
+              end = next(
+                  (i for i in range(run + 1, len(lines)) if lines[i].startswith('      - name:')),
+                  len(lines))
+              body = '\n'.join(
+                  line[10:] if line.startswith('          ') else line
+                  for line in lines[run + 1:end])
+              Path(f'/tmp/api008-v4-step-{index}.sh').write_text(
+                  'set -euo pipefail\n' + body + '\n', encoding='utf-8')
+          PY
+          bash /tmp/api008-v4-step-0.sh
+          bash /tmp/api008-v4-step-1.sh
+          bash /tmp/api008-v4-step-2.sh
+
+      - name: Capture remaining validation failure
+        shell: bash
+        run: |
+          set +e
+          sh tools/validate.sh > /tmp/api008-validation.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'Validation is already green.'
+            exit 0
+          fi
+
+          mkdir -p .agent-diagnostic
+          grep -E -B 30 -A 160 \
+            'failed|Assertion failed|Exception|PostgresException|Validation stage|error (CS|CA|IDE|NETSDK)[0-9]+|Error:' \
+            /tmp/api008-validation.log | tail -n 900 \
+            > .agent-diagnostic/api008-validation.txt || true
+          test -s .agent-diagnostic/api008-validation.txt \
+            || tail -n 700 /tmp/api008-validation.log \
+              > .agent-diagnostic/api008-validation.txt
+
+          node tools/normalize-encoding.mjs
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .agent-diagnostic/api008-validation.txt
+          git commit -m 'Record API-008 validation failure' || true
+          git push origin HEAD:${{ github.head_ref }}
+          exit "$status"
