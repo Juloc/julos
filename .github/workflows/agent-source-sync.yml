@@ -1,3 +1,4 @@
+# Export the current pull-request head after this workflow is registered.
 name: Agent source sync
 
 on:
