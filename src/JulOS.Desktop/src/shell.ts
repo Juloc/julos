@@ -251,7 +251,7 @@ export class JulOsShell extends HTMLElement {
         <h2 id="about-title" data-message="about"></h2>
         <dl>
           <div><dt data-message="version"></dt><dd id="about-version" data-message="loading"></dd></div>
-          <div><dt>Component</dt><dd id="about-component">JulOS.Server</dd></div>
+          <div><dt data-message="component"></dt><dd id="about-component">JulOS.Server</dd></div>
         </dl>
         <button id="about-close" type="button" class="primary-button" data-message="close"></button>
       </dialog>
