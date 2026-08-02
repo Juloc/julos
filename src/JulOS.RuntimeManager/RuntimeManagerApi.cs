@@ -1,10 +1,21 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
+
 namespace JulOS.RuntimeManager;
 
+/// <summary>Validated Runtime Manager authentication and network configuration.</summary>
+/// <param name="ApiKey">Shared control-plane API key.</param>
+/// <param name="AllowedNetworks">Container networks packages may request.</param>
 public sealed record RuntimeManagerOptions(string ApiKey, IReadOnlyList<string> AllowedNetworks)
 {
+    /// <summary>Reads and validates Runtime Manager configuration.</summary>
+    /// <param name="configuration">Application configuration.</param>
+    /// <returns>Validated options.</returns>
     public static RuntimeManagerOptions Read(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -24,12 +35,16 @@ public sealed record RuntimeManagerOptions(string ApiKey, IReadOnlyList<string> 
     }
 }
 
+/// <summary>Authenticates every privileged Runtime Manager request in constant time.</summary>
 public sealed class RuntimeManagerAuthenticationMiddleware
 {
     private const string ApiKeyHeader = "X-JulOS-Runtime-Key";
     private readonly RequestDelegate next;
     private readonly byte[] expectedKey;
 
+    /// <summary>Creates the authentication middleware.</summary>
+    /// <param name="next">Next middleware delegate.</param>
+    /// <param name="options">Validated Runtime Manager options.</param>
     public RuntimeManagerAuthenticationMiddleware(RequestDelegate next, RuntimeManagerOptions options)
     {
         this.next = next ?? throw new ArgumentNullException(nameof(next));
@@ -37,6 +52,8 @@ public sealed class RuntimeManagerAuthenticationMiddleware
         this.expectedKey = Encoding.UTF8.GetBytes(options.ApiKey);
     }
 
+    /// <summary>Authenticates one request before forwarding it.</summary>
+    /// <param name="context">HTTP request context.</param>
     public async Task InvokeAsync(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -69,8 +86,12 @@ public sealed class RuntimeManagerAuthenticationMiddleware
     }
 }
 
+/// <summary>Maps the narrow authenticated Runtime Manager HTTP contract.</summary>
 public static class RuntimeManagerEndpoints
 {
+    /// <summary>Maps liveness and managed-runtime endpoints.</summary>
+    /// <param name="endpoints">Endpoint route builder.</param>
+    /// <returns>The same builder.</returns>
     public static IEndpointRouteBuilder MapRuntimeManager(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
