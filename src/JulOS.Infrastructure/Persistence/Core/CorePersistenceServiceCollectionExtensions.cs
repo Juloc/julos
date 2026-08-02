@@ -1,6 +1,8 @@
-﻿using JulOS.Application.Authorization;
+﻿using JulOS.Application.Auditing;
+using JulOS.Application.Authorization;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
+using JulOS.Infrastructure.Auditing;
 using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Profile;
@@ -24,6 +26,7 @@ public static class CorePersistenceServiceCollectionExtensions
 
         services.AddDbContext<CoreDbContext>(options => Configure(options, connectionString));
         services.AddScoped<InitialAdministratorProvisioner>();
+        services.AddScoped<IAuditService, PostgresAuditService>();
         services.AddScoped<IPermissionAssignmentReader, EfPermissionAssignmentReader>();
         services.AddScoped<IAuthorizationAdministration, IdentityAuthorizationAdministration>();
         services.AddScoped<IProfileService, EfProfileService>();
