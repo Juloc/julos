@@ -1,4 +1,4 @@
-name: Agent API-005 diagnostic validation
+name: Agent API-005 corrected validation
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: agent-api005-diagnostic-${{ github.event.pull_request.number }}
+  group: agent-api005-corrected-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -99,7 +99,7 @@ jobs:
           dotnet restore JulOS.slnx
           dotnet build JulOS.slnx --no-restore
 
-      - name: Generate and inspect profile migration
+      - name: Generate corrected profile migration
         shell: bash
         run: |
           set -euo pipefail
@@ -108,27 +108,42 @@ jobs:
             --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
             --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
             --output-dir Persistence/Core/Migrations
-          node tools/normalize-encoding.mjs
-          echo '--- generated migration ---'
+
           migration=$(find src/JulOS.Infrastructure/Persistence/Core/Migrations -maxdepth 1 -name '*_AddProfilePreferences.cs' -print -quit)
           test -n "$migration"
-          sed -n '1,260p' "$migration"
+          python3 - "$migration" <<'PY'
+          from pathlib import Path
+          import sys
 
-      - name: Run focused setup diagnostic
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding='utf-8-sig')
+          old = 'defaultValue: "");'
+          new = 'defaultValue: "enabled");'
+          if old not in text:
+              raise SystemExit('Expected motion migration default was not found.')
+          text = text.replace(old, new, 1)
+          path.write_text('\ufeff' + text, encoding='utf-8')
+          PY
+          node tools/normalize-encoding.mjs
+          sed -n '1,220p' "$migration"
+
+      - name: Diagnose integration failures
         shell: bash
         run: |
           set -o pipefail
           dotnet build JulOS.slnx --no-restore
-          dotnet test tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj \
-            --no-build \
-            --filter 'FullyQualifiedName~InitialSetupCreatesAdministratorAndProtectsTheApi' \
-            --logger 'console;verbosity=detailed' \
-            > /tmp/setup-test.log 2>&1 || {
-              echo '--- focused setup failure ---'
-              tail -n 350 /tmp/setup-test.log
-              exit 1
-            }
-          cat /tmp/setup-test.log
+          if dotnet test tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj \
+              --no-build \
+              --logger 'console;verbosity=detailed' \
+              > /tmp/integration-test.log 2>&1; then
+            cat /tmp/integration-test.log
+          else
+            echo '--- setup-related exception context ---'
+            grep -n -B 40 -A 180 -E 'InitialSetupCreatesAdministratorAndProtectsTheApi|Unhandled exception|PostgresException|DbUpdateException|InternalServerError|column .* does not exist|violates check constraint' /tmp/integration-test.log | tail -n 500 || true
+            echo '--- integration test summary ---'
+            tail -n 120 /tmp/integration-test.log
+            exit 1
+          fi
 
       - name: Run full repository validation
         run: sh tools/validate.sh
