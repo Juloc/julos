@@ -1,10 +1,13 @@
 ﻿import { applyAppearance, isMotionMode, isThemeMode } from './appearance.js';
+import { mapClientFailure, type ClientFailureState } from './client-failure.js';
+import { DesktopClientServices } from './client-services.js';
 import {
   normalizeLanguage,
   translate,
   type ShellMessageKey,
   type SupportedLanguage,
 } from './localization.js';
+import { SignalRJsonConnection } from './realtime-events.js';
 import { ShellApiClient, type ServerVersion } from './shell-api.js';
 
 const shellElementName = 'julos-shell';
@@ -27,6 +30,7 @@ export class JulOsShell extends HTMLElement {
   readonly #api: ShellApiClient;
   #language: SupportedLanguage = normalizeLanguage(globalThis.navigator?.language);
   #clockTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+  #clientServices: DesktopClientServices | null = null;
   #connected = false;
 
   public constructor(api = new ShellApiClient()) {
@@ -45,7 +49,7 @@ export class JulOsShell extends HTMLElement {
     this.#applyLanguage();
     this.#updateClock();
     this.#clockTimer = globalThis.setInterval(() => this.#updateClock(), 30_000);
-    void this.#loadSession();
+    void this.#initialize();
   }
 
   public disconnectedCallback(): void {
@@ -54,27 +58,58 @@ export class JulOsShell extends HTMLElement {
       this.#clockTimer = null;
     }
 
+    const services = this.#clientServices;
+    this.#clientServices = null;
+    if (services !== null) {
+      void services.stop();
+    }
+
     this.#connected = false;
   }
 
-  async #loadSession(): Promise<void> {
+  async #initialize(): Promise<void> {
+    const authenticated = await this.#loadSession();
+    if (!authenticated || !this.#connected) {
+      return;
+    }
+
+    const refresh = async (): Promise<void> => {
+      await this.#loadSession();
+    };
+    const services = new DesktopClientServices(
+      new SignalRJsonConnection(),
+      refresh,
+      refresh,
+    );
+    this.#clientServices = services;
+
+    try {
+      await services.start();
+    } catch (error) {
+      this.#showClientFailure(error);
+    }
+  }
+
+  async #loadSession(): Promise<boolean> {
     const userLabel = this.#requiredElement<HTMLElement>('current-user');
     const versionLabel = this.#requiredElement<HTMLElement>('desktop-version');
     const aboutVersion = this.#requiredElement<HTMLElement>('about-version');
     const aboutComponent = this.#requiredElement<HTMLElement>('about-component');
+    this.#hideClientFailure();
 
     try {
       const status = await this.#api.readAuthenticationStatus();
       if (status.setupRequired) {
         userLabel.textContent = translate(this.#language, 'setupRequired');
         this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
-        return;
+        return false;
       }
 
       if (!status.authenticated || status.user === null) {
         userLabel.textContent = translate(this.#language, 'signedOut');
+        this.#showClientState('unauthorized');
         this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
-        return;
+        return false;
       }
 
       userLabel.textContent = status.user.displayName;
@@ -83,6 +118,7 @@ export class JulOsShell extends HTMLElement {
         this.#api.readServerVersion(),
       ]);
 
+      let failure: unknown = null;
       if (profileResult.status === 'fulfilled') {
         const profile = profileResult.value;
         this.#language = normalizeLanguage(profile.preferredLanguage);
@@ -93,16 +129,33 @@ export class JulOsShell extends HTMLElement {
         userLabel.textContent = profile.displayName;
         this.#applyLanguage();
         this.#updateClock();
+      } else {
+        failure = profileResult.reason;
       }
 
       if (versionResult.status === 'fulfilled') {
         this.#showVersion(versionResult.value, versionLabel, aboutVersion, aboutComponent);
       } else {
+        failure ??= versionResult.reason;
         this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
       }
-    } catch {
-      userLabel.textContent = translate(this.#language, 'signedOut');
+
+      if (failure !== null) {
+        this.#showClientFailure(failure);
+        const state = mapClientFailure(failure).state;
+        return state !== 'offline' && state !== 'unauthorized';
+      }
+
+      return true;
+    } catch (error) {
+      const state = mapClientFailure(error).state;
+      userLabel.textContent = translate(
+        this.#language,
+        state === 'offline' ? 'offline' : 'signedOut',
+      );
+      this.#showClientFailure(error);
       this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
+      return false;
     }
   }
 
@@ -126,6 +179,42 @@ export class JulOsShell extends HTMLElement {
     versionLabel.textContent = unavailable;
     aboutVersion.textContent = unavailable;
     aboutComponent.textContent = 'JulOS.Server';
+  }
+
+  #showClientFailure(error: unknown): void {
+    const view = mapClientFailure(error);
+    this.#showClientState(view.state, view.detail, view.correlationId);
+  }
+
+  #showClientState(
+    state: ClientFailureState,
+    detail: string | null = null,
+    correlationId: string | null = null,
+  ): void {
+    const notice = this.#requiredElement<HTMLElement>('connection-notice');
+    const message = this.#requiredElement<HTMLElement>('connection-message');
+    const reference = this.#requiredElement<HTMLElement>('connection-reference');
+    const key: ShellMessageKey = state === 'offline'
+      ? 'offline'
+      : state === 'unauthorized'
+        ? 'signedOut'
+        : state === 'forbidden'
+          ? 'accessDenied'
+          : 'requestFailed';
+
+    notice.dataset['state'] = state;
+    notice.hidden = false;
+    message.textContent = detail ?? translate(this.#language, key);
+    reference.textContent = correlationId === null
+      ? ''
+      : `${translate(this.#language, 'reference')}: ${correlationId}`;
+    reference.hidden = correlationId === null;
+  }
+
+  #hideClientFailure(): void {
+    const notice = this.#requiredElement<HTMLElement>('connection-notice');
+    notice.hidden = true;
+    delete notice.dataset['state'];
   }
 
   #applyLanguage(): void {
@@ -204,6 +293,10 @@ export class JulOsShell extends HTMLElement {
       <main class="desktop" aria-label="JulOS Desktop">
         <section class="desktop-content" aria-labelledby="desktop-heading">
           <h1 id="desktop-heading" class="visually-hidden" data-message="desktop"></h1>
+          <div id="connection-notice" class="connection-notice" role="alert" hidden>
+            <strong id="connection-message"></strong>
+            <code id="connection-reference" hidden></code>
+          </div>
           <div class="empty-state" role="status">
             <div class="brand-mark" aria-hidden="true">J</div>
             <h2 data-message="noApplicationsTitle"></h2>
