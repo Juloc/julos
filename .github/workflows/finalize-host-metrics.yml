@@ -1,0 +1,64 @@
+name: Finalize Host Metrics package
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-host-metrics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Normalize, hash and add package to solution
+        run: |
+          node tools/normalize-encoding.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          frontend = Path('packages/JulOS.HostMetrics/frontend/host-metrics.js').read_bytes()
+          digest = hashlib.sha256(frontend).hexdigest().encode()
+          manifest = Path('packages/JulOS.HostMetrics/manifest.json')
+          data = manifest.read_bytes()
+          placeholder = b'0' * 64
+          if placeholder not in data:
+              raise SystemExit('Host Metrics manifest digest placeholder is missing.')
+          manifest.write_bytes(data.replace(placeholder, digest, 1))
+
+          solution = Path('JulOS.slnx')
+          solution_data = solution.read_bytes()
+          project = b'    <Project Path="packages/JulOS.HostMetrics/worker/JulOS.HostMetrics.Worker.csproj" />\r\n'
+          if project not in solution_data:
+              anchor = b'    <Project Path="packages/JulOS.ReferencePackage/worker/JulOS.ReferencePackage.Worker.csproj" />\r\n'
+              if anchor not in solution_data:
+                  raise SystemExit('Reference package solution anchor is missing.')
+              solution.write_bytes(solution_data.replace(anchor, anchor + project, 1))
+          PY
+          node tools/normalize-encoding.mjs
+
+      - name: Commit permanent package files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-host-metrics.yml
+          git add JulOS.slnx packages/JulOS.HostMetrics
+          git commit -m "Finalize Host Metrics package"
+          git pull --rebase origin agent/complete-julos-work-breakdown
+          git push origin HEAD:agent/complete-julos-work-breakdown
