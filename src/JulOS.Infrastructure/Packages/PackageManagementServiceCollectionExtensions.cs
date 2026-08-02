@@ -7,8 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace JulOS.Infrastructure.Packages;
 
+/// <summary>Registers package verification, storage, lifecycle, update and capability services.</summary>
 public static class PackageManagementServiceCollectionExtensions
 {
+    /// <summary>Adds the complete JulOS package-management Infrastructure implementation.</summary>
+    /// <param name="services">Dependency-injection service collection.</param>
+    /// <param name="configuration">Package root and trusted-publisher configuration.</param>
+    /// <param name="coreDatabaseConnectionString">Administrative Core PostgreSQL connection.</param>
+    /// <returns>The same service collection.</returns>
     public static IServiceCollection AddJulOsPackageManagement(
         this IServiceCollection services,
         IConfiguration configuration,
