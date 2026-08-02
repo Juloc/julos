@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://os.juloc.de/packages/reference/settings.schema.json",
   "title": "JulOS Reference Package Settings",
