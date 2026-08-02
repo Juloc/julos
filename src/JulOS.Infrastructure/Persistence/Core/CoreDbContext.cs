@@ -7,27 +7,14 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
-/// <summary>
-/// Persistence boundary for JulOS-owned Core state.
-/// </summary>
+/// <summary>Persistence boundary for JulOS-owned Core state.</summary>
 public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid>
 {
     private readonly TimeProvider timeProvider;
-    /// <summary>
-    /// Gets the PostgreSQL schema owned by the JulOS core platform.
-    /// </summary>
-    public const string SchemaName = "core";
 
-    /// <summary>
-    /// Gets the schema-qualified Entity Framework migration-history table name.
-    /// </summary>
+    public const string SchemaName = "core";
     public const string MigrationHistoryTableName = "__ef_migrations_history";
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CoreDbContext"/> class.
-    /// </summary>
-    /// <param name="options">The configured database-context options.</param>
-    /// <param name="timeProvider">The clock used for identity timestamps and revisions.</param>
     public CoreDbContext(
         DbContextOptions<CoreDbContext> options,
         TimeProvider? timeProvider = null)
@@ -47,6 +34,10 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<SessionReferenceRow> Sessions => this.Set<SessionReferenceRow>();
     internal DbSet<AgentRow> Agents => this.Set<AgentRow>();
     internal DbSet<AgentCapabilityRow> AgentCapabilities => this.Set<AgentCapabilityRow>();
+    internal DbSet<AgentEnrollmentTokenRow> AgentEnrollmentTokens => this.Set<AgentEnrollmentTokenRow>();
+    internal DbSet<AgentCredentialRow> AgentCredentials => this.Set<AgentCredentialRow>();
+    internal DbSet<AgentCommandRow> AgentCommands => this.Set<AgentCommandRow>();
+    internal DbSet<AgentMetricSampleRow> AgentMetricSamples => this.Set<AgentMetricSampleRow>();
     internal DbSet<ProblemRow> Problems => this.Set<ProblemRow>();
     internal DbSet<NotificationRow> Notifications => this.Set<NotificationRow>();
     internal DbSet<AuditEventRow> AuditEvents => this.Set<AuditEventRow>();
@@ -54,7 +45,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<OperationProgressEventRow> OperationProgressEvents => this.Set<OperationProgressEventRow>();
     internal DbSet<SecretReferenceRow> SecretReferences => this.Set<SecretReferenceRow>();
 
-    /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         try
@@ -68,7 +58,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         }
     }
 
-    /// <inheritdoc />
     public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
@@ -86,13 +75,12 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         }
     }
 
-    /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
-
         base.OnModelCreating(builder);
         CoreModelConfiguration.Configure(builder);
+        AgentPersistenceModelConfiguration.Configure(builder);
     }
 
     private void PrepareIdentityRevisions()
@@ -133,7 +121,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         var currentRevision = exception.Entries
             .Select(ReadCurrentRevision)
             .FirstOrDefault(revision => revision is not null);
-
         return new ConcurrencyConflictException(currentRevision, exception);
     }
 
@@ -149,7 +136,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
                 return new ConcurrencyConflictException(currentRevision, exception);
             }
         }
-
         return new ConcurrencyConflictException(currentRevision: null, exception);
     }
 
@@ -157,7 +143,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     {
         var revisionProperty = entry.Metadata.FindProperty(nameof(PackageInstallationRow.Revision));
         var databaseValues = entry.GetDatabaseValues();
-
         return revisionProperty is null || databaseValues is null
             ? null
             : databaseValues.GetValue<int>(revisionProperty.Name);
@@ -169,7 +154,6 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     {
         var revisionProperty = entry.Metadata.FindProperty(nameof(PackageInstallationRow.Revision));
         var databaseValues = await entry.GetDatabaseValuesAsync(cancellationToken).ConfigureAwait(false);
-
         return revisionProperty is null || databaseValues is null
             ? null
             : databaseValues.GetValue<int>(revisionProperty.Name);
