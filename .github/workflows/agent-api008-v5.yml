@@ -72,27 +72,33 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('src/JulOS.Server/Authorization/AuthorizationServices.cs')
           text = path.read_text(encoding='utf-8-sig')
-          anchor = '''            AddPermissionPolicy(
-              options,
-              JulOsAuthorizationPolicies.OperationCancel,
-              AuthorizationPermissionNames.OperationCancel);
-          '''
-          addition = anchor + '''            AddPermissionPolicy(
-              options,
-              JulOsAuthorizationPolicies.SecretRead,
-              AuthorizationPermissionNames.SecretRead);
-            AddPermissionPolicy(
-              options,
-              JulOsAuthorizationPolicies.SecretManage,
-              AuthorizationPermissionNames.SecretManage);
-          '''
           if 'JulOsAuthorizationPolicies.SecretManage,' not in text:
-              if anchor not in text:
-                  raise SystemExit('The operation-cancel policy registration anchor was not found.')
-              text = text.replace(anchor, addition, 1)
+              pattern = re.compile(
+                  r'(?m)^(?P<indent>[ \t]*)AddPermissionPolicy\(\s*'
+                  r'options,\s*'
+                  r'JulOsAuthorizationPolicies\.OperationCancel,\s*'
+                  r'AuthorizationPermissionNames\.OperationCancel\);')
+
+              def add_secret_policies(match):
+                  indent = match.group('indent')
+                  continuation = indent + '  '
+                  return match.group(0) + '\n' + (
+                      f'{indent}AddPermissionPolicy(\n'
+                      f'{continuation}options,\n'
+                      f'{continuation}JulOsAuthorizationPolicies.SecretRead,\n'
+                      f'{continuation}AuthorizationPermissionNames.SecretRead);\n'
+                      f'{indent}AddPermissionPolicy(\n'
+                      f'{continuation}options,\n'
+                      f'{continuation}JulOsAuthorizationPolicies.SecretManage,\n'
+                      f'{continuation}AuthorizationPermissionNames.SecretManage);')
+
+              text, count = pattern.subn(add_secret_policies, text, count=1)
+              if count != 1:
+                  raise SystemExit('The operation-cancel policy registration was not found exactly once.')
           path.write_text('\ufeff' + text, encoding='utf-8')
           PY
           node tools/normalize-encoding.mjs
