@@ -37,6 +37,11 @@ export interface PackageManagerSnapshot {
 
 export type PackageManagerListener = (snapshot: PackageManagerSnapshot) => void;
 
+interface AntiforgeryToken {
+  readonly headerName: string;
+  readonly token: string;
+}
+
 /** State model for the Core Package Manager application. */
 export class PackageManagerStore {
   readonly #api: JulOsApiClient;
@@ -46,7 +51,7 @@ export class PackageManagerStore {
   #activePackageId: string | null = null;
   #safeMode = false;
   #lastError: string | null = null;
-  #antiforgery: { readonly headerName: string; readonly token: string } | null = null;
+  #antiforgery: AntiforgeryToken | null = null;
 
   public constructor(fetchImplementation: typeof fetch = globalThis.fetch.bind(globalThis)) {
     this.#api = new JulOsApiClient(fetchImplementation);
@@ -154,9 +159,9 @@ export class PackageManagerStore {
     });
   }
 
-  async #readAntiforgery(): Promise<{ readonly headerName: string; readonly token: string }> {
+  async #readAntiforgery(): Promise<AntiforgeryToken> {
     if (this.#antiforgery === null) {
-      this.#antiforgery = await this.#api.get('/api/v1/auth/antiforgery');
+      this.#antiforgery = await this.#api.get<AntiforgeryToken>('/api/v1/auth/antiforgery');
     }
     return this.#antiforgery;
   }
