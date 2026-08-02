@@ -1,0 +1,66 @@
+﻿{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.hostmetrics",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-official",
+  "DisplayNameKey": "package.hostmetrics.name",
+  "DescriptionKey": "package.hostmetrics.description",
+  "Runtime": {
+    "Kind": "process",
+    "Image": null,
+    "EntryPoint": "worker/JulOS.HostMetrics.Worker.dll",
+    "MemoryLimitMegabytes": 128,
+    "CpuLimit": 0.5,
+    "StartupTimeoutSeconds": 30,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [
+    {
+      "StableKey": "host-metrics",
+      "DisplayNameKey": "app.hostmetrics.name",
+      "InstancePolicy": "single-instance-per-user",
+      "DefaultWidth": 920,
+      "DefaultHeight": 680,
+      "MinimumWidth": 480,
+      "MinimumHeight": 360,
+      "Viewports": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    }
+  ],
+  "Widgets": [
+    {
+      "StableKey": "host-summary",
+      "DisplayNameKey": "widget.hostmetrics.summary.name",
+      "ElementName": "julos-host-metrics-widget",
+      "Sizes": [
+        "small",
+        "medium",
+        "wide"
+      ],
+      "DefaultSize": "medium"
+    }
+  ],
+  "Capabilities": [
+    {
+      "Name": "host.metrics.read",
+      "Direction": "requires",
+      "ContractVersion": "1.0.0",
+      "Required": true
+    }
+  ],
+  "Migrations": [],
+  "Frontend": {
+    "ModulePath": "frontend/host-metrics.js",
+    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "ExportedElements": [
+      "julos-host-metrics-app",
+      "julos-host-metrics-widget"
+    ]
+  }
+}
