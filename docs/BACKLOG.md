@@ -45,7 +45,8 @@ Status values:
 | API-010 | Real-time event hub | Done | Authenticated SignalR envelopes are versioned; Desktop deduplicates events and refreshes authoritative state after reconnect. |
 | Phase 2 | Persistence, authentication and core APIs | Done | Gate passed: PostgreSQL, authentication, authorization, APIs, audit, secrets, operations and real-time events validate together. |
 | DESK-001 | Shell and design tokens | Done | Responsive Fluent 2 shell, taskbar, themes, localization, About dialog and server version are built into the Server image. |
-| Phase 3 | Desktop shell | In progress | `DESK-002` is next: typed API failures, correlation display and reconnect behavior. |
+| DESK-002 | Client API and event services | Done | Same-origin typed API calls, Problem Details, correlation references, distinct failure states and reconnect refresh are tested. |
+| Phase 3 | Desktop shell | In progress | `DESK-003` is next: deterministic window state and commands. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. |
@@ -56,19 +57,19 @@ Status values:
 
 ## Next issue
 
-### DESK-002 — Implement client API and event services
+### DESK-003 — Implement window store
 
 Scope:
 
-- typed same-origin API client
-- JulOS Problem Details mapping and correlation display
-- distinct offline, unauthorized and forbidden client states
-- reconnect refresh integration with the real-time service
+- deterministic open and close commands
+- focus and gap-free z-order
+- move, resize, minimize, restore and maximize transitions
+- unit coverage with at least five simultaneous windows
 
 Acceptance:
 
-- no raw authentication token is exposed to package modules
-- offline and unauthorized are distinct states
+- unit tests cover every state transition
+- five simultaneous windows remain usable
 
 ## Specification status
 
