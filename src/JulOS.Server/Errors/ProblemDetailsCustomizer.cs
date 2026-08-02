@@ -3,6 +3,7 @@ using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
+using JulOS.Application.Secrets;
 using JulOS.Contracts.Errors;
 using JulOS.Domain;
 
@@ -60,6 +61,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = profileFailure.Message;
         }
+        else if (exception is SecretReferenceFailureException secretFailure)
+        {
+            context.ProblemDetails.Detail = secretFailure.Message;
+        }
         else if (exception is not null)
         {
             context.ProblemDetails.Detail = null;
@@ -106,6 +111,13 @@ internal static class ProblemDetailsCustomizer
         if (exception is ProfileFailureException profileFailure)
         {
             return (profileFailure.Code, false);
+        }
+
+        if (exception is SecretReferenceFailureException secretFailure)
+        {
+            return (
+                secretFailure.Code,
+                secretFailure.Reason == SecretReferenceFailureReason.Unavailable);
         }
 
         return status switch

@@ -30,6 +30,7 @@ public sealed class CoreModelTests
             typeof(AgentCapabilityRow),
             typeof(ProblemRow),
             typeof(OperationRow),
+            typeof(SecretReferenceRow),
             typeof(LocalUser),
             typeof(LocalRole),
         };

@@ -38,6 +38,7 @@ public sealed class CoreMigrationTests
         CollectionAssert.Contains(tableNames, "desktop_layouts");
         CollectionAssert.Contains(tableNames, "session_references");
         CollectionAssert.Contains(tableNames, "audit_events");
+        CollectionAssert.Contains(tableNames, "secret_references");
 
         await using var migrationCommand = new NpgsqlCommand(
             "SELECT count(*) FROM core.__ef_migrations_history",
@@ -132,12 +133,14 @@ public sealed class CoreMigrationTests
                   'core.authorization.manage',
                   'core.operation.create',
                   'core.operation.read',
-                  'core.operation.cancel')
+                  'core.operation.cancel',
+                  'core.secret.read',
+                  'core.secret.manage')
             """,
             verification);
         grantCommand.Parameters.AddWithValue("role_id", administratorRoleId);
         Assert.AreEqual(
-            6L,
+            8L,
             Convert.ToInt64(
                 await grantCommand.ExecuteScalarAsync().ConfigureAwait(false),
                 System.Globalization.CultureInfo.InvariantCulture));
@@ -182,6 +185,19 @@ public sealed class CoreMigrationTests
                 (@id, 'Agent', 'machine', 'Linux', 'x64', '1.0.0', 'Revoked', now(), NULL, NULL, 1)
             """,
             "ck_agents_revoked_at").ConfigureAwait(false);
+
+        await AssertConstraintViolationAsync(
+            connection,
+            """
+            INSERT INTO core.secret_references
+                (id, owning_scope_type, owning_scope_id, purpose, storage_provider,
+                 encryption_key_id, nonce, ciphertext, authentication_tag,
+                 created_at_utc, rotated_at_utc, deleted_at_utc, revision)
+            VALUES
+                (@id, 'Package', 'de.juloc.invalid', 'remote.password', 'core-aes-gcm-v1',
+                 NULL, NULL, NULL, NULL, now(), NULL, NULL, 1)
+            """,
+            "ck_secret_references_protected_value").ConfigureAwait(false);
     }
 
     [TestMethod]

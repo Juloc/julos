@@ -147,6 +147,8 @@ Contracts contain no persistence annotations or implementation behavior.
 
 Contains core persistence, the ASP.NET Core Identity stores for local users and roles, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
 
+Secret storage is a Core-backed Infrastructure adapter. AES-256-GCM ciphertext, nonce, tag and key identifier are stored in PostgreSQL; the 32-byte key files are loaded from the absolute external `Secrets:KeyRingPath`. The active key identifier and lease lifetime are non-secret configuration, while key contents are deployment material. The HTTP layer exposes metadata-only create, read, rotate and delete operations; decrypted bytes exist only inside the operation-scoped Application lease.
+
 ### JulOS.Server
 
 ASP.NET Core composition root. It owns middleware, endpoint mapping, authentication setup, secure cookie configuration, default-deny fallback authorization, rate limiting, antiforgery, background-service registration and dependency injection wiring.

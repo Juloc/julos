@@ -52,6 +52,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<AuditEventRow> AuditEvents => this.Set<AuditEventRow>();
     internal DbSet<OperationRow> Operations => this.Set<OperationRow>();
     internal DbSet<OperationProgressEventRow> OperationProgressEvents => this.Set<OperationProgressEventRow>();
+    internal DbSet<SecretReferenceRow> SecretReferences => this.Set<SecretReferenceRow>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)

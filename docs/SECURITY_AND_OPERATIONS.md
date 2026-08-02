@@ -123,7 +123,13 @@ Requirements:
 - secret rotation does not require recreating unrelated configuration
 - deletion is explicit and auditable
 
-Development examples use placeholders only.
+Core secret references use AES-256-GCM. Every encryption uses a random 96-bit nonce and a 128-bit authentication tag. The opaque reference identity, owning scope and purpose are authenticated associated data, so ciphertext cannot be copied to a different reference or scope without detection.
+
+`Secrets:KeyRingPath` points to an absolute external directory containing one Base64-encoded 32-byte key per `<key-id>.key` file. `Secrets:ActiveKeyId` selects the key for new writes; retained files decrypt older rows. The directory must be readable only by the Server identity and backed up separately from PostgreSQL. Key files are never generated automatically in production, stored in the database, written to logs or included in ordinary application backup archives. Activating or retiring a key requires a controlled Server restart.
+
+Deletion clears the encryption-key identifier, nonce, ciphertext and authentication tag in the same transaction that appends the sanitized audit event. A lease is issued only for a running, non-cancelling operation whose package identity matches the reference scope, expires after 30 seconds to 15 minutes, and zeroes its in-memory buffer when disposed or expired.
+
+Development examples use generated test-only keys and placeholders only.
 
 ## 6. Agents
 

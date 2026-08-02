@@ -85,6 +85,8 @@ Application services implement core use cases through ports:
 - create and manage session references
 - lease secrets for one authorized operation
 
+The Core secret-reference service stores only AES-GCM ciphertext and non-secret metadata in PostgreSQL. Encryption keys live in an external file key ring owned by the deployment. The Application lease port checks the durable operation resource before decrypting: system secrets require a Core operation, package secrets require the same `SourcePackageId`, and cancelled, queued or terminal operations receive no lease. The byte buffer never crosses the HTTP API and is zeroed when the short lease ends.
+
 Application services do not perform product-specific protocol work.
 
 ## 5. JulOS Server

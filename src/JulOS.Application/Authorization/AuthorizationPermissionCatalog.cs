@@ -15,5 +15,7 @@ public static class AuthorizationPermissionCatalog
         PermissionName.Parse(AuthorizationPermissionNames.OperationCreate),
         PermissionName.Parse(AuthorizationPermissionNames.OperationRead),
         PermissionName.Parse(AuthorizationPermissionNames.OperationCancel),
+        PermissionName.Parse(AuthorizationPermissionNames.SecretRead),
+        PermissionName.Parse(AuthorizationPermissionNames.SecretManage),
     ];
 }

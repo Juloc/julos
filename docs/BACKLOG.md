@@ -40,7 +40,7 @@ Status values:
 | API-005 | Profile and preferences API | Done | Authenticated language, time-zone, theme and motion preferences use antiforgery and optimistic concurrency. |
 | API-006 | Problem Details and correlation IDs | Done | One failure shape for every path; correlation identifier on every response. |
 | API-007 | Operation-resource framework | Done | Durable queued/running/terminal state, idempotent creation, progress events and persistent cancellation requests. |
-| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-007` are done; `API-008` is next. |
+| Phase 2 | Persistence, authentication and core APIs | In progress | `API-001` through `API-008` are done; `API-009` is next. |
 | Phase 3 | Desktop shell | Planned | Depends on authentication, APIs and frontend foundation. |
 | Phase 4 | Package platform | Planned | Depends on stable Desktop host and Core contracts. |
 | Phase 5 | Agent and host observability | Planned | Depends on package and event foundations. |
@@ -52,18 +52,18 @@ Status values:
 
 ## Next issue
 
-### API-008 — Add secret-reference service
+### API-009 — Add audit service
 
 Scope:
 
-- encrypted Core-owned secret storage
-- opaque references that never expose stored values after creation
-- create, rotate, delete and operation-scoped lease port
+- append-only mutation audit service and query API
+- sanitized structured details and retention-safe paging
+- required security and infrastructure mutation coverage
 
 Acceptance:
 
-- secret values are never returned after creation
-- logs, audit details and API errors contain no plaintext secret
+- required security and infrastructure actions are audited
+- audit details are sanitized and never contain secret values
 
 ## Specification status
 

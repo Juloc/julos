@@ -3,6 +3,7 @@ using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
+using JulOS.Application.Secrets;
 using JulOS.Domain;
 
 namespace JulOS.Server.Errors;
@@ -87,6 +88,16 @@ internal static class ErrorHandling
             {
                 ProfileFailureReason.InvalidPreferences => StatusCodes.Status400BadRequest,
                 ProfileFailureReason.NotFound => StatusCodes.Status404NotFound,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            SecretReferenceFailureException secret => secret.Reason switch
+            {
+                SecretReferenceFailureReason.Invalid => StatusCodes.Status400BadRequest,
+                SecretReferenceFailureReason.NotFound => StatusCodes.Status404NotFound,
+                SecretReferenceFailureReason.Deleted => StatusCodes.Status409Conflict,
+                SecretReferenceFailureReason.LeaseDenied => StatusCodes.Status404NotFound,
+                SecretReferenceFailureReason.Unavailable => StatusCodes.Status503ServiceUnavailable,
+                SecretReferenceFailureReason.LeaseExpired => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
             },
             ConcurrencyConflictException => StatusCodes.Status409Conflict,

@@ -18,6 +18,11 @@ x-server-image: &server-image
     ASPNETCORE_HTTP_PORTS: 8080
     ConnectionStrings__CoreDatabase: >-
       Host=postgres;Port=5432;Database=${JULOS_POSTGRES_DB:-julos};Username=${JULOS_POSTGRES_USER:-julos};Password=${JULOS_POSTGRES_PASSWORD:?Set JULOS_POSTGRES_PASSWORD in deploy/compose/.env}
+    Secrets__ActiveKeyId: primary
+    Secrets__KeyRingPath: /run/julos-secret-keys
+    Secrets__LeaseLifetimeSeconds: 300
+  volumes:
+    - ${JULOS_SECRET_KEY_RING_PATH:?Set JULOS_SECRET_KEY_RING_PATH in deploy/compose/.env}:/run/julos-secret-keys:ro
 
 services:
   postgres:

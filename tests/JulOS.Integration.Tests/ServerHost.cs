@@ -1,4 +1,6 @@
-﻿using JulOS.Application.Concurrency;
+﻿using System.Security.Cryptography;
+
+using JulOS.Application.Concurrency;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -16,6 +18,8 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
     // and makes an accidental database access fail immediately.
     private const string UnreachableDatabase =
         "Host=127.0.0.1;Port=9;Database=julos_tests;Username=julos;Password=test-only;Timeout=1;Command Timeout=1";
+
+    private static readonly Lazy<string> SecretKeyRingPath = new(CreateSecretKeyRing);
 
     private readonly string connectionString;
     private readonly bool includeConcurrencyConflictEndpoint;
@@ -55,6 +59,9 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseSetting("ConnectionStrings:CoreDatabase", this.connectionString);
+        builder.UseSetting("Secrets:ActiveKeyId", "primary");
+        builder.UseSetting("Secrets:KeyRingPath", SecretKeyRingPath.Value);
+        builder.UseSetting("Secrets:LeaseLifetimeSeconds", "300");
         builder.UseEnvironment("Production");
 
         foreach (var setting in this.settings)
@@ -71,6 +78,24 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
                 services.AddSingleton<IStartupFilter, ConcurrencyConflictEndpointStartupFilter>();
             });
         }
+    }
+
+    private static string CreateSecretKeyRing()
+    {
+        var path = Path.Combine(
+            Path.GetTempPath(),
+            "julos-integration-tests",
+            $"secret-key-ring-{Environment.ProcessId}");
+        Directory.CreateDirectory(path);
+        var keyPath = Path.Combine(path, "primary.key");
+        if (!File.Exists(keyPath))
+        {
+            File.WriteAllText(
+                keyPath,
+                Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+        }
+
+        return path;
     }
 
     private sealed class ConcurrencyConflictEndpointStartupFilter : IStartupFilter

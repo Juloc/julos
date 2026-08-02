@@ -523,6 +523,14 @@ Acceptance:
 - secret value is never returned after creation
 - logs and audit tests contain no plaintext
 
+Status: done.
+
+Implemented through versioned metadata-only contracts, an Application service and lease port, AES-256-GCM protection in Infrastructure, Core PostgreSQL persistence and permission-protected Server endpoints. The active encryption key and retained decryption keys are loaded from external `*.key` files, never from PostgreSQL or ordinary configuration columns. Associated data binds ciphertext to the opaque reference, scope and purpose so copied or altered records fail authentication.
+
+Create and rotate accept a value only for the current request and return metadata without the value. Delete destroys the nonce, ciphertext, authentication tag and key identifier while retaining a revisioned tombstone. Every mutation appends an audit event whose summary and safe details state only that the value was omitted.
+
+The lease port releases decrypted bytes only for a running, non-cancelling operation whose Core or package identity owns the secret scope. Leases expire within the configured short lifetime and zero their buffers on expiry or disposal. Integration tests verify encryption at rest, response and audit redaction, antiforgery, optimistic concurrency, scope denial, rotation, deletion and real PostgreSQL constraints.
+
 ### API-009 — Add audit service
 
 Depends on: API-001, API-003.

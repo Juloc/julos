@@ -4,12 +4,14 @@
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
 using JulOS.Server.Profile;
 using JulOS.Server.Operations;
+using JulOS.Server.Secrets;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -42,6 +44,11 @@ builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();
+var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
+builder.Services.AddJulOsSecretReferences(
+    secretOptions.ActiveKeyId,
+    secretOptions.KeyRingPath,
+    secretOptions.LeaseLifetime);
 
 builder.Services
     .AddHealthChecks()
@@ -73,6 +80,7 @@ app.MapJulOsLocalAuthentication();
 app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsOperations();
+app.MapJulOsSecretReferences();
 
 app.MapGet(
     "/api/v1/system/version",

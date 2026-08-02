@@ -223,7 +223,10 @@ const stages = [
         'docker',
         ['compose', '--file', 'deploy/compose/compose.yaml', 'config', '--quiet'],
         repositoryRoot,
-        { JULOS_POSTGRES_PASSWORD: 'validation-placeholder' },
+        {
+  JULOS_POSTGRES_PASSWORD: 'validation-placeholder',
+  JULOS_SECRET_KEY_RING_PATH: './secret-keys',
+},
       );
 
       if (composeCheck.status === 'failed') {

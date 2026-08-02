@@ -226,6 +226,9 @@ Runtime Manager is security-critical. Tests verify:
 - cross-user layout and session isolation
 - package schema access isolation
 - secret values absent from APIs, logs and audit events
+- AES-GCM ciphertext differs across encryptions and fails when reference metadata is altered
+- secret-reference deletion clears protected-value columns
+- leases require a matching running operation, expire and zero their buffer
 - anti-forgery rejection
 - login rate limits
 - unsafe redirect rejection

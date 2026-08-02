@@ -20,6 +20,12 @@ public static class AuthorizationPermissionNames
 
     /// <summary>Requests cancellation of durable operations.</summary>
     public const string OperationCancel = "core.operation.cancel";
+
+    /// <summary>Reads non-secret secret-reference metadata.</summary>
+    public const string SecretRead = "core.secret.read";
+
+    /// <summary>Creates, rotates and deletes encrypted secret references.</summary>
+    public const string SecretManage = "core.secret.manage";
 }
 
 /// <summary>Stable subject names used by the authorization API.</summary>

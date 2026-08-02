@@ -302,7 +302,18 @@ DeletedAtUtc
 Revision
 ```
 
-No API returns the secret value after creation. A package receives an operation-specific credential lease through the secret service.
+`OwningScopeType` is `system` or `package` in the first contract. A package scope requires a valid package identity; a system scope has no scope identifier. `Purpose` is stable non-secret metadata and cannot be changed independently of the reference.
+
+The Core store additionally owns the encryption-key identifier, 96-bit nonce, ciphertext and 128-bit authentication tag. These fields are never transport members. Active rows require all protected-value fields; deletion clears all four fields and retains only the metadata tombstone.
+
+HTTP contract:
+
+- `POST /api/v1/secret-references` creates encrypted value material and returns metadata only
+- `GET /api/v1/secret-references/{id}` returns metadata only
+- `POST /api/v1/secret-references/{id}/rotation` replaces encrypted value material using an expected revision
+- `DELETE /api/v1/secret-references/{id}?revision={revision}` destroys value material
+
+No API returns the secret value after creation. A package or Core worker receives a short-lived operation-specific credential lease through the Application port only while the owning operation is running and not cancelling.
 
 ### 2.15 Problem
 

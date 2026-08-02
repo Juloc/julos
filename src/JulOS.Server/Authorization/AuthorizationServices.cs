@@ -43,6 +43,14 @@ internal static class AuthorizationServices
                 options,
                 JulOsAuthorizationPolicies.OperationCancel,
                 AuthorizationPermissionNames.OperationCancel);
+            AddPermissionPolicy(
+              options,
+              JulOsAuthorizationPolicies.SecretRead,
+              AuthorizationPermissionNames.SecretRead);
+            AddPermissionPolicy(
+              options,
+              JulOsAuthorizationPolicies.SecretManage,
+              AuthorizationPermissionNames.SecretManage);
         });
 
         return services;

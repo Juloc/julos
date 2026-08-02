@@ -247,3 +247,13 @@ Backend policies resolve direct user grants and grants inherited from current AS
 
 Reason: a role-name superuser branch would create a second authorization system outside the Domain model, hide missing assignments and make scoped permissions impossible to reason about. Explicit persisted grants keep policy behavior visible, testable and migratable. Existing administrators are backfilled during the `API-004` migration so an upgrade cannot lock out the operator.
 
+
+## D029 — External AES-GCM secret key ring
+
+**Status:** Accepted
+
+Core secret references use AES-256-GCM with a random 96-bit nonce and a 128-bit authentication tag. The reference identifier, owning scope and purpose are authenticated associated data. PostgreSQL stores ciphertext and the non-secret key identifier; 32-byte encryption keys are Base64 files in an external deployment-owned key-ring directory. One configured active key encrypts new values, while retained keys decrypt existing rows.
+
+The control plane never returns a stored value through HTTP. Decryption occurs only through the operation-scoped Application lease after the durable operation is verified as running, non-cancelling and owned by the matching Core or package scope. Lease buffers are zeroed on expiry or disposal. Deletion destroys all protected-value columns and retains a revisioned metadata tombstone plus a sanitized audit event.
+
+Reason: authenticated encryption protects confidentiality and detects record substitution without inventing a custom cryptographic construction. Keeping key files outside PostgreSQL means a database backup alone cannot decrypt credentials. A small explicit key ring supports controlled encryption-key rotation without an indefinite dual storage path or a dependency on an external secret product for the first supported deployment.
