@@ -1,0 +1,32 @@
+name: API-002 error branch
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-julos-work-breakdown
+          fetch-depth: 0
+      - name: Push diagnostic branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('.tmp/api002-first-error.txt').read_text(encoding='utf-8').strip().lower()
+          text = re.sub(r'[^a-z0-9]+', '-', text).strip('-')
+          print(text[:180])
+          PY
+          )"
+          git push --force origin HEAD:"debug-api002-${slug}"
