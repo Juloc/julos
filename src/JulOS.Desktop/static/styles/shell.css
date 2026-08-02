@@ -39,6 +39,46 @@ svg {
   padding: 32px;
 }
 
+.connection-notice {
+  position: absolute;
+  z-index: 10;
+  top: 16px;
+  left: 50%;
+  display: grid;
+  width: min(560px, calc(100% - 32px));
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--julos-color-border-strong);
+  border-left: 4px solid var(--julos-color-critical);
+  border-radius: var(--julos-radius-medium);
+  background: var(--julos-color-surface-solid);
+  box-shadow: var(--julos-shadow-flyout);
+  transform: translateX(-50%);
+}
+
+.connection-notice[hidden] {
+  display: none;
+}
+
+.connection-notice[data-state="unauthorized"] {
+  border-left-color: var(--julos-color-accent);
+}
+
+.connection-notice[data-state="forbidden"] {
+  border-left-color: var(--julos-color-critical);
+}
+
+.connection-notice strong {
+  font-weight: 600;
+}
+
+.connection-notice code {
+  color: var(--julos-color-text-secondary);
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .empty-state {
   max-width: 420px;
   text-align: center;
@@ -357,6 +397,11 @@ svg {
     padding: 20px;
   }
 
+  .connection-notice {
+    top: 8px;
+    width: calc(100% - 16px);
+  }
+
   .taskbar {
     right: 0;
     bottom: 0;
@@ -400,7 +445,8 @@ svg {
 @media (forced-colors: active) {
   .taskbar,
   .launcher-panel,
-  .about-dialog {
+  .about-dialog,
+  .connection-notice {
     border: 1px solid CanvasText;
   }
 
