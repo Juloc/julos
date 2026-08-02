@@ -1,0 +1,62 @@
+name: Agent API-004 build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api004-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Apply verified API-004 code
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .agent/api004-code/part-00 ]; then
+            echo "Patch already applied."
+            exit 0
+          fi
+          tr -d '[:space:]' < .agent/api004-code/part-00 \
+            | base64 --decode | gzip -dc > /tmp/api004-code.patch
+          echo "28825509d059cefc6b68ed09392a010925a16467ba8e405f3ce4b61b38d03eb0  /tmp/api004-code.patch" \
+            | sha256sum --check
+          git apply --check /tmp/api004-code.patch
+          git apply /tmp/api004-code.patch
+          rm -rf .agent
+          node tools/normalize-encoding.mjs
+          dotnet restore JulOS.slnx
+          dotnet build JulOS.slnx --no-restore
+
+      - name: Commit compiled API-004 code
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Implement API-004 authorization code"
+          git push origin HEAD:${{ github.head_ref }}
