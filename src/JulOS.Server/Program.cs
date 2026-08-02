@@ -6,6 +6,7 @@ using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
+using JulOS.Server.Auditing;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
@@ -81,6 +82,7 @@ app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
+app.MapJulOsAudit();
 
 app.MapGet(
     "/api/v1/system/version",
