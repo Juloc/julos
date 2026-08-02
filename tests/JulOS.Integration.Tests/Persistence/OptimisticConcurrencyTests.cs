@@ -1,6 +1,5 @@
 ﻿using JulOS.Application.Concurrency;
 using JulOS.Domain.Packages;
-using JulOS.Domain.Primitives;
 using JulOS.Infrastructure.Persistence.Core;
 
 using Microsoft.EntityFrameworkCore;
@@ -24,8 +23,8 @@ public sealed class OptimisticConcurrencyTests
             await setup.Database.MigrateAsync();
 
             var installation = PackageInstallation.BeginInstallation(
-                PackageInstallationId.From(EntityIdentifier.From(Guid.NewGuid())),
-                PackageId.From("com.julos.concurrency-test"));
+                new PackageInstallationId(Guid.CreateVersion7()),
+                PackageId.Parse("com.julos.concurrency-test"));
 
             setup.PackageInstallations.Add(PackageInstallationRow.FromDomain(installation));
             await setup.SaveChangesAsync();
