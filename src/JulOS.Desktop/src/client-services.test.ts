@@ -41,8 +41,12 @@ test('start loads authoritative API state before opening realtime delivery', asy
   const connection = new FakeConnection();
   const services = new DesktopClientServices(
     connection,
-    () => sequence.push('event'),
-    () => sequence.push('refresh'),
+    () => {
+      sequence.push('event');
+    },
+    () => {
+      sequence.push('refresh');
+    },
   );
 
   await services.start();
