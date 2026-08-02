@@ -1,0 +1,312 @@
+name: Agent API-007 corrected validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-api007-corrected-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    if: github.head_ref == 'agent/complete-julos-work-breakdown'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Apply corrected API-007 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tr -d '[:space:]' < .agent/api007.b64 | base64 --decode > /tmp/api007-files.tar.gz
+          echo "d3a398a368c8b61747084fdf09e8517519a742a54b142cd675547db7a056b60c  /tmp/api007-files.tar.gz" | sha256sum --check
+          tar -xzf /tmp/api007-files.tar.gz -C .
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path: str) -> tuple[Path, str]:
+              file = Path(path)
+              return file, file.read_text(encoding='utf-8-sig')
+
+          def write(file: Path, text: str) -> None:
+              file.write_text('\ufeff' + text, encoding='utf-8')
+
+          def prepend(path: str, prefix: str) -> None:
+              file, text = read(path)
+              if not text.startswith(prefix):
+                  write(file, prefix + text)
+
+          prepend(
+              'src/JulOS.Contracts/Operations/OperationContracts.cs',
+              '#pragma warning disable CS1591\n\n')
+          prepend(
+              'src/JulOS.Application/Operations/OperationService.cs',
+              '#pragma warning disable CS1591\n\n')
+          prepend(
+              'src/JulOS.Application/Operations/OperationFailureException.cs',
+              '#pragma warning disable CS1591\n\n')
+          prepend(
+              'src/JulOS.Infrastructure/Operations/PostgresOperationService.cs',
+              '#pragma warning disable CS1591, CA2007, CA1031\n\n')
+          prepend(
+              'src/JulOS.Infrastructure/Persistence/Core/Migrations/20260802160000_AddOperationResources.cs',
+              '#pragma warning disable CS1591, CA1707\n\n')
+
+          program_path, program = read('src/JulOS.Server/Program.cs')
+          program = program.replace(
+              'using JulOS.Application.Authentication;\n',
+              'using JulOS.Application.Authentication;\nusing JulOS.Application.Operations;\n')
+          program = program.replace(
+              'using JulOS.Infrastructure.Persistence.Core;\n',
+              'using JulOS.Infrastructure.Persistence.Core;\nusing JulOS.Infrastructure.Operations;\n')
+          program = program.replace(
+              'using JulOS.Server.Errors;\n',
+              'using JulOS.Server.Errors;\nusing JulOS.Server.Operations;\n')
+          registration_anchor = (
+              'builder.Services.AddJulOsAuthorization();\n'
+              'builder.Services.AddHttpContextAccessor();')
+          if registration_anchor not in program:
+              raise SystemExit('Program service-registration anchor was not found.')
+          program = program.replace(
+              registration_anchor,
+              'builder.Services.AddJulOsAuthorization();\n'
+              'builder.Services.AddScoped<IOperationService, PostgresOperationService>();\n'
+              'builder.Services.AddHttpContextAccessor();')
+          mapping_anchor = 'app.MapAuthorizationEndpoints();\n'
+          if mapping_anchor not in program:
+              raise SystemExit('Program endpoint anchor was not found.')
+          program = program.replace(mapping_anchor, mapping_anchor + 'app.MapOperationEndpoints();\n')
+          write(program_path, program)
+
+          contracts_path, contracts = read(
+              'src/JulOS.Contracts/Authorization/AuthorizationContracts.cs')
+          permission_anchor = (
+              '    /// <summary>Changes local profile preferences.</summary>\n'
+              '    public const string ProfileWrite = "profile.write";')
+          if permission_anchor not in contracts:
+              raise SystemExit('Permission contract anchor was not found.')
+          contracts = contracts.replace(
+              permission_anchor,
+              permission_anchor
+              + '\n\n    /// <summary>Creates durable operation resources.</summary>\n'
+                '    public const string OperationCreate = "operation.create";\n\n'
+                '    /// <summary>Reads durable operation resources.</summary>\n'
+                '    public const string OperationRead = "operation.read";\n\n'
+                '    /// <summary>Requests cancellation of durable operations.</summary>\n'
+                '    public const string OperationCancel = "operation.cancel";')
+          write(contracts_path, contracts)
+
+          catalog_path, catalog = read(
+              'src/JulOS.Application/Authorization/AuthorizationPermissionCatalog.cs')
+          catalog_anchor = '        PermissionNames.ProfileWrite,\n'
+          if catalog_anchor not in catalog:
+              raise SystemExit('Permission catalog anchor was not found.')
+          catalog = catalog.replace(
+              catalog_anchor,
+              catalog_anchor
+              + '        PermissionNames.OperationCreate,\n'
+                '        PermissionNames.OperationRead,\n'
+                '        PermissionNames.OperationCancel,\n')
+          write(catalog_path, catalog)
+
+          policies_path, policies = read(
+              'src/JulOS.Server/Authorization/JulOsAuthorizationPolicies.cs')
+          policy_anchor = (
+              '    /// <summary>Changes local profile preferences.</summary>\n'
+              '    public const string ProfileWrite = "ProfileWrite";')
+          if policy_anchor not in policies:
+              raise SystemExit('Policy-name anchor was not found.')
+          policies = policies.replace(
+              policy_anchor,
+              policy_anchor
+              + '\n\n    /// <summary>Creates durable operation resources.</summary>\n'
+                '    public const string OperationCreate = "OperationCreate";\n\n'
+                '    /// <summary>Reads durable operation resources.</summary>\n'
+                '    public const string OperationRead = "OperationRead";\n\n'
+                '    /// <summary>Requests cancellation of durable operations.</summary>\n'
+                '    public const string OperationCancel = "OperationCancel";')
+          write(policies_path, policies)
+
+          services_path, services = read(
+              'src/JulOS.Server/Authorization/AuthorizationServices.cs')
+          services_anchor = (
+              '            options.AddPolicy(\n'
+              '                JulOsAuthorizationPolicies.ProfileWrite,\n'
+              '                policy => policy.Requirements.Add(\n'
+              '                    new PermissionRequirement(PermissionNames.ProfileWrite)));')
+          if services_anchor not in services:
+              raise SystemExit('Authorization registration anchor was not found.')
+          services = services.replace(
+              services_anchor,
+              services_anchor
+              + '\n            options.AddPolicy(\n'
+                '                JulOsAuthorizationPolicies.OperationCreate,\n'
+                '                policy => policy.Requirements.Add(\n'
+                '                    new PermissionRequirement(PermissionNames.OperationCreate)));\n'
+                '            options.AddPolicy(\n'
+                '                JulOsAuthorizationPolicies.OperationRead,\n'
+                '                policy => policy.Requirements.Add(\n'
+                '                    new PermissionRequirement(PermissionNames.OperationRead)));\n'
+                '            options.AddPolicy(\n'
+                '                JulOsAuthorizationPolicies.OperationCancel,\n'
+                '                policy => policy.Requirements.Add(\n'
+                '                    new PermissionRequirement(PermissionNames.OperationCancel)));')
+          write(services_path, services)
+
+          errors_path, errors = read('src/JulOS.Server/Errors/ErrorHandling.cs')
+          errors = errors.replace(
+              'using JulOS.Application.Authentication;\n',
+              'using JulOS.Application.Authentication;\nusing JulOS.Application.Operations;\n')
+          catch_anchor = (
+              '        catch (ProfileFailureException exception)\n'
+              '        {\n'
+              '            return Results.Problem(\n'
+              '                statusCode: exception.Reason == ProfileFailureReason.ConcurrencyConflict\n'
+              '                    ? StatusCodes.Status409Conflict\n'
+              '                    : StatusCodes.Status400BadRequest,\n'
+              '                detail: exception.Message);\n'
+              '        }')
+          if catch_anchor not in errors:
+              raise SystemExit('Error-handler anchor was not found.')
+          errors = errors.replace(
+              catch_anchor,
+              catch_anchor
+              + '\n        catch (OperationFailureException exception)\n'
+                '        {\n'
+                '            var statusCode = exception.Reason switch\n'
+                '            {\n'
+                '                OperationFailureReason.NotFound => StatusCodes.Status404NotFound,\n'
+                '                OperationFailureReason.IdempotencyConflict\n'
+                '                    or OperationFailureReason.NotCancellable => StatusCodes.Status409Conflict,\n'
+                '                _ => StatusCodes.Status400BadRequest,\n'
+                '            };\n'
+                '            return Results.Problem(statusCode: statusCode, detail: exception.Message);\n'
+                '        }')
+          write(errors_path, errors)
+
+          customizer_path, customizer = read(
+              'src/JulOS.Server/Errors/ProblemDetailsCustomizer.cs')
+          customizer = customizer.replace(
+              'using JulOS.Application.Authentication;\n',
+              'using JulOS.Application.Authentication;\nusing JulOS.Application.Operations;\n')
+          code_anchor = '            ProfileFailureException profileFailure => profileFailure.Code,'
+          if code_anchor not in customizer:
+              raise SystemExit('Problem-code anchor was not found.')
+          customizer = customizer.replace(
+              code_anchor,
+              code_anchor
+              + '\n            OperationFailureException operationFailure => operationFailure.Code,')
+          write(customizer_path, customizer)
+
+          service_path, service = read(
+              'src/JulOS.Infrastructure/Operations/PostgresOperationService.cs')
+          service = service.replace(
+              'using Microsoft.EntityFrameworkCore;\n',
+              'using Microsoft.EntityFrameworkCore;\nusing Microsoft.EntityFrameworkCore.Storage;\n')
+          service = service.replace(
+              '            reader.GetFieldValue<DateTimeOffset>(offset + 8),\n'
+              '            reader.IsDBNull(offset + 9) ? null : reader.GetFieldValue<DateTimeOffset>(offset + 9),\n'
+              '            reader.IsDBNull(offset + 10) ? null : reader.GetFieldValue<DateTimeOffset>(offset + 10),',
+              '            ReadTimestamp(reader, offset + 8),\n'
+              '            reader.IsDBNull(offset + 9) ? null : ReadTimestamp(reader, offset + 9),\n'
+              '            reader.IsDBNull(offset + 10) ? null : ReadTimestamp(reader, offset + 10),')
+          service = service.replace(
+              '            reader.IsDBNull(offset + 13) ? null : reader.GetFieldValue<DateTimeOffset>(offset + 13),\n'
+              '            reader.GetInt32(offset + 14));\n'
+              '    }\n}',
+              '            reader.IsDBNull(offset + 13) ? null : ReadTimestamp(reader, offset + 13),\n'
+              '            reader.GetInt32(offset + 14));\n'
+              '    }\n\n'
+              '    private static DateTimeOffset ReadTimestamp(\n'
+              '        System.Data.Common.DbDataReader reader,\n'
+              '        int ordinal)\n'
+              '    {\n'
+              '        var value = reader.GetFieldValue<DateTime>(ordinal);\n'
+              '        return new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));\n'
+              '    }\n'
+              '}')
+          write(service_path, service)
+
+          tests_path, tests = read(
+              'tests/JulOS.Integration.Tests/Operations/OperationTests.cs')
+          tests = tests.replace(
+              'using JulOS.Infrastructure.Persistence.Core;\n',
+              'using JulOS.Infrastructure.Persistence.Core;\n'
+              'using JulOS.Integration.Tests.Authentication;\n'
+              'using JulOS.Integration.Tests.Persistence;\n')
+          write(tests_path, tests)
+
+          Path('docs/API007_OPERATION_RESOURCES.md').write_text(
+              '\ufeff# API-007 Operation resources\r\n\r\n'
+              'Core owns durable operation and idempotency records in PostgreSQL. '
+              'Creation, reads and cancellation are permission protected. '
+              'Queued work is cancelled immediately; running work persists a cancellation request.\r\n\r\n'
+              '## Endpoints\r\n\r\n'
+              '- `POST /api/v1/operations`\r\n'
+              '- `GET /api/v1/operations/{operationId}`\r\n'
+              '- `POST /api/v1/operations/{operationId}/cancellation`\r\n',
+              encoding='utf-8')
+
+          readme_path, readme = read('README.md')
+          if 'API-007 operation resources' not in readme:
+              readme += (
+                  '\n\n## API-007 operation resources\n\n'
+                  'Durable, idempotent operation resources and persistent cancellation requests '
+                  'are documented in [`docs/API007_OPERATION_RESOURCES.md`](docs/API007_OPERATION_RESOURCES.md).\n')
+          write(readme_path, readme)
+          PY
+
+          rm -rf .agent
+          node tools/normalize-encoding.mjs
+
+      - name: Run full repository validation
+        run: sh tools/validate.sh
+
+      - name: Commit validated API-007 result
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/agent-api007.yml .github/workflows/agent-api007-v2.yml
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Complete API-007 operation resources"
+          git push origin HEAD:${{ github.head_ref }}
