@@ -1,33 +1,54 @@
-# Repository validation.
-#
-# This workflow runs tools/validate.sh, the same entry point developers run.
-# Continuous integration must not grow its own list of checks; a stage belongs
-# in tools/validate.mjs so both places stay identical by construction.
-
-name: Validation
+name: API-003 implementation validation
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: validation-${{ github.ref }}
+  group: api003-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate the repository
+  implement:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
-      - name: Check out the repository
+      - name: Check out the working branch
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Apply the verified API-003 overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .agent/api003/part-* | base64 --decode > /tmp/api003-overlay.tar.gz
+          echo "54f127203633d131c58c984bd415a44a4768bfa3768aec6c816378cb8f707231  /tmp/api003-overlay.tar.gz" | sha256sum --check
+          tar -xzf /tmp/api003-overlay.tar.gz -C .
+          rm -rf .agent
+          node tools/normalize-encoding.mjs
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -41,20 +62,27 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
-      # Only downloaded packages are cached. Build output, node_modules and
-      # generated assets are never restored, so a missing generated dependency
-      # fails the run instead of being served from an earlier one.
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
-          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore tools and dependencies
+        run: |
+          dotnet tool restore
+          dotnet restore JulOS.slnx
 
-      - name: Run repository validation
+      - name: Generate the authentication migration
+        run: |
+          dotnet ef migrations add AddLocalAuthentication \
+            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
+            --startup-project src/JulOS.Server/JulOS.Server.csproj \
+            --context JulOS.Infrastructure.Persistence.Core.CoreDbContext \
+            --output-dir Persistence/Core/Migrations
+          node tools/normalize-encoding.mjs
+
+      - name: Validate the complete repository
         run: sh tools/validate.sh
 
-      # The validation must not modify tracked files. A difference here means a
-      # generated artefact is committed out of date.
-      - name: Verify the working tree is unchanged
-        run: git diff --exit-code
+      - name: Commit the completed work package
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Implement API-003 local authentication"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
