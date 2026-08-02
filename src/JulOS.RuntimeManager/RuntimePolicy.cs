@@ -2,6 +2,7 @@
 
 namespace JulOS.RuntimeManager;
 
+/// <summary>Validates every package runtime request against immutable isolation policy.</summary>
 public sealed class RuntimePolicy
 {
     private static readonly Regex IdentifierPattern = new(
@@ -26,6 +27,8 @@ public sealed class RuntimePolicy
 
     private readonly IReadOnlySet<string> allowedNetworks;
 
+    /// <summary>Creates a policy with the exact Docker networks packages may use.</summary>
+    /// <param name="allowedNetworks">Allowlisted non-host networks.</param>
     public RuntimePolicy(IEnumerable<string> allowedNetworks)
     {
         ArgumentNullException.ThrowIfNull(allowedNetworks);
@@ -43,6 +46,8 @@ public sealed class RuntimePolicy
         this.allowedNetworks = networks;
     }
 
+    /// <summary>Rejects unpinned images, unapproved networks, foreign volumes and secret-like environment fields.</summary>
+    /// <param name="request">Runtime request to validate.</param>
     public void Validate(RuntimeCreateRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -119,9 +124,11 @@ public sealed class RuntimePolicy
         }
     }
 
+    /// <summary>Returns the Docker ownership label for a package.</summary>
     public static string OwnershipLabel(string packageId) =>
         $"com.juloc.julos.package={packageId}";
 
+    /// <summary>Returns the Docker identity label for a managed runtime.</summary>
     public static string RuntimeLabel(string runtimeId) =>
         $"com.juloc.julos.runtime={runtimeId}";
 
