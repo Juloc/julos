@@ -22,6 +22,7 @@ namespace JulOS.Integration.Tests.Agents;
 public sealed class HostMetricsCapabilityTests
 {
     private const string PackageId = "de.juloc.julos.hostmetrics";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly WebApplicationFactoryClientOptions ClientOptions = new()
     {
         BaseAddress = new Uri("https://localhost"),
@@ -97,7 +98,7 @@ public sealed class HostMetricsCapabilityTests
             CancellationToken.None).ConfigureAwait(false);
 
         Assert.IsTrue(response.Succeeded);
-        var snapshot = response.Payload.Deserialize<HostMetricsSnapshotResponse>();
+        var snapshot = response.Payload.Deserialize<HostMetricsSnapshotResponse>(JsonOptions);
         Assert.IsNotNull(snapshot);
         Assert.AreEqual(HostMetricsSnapshotStates.Live, snapshot.State);
         Assert.IsFalse(snapshot.Stale);
