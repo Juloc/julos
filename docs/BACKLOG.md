@@ -31,8 +31,8 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | AGT-003 | Agent command dispatcher | Done | Typed polling, deadlines, diagnostics execution and server-side advertised-command authorization are implemented and integration-tested. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection plus valid/missing/malformed fixture tests are complete; deployed Debian validation remains. |
 | AGT-005 | Host metrics package and widgets | In progress | Persisted-metric provider, signed-manifest authorization, authenticated frontend bridge and live/stale/offline/error view logic are implemented; installed-package end-to-end validation remains. |
-| AGT-006 | Agent diagnostics and update foundation | In progress | Explicit protocol negotiation, shared capability inventory, structured reconnect diagnostics and a manual-only update preparation contract are implemented; full repository validation remains. |
-| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain. |
+| AGT-006 | Agent diagnostics and update foundation | Done | Exact protocol negotiation, shared capability inventory, bounded reconnect diagnostics and a manual-only digest-verified update preparation contract are implemented, documented and fully validated. |
+| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -41,24 +41,23 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### AGT-006 — Validate protocol diagnostics and update preparation
+### REM-001 — Define protocol-neutral Remote session contracts
 
 Scope:
 
-- reject missing, malformed and unsupported Agent protocol versions
-- confirm the exact protocol on enrollment and every runtime response
-- verify heartbeat and diagnostics share one capability inventory
-- validate bounded reconnect history and backoff reset after recovery
-- verify update preparation never downloads, applies or restarts automatically
-- validate the operational runbook against the implemented contracts
+- define versioned profile, session request, session state and display transport contracts
+- keep RDP, VNC and SSH protocol details outside Core
+- define explicit target, credential reference, network profile and viewport fields
+- define bounded lifecycle states, failure codes, deadlines and cancellation
+- provide a capability contract that later Remote workers can implement through Runtime Manager
 
 Acceptance:
 
-- incompatible Agents fail with HTTP 426 and actionable stable error codes
-- the Agent never silently downgrades or retries a terminal protocol failure
-- diagnostics include version, protocol, capabilities, reconnect state and update flags without secrets
-- explicit downgrade approval and a matching SHA-256 digest are required
-- automatic update flags remain false
+- Core and Desktop can represent a Remote session without referencing Julgate, Guacamole or one protocol library
+- credentials are referenced through secret handles and never embedded in session contracts
+- unsupported protocol, invalid target and expired request states fail closed
+- session identifiers and operation keys are idempotent and bounded
+- contracts and validation tests are complete before transport implementation starts
 - full repository validation remains green
 
 ## Specification status
