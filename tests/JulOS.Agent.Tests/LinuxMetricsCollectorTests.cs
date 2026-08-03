@@ -19,17 +19,33 @@ public sealed class LinuxMetricsCollectorTests
     }
 
     [TestMethod]
-    public async Task CpuUtilizationRequiresTwoObservationsAndPreservesTimestamp()
+    public async Task CollectorPreservesTimestampAndReadsAllLinuxMetricGroups()
     {
         var directory = this.CreateDirectory();
         var stat = Path.Combine(directory, "stat");
         var memory = Path.Combine(directory, "meminfo");
         var load = Path.Combine(directory, "loadavg");
+        var uptime = Path.Combine(directory, "uptime");
+        var network = Path.Combine(directory, "netdev");
         await File.WriteAllTextAsync(stat, "cpu  100 0 100 800 0 0 0 0 0 0\n");
         await File.WriteAllTextAsync(memory, "MemTotal: 1000 kB\nMemAvailable: 400 kB\n");
         await File.WriteAllTextAsync(load, "1.00 0.50 0.25 1/100 1\n");
+        await File.WriteAllTextAsync(uptime, "123.50 50.00\n");
+        await File.WriteAllTextAsync(
+            network,
+            "Inter-| Receive | Transmit\n"
+            + " face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed\n"
+            + "    lo: 100 1 0 0 0 0 0 0 200 1 0 0 0 0 0 0\n"
+            + "  eth0: 300 2 0 0 0 0 0 0 500 3 0 0 0 0 0 0\n");
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 2, 22, 0, 0, TimeSpan.Zero));
-        var collector = new LinuxMetricsCollector(clock, stat, memory, load, directory);
+        var collector = new LinuxMetricsCollector(
+            clock,
+            stat,
+            memory,
+            load,
+            directory,
+            uptime,
+            network);
 
         var first = await collector.CollectAsync(CancellationToken.None);
         Assert.IsNull(first.Single(metric => metric.Name == "host.cpu.utilization").Value);
@@ -44,6 +60,14 @@ public sealed class LinuxMetricsCollectorTests
         Assert.AreEqual(clock.GetUtcNow(), cpu.ObservedAtUtc);
         Assert.AreEqual(1024000d, second.Single(metric => metric.Name == "host.memory.total_bytes").Value);
         Assert.AreEqual(614400d, second.Single(metric => metric.Name == "host.memory.used_bytes").Value);
+        Assert.AreEqual(123.5d, second.Single(metric => metric.Name == "host.uptime.seconds").Value);
+        Assert.AreEqual(
+            300d,
+            second.Single(metric => metric.Name == "host.network.receive_bytes_total").Value);
+        Assert.AreEqual(
+            500d,
+            second.Single(metric => metric.Name == "host.network.transmit_bytes_total").Value);
+        Assert.IsTrue(second.All(metric => metric.ObservedAtUtc == clock.GetUtcNow()));
     }
 
     [TestMethod]
@@ -55,14 +79,40 @@ public sealed class LinuxMetricsCollectorTests
             Path.Combine(directory, "missing-stat"),
             Path.Combine(directory, "missing-memory"),
             Path.Combine(directory, "missing-load"),
-            Path.Combine(directory, "missing-disk"));
+            Path.Combine(directory, "missing-disk"),
+            Path.Combine(directory, "missing-uptime"),
+            Path.Combine(directory, "missing-network"));
 
         var metrics = await collector.CollectAsync(CancellationToken.None);
 
         Assert.IsNull(metrics.Single(metric => metric.Name == "host.cpu.utilization").Value);
         Assert.IsNull(metrics.Single(metric => metric.Name == "host.memory.total_bytes").Value);
         Assert.IsNull(metrics.Single(metric => metric.Name == "host.load.one").Value);
+        Assert.IsNull(metrics.Single(metric => metric.Name == "host.uptime.seconds").Value);
         Assert.IsNull(metrics.Single(metric => metric.Name == "host.disk.total_bytes").Value);
+        Assert.IsNull(metrics.Single(metric => metric.Name == "host.network.receive_bytes_total").Value);
+        Assert.IsNull(metrics.Single(metric => metric.Name == "host.network.transmit_bytes_total").Value);
+    }
+
+    [TestMethod]
+    public async Task MalformedNetworkDataFailsClosed()
+    {
+        var directory = this.CreateDirectory();
+        var network = Path.Combine(directory, "netdev");
+        await File.WriteAllTextAsync(network, "eth0: not-a-counter\n");
+        var collector = new LinuxMetricsCollector(
+            new FakeTimeProvider(),
+            Path.Combine(directory, "missing-stat"),
+            Path.Combine(directory, "missing-memory"),
+            Path.Combine(directory, "missing-load"),
+            directory,
+            Path.Combine(directory, "missing-uptime"),
+            network);
+
+        var metrics = await collector.CollectAsync(CancellationToken.None);
+
+        Assert.IsNull(metrics.Single(metric => metric.Name == "host.network.receive_bytes_total").Value);
+        Assert.IsNull(metrics.Single(metric => metric.Name == "host.network.transmit_bytes_total").Value);
     }
 
     private string CreateDirectory()
