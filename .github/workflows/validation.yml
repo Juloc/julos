@@ -20,6 +20,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  apply-agt002-service-patch:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.head_ref == 'agent/julos-1.0-agent-enrollment-bootstrap'
+      && github.actor != 'github-actions[bot]'
+    name: Apply the reviewed AGT-002 service patch once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out the pull-request branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Apply, remove and commit the patch
+        run: |
+          patch_path=.github/patches/agt002-idempotent-enrollment.patch
+          git apply --cached --check "$patch_path"
+          git apply --cached "$patch_path"
+          git rm --cached "$patch_path"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(agent): make enrollment retries idempotent"
+          git push origin HEAD:${{ github.head_ref }}
+
   validate:
     name: Validate the repository
     runs-on: ubuntu-latest
