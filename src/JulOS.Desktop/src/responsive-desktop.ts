@@ -11,14 +11,23 @@ export interface ResponsiveDesktopSnapshot {
   readonly activeWindowId: string | null;
 }
 
+export interface DerivedResponsiveDesktop {
+  readonly viewportClass: DesktopViewport;
+  readonly presentation: DesktopPresentationMode;
+  readonly usesTaskSwitching: boolean;
+  readonly visibleWindows: readonly DesktopWindowSnapshot[];
+  readonly taskWindows: readonly DesktopWindowSnapshot[];
+  readonly activeWindowId: string | null;
+}
+
 export interface ViewportThresholds {
   readonly tablet: number;
   readonly desktop: number;
 }
 
 const defaultThresholds: ViewportThresholds = {
-  tablet: 640,
-  desktop: 1024,
+  tablet: 720,
+  desktop: 1100,
 };
 
 /** Separates persisted layouts and presentation rules by viewport class. */
@@ -114,6 +123,41 @@ export function classifyViewport(
   }
   validateThresholds(thresholds);
   return width >= thresholds.desktop ? 'desktop' : width >= thresholds.tablet ? 'tablet' : 'mobile';
+}
+
+export function deriveResponsiveDesktop(
+  width: number,
+  windows: readonly DesktopWindowSnapshot[],
+  activeWindowId: string | null,
+  thresholds: ViewportThresholds = defaultThresholds,
+): DerivedResponsiveDesktop {
+  const viewportClass = classifyViewport(width, thresholds);
+  const taskWindows = [...windows].sort((left, right) => right.zIndex - left.zIndex);
+  if (viewportClass === 'desktop') {
+    return {
+      viewportClass,
+      presentation: 'windowed',
+      usesTaskSwitching: false,
+      visibleWindows: windows.filter((window) => window.state !== 'minimized'),
+      taskWindows,
+      activeWindowId: activeWindowId ?? taskWindows[0]?.id ?? null,
+    };
+  }
+
+  const requested = activeWindowId === null
+    ? null
+    : windows.find((window) => window.id === activeWindowId && window.state !== 'minimized') ?? null;
+  const selected = requested
+    ?? taskWindows.find((window) => window.state !== 'minimized')
+    ?? null;
+  return {
+    viewportClass,
+    presentation: viewportClass === 'mobile' ? 'task-switching' : 'focused',
+    usesTaskSwitching: viewportClass === 'mobile',
+    visibleWindows: selected === null ? [] : [selected],
+    taskWindows,
+    activeWindowId: selected?.id ?? null,
+  };
 }
 
 export function viewportLayoutKey(userId: string, viewport: DesktopViewport): string {
