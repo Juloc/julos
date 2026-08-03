@@ -39,6 +39,7 @@ public sealed class AgentIdentityStoreTests
         if (!OperatingSystem.IsLinux())
         {
             Assert.Inconclusive("Unix permission enforcement is validated on Linux.");
+            return;
         }
 
         var root = CreateRoot();
@@ -69,6 +70,7 @@ public sealed class AgentIdentityStoreTests
         if (!OperatingSystem.IsLinux())
         {
             Assert.Inconclusive("Symbolic-link identity enforcement is validated on Linux.");
+            return;
         }
 
         var root = CreateRoot();
