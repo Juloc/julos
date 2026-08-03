@@ -2,6 +2,7 @@
 using JulOS.Contracts.Packages;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
+using JulOS.Server.SafeMode;
 
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
@@ -121,9 +122,19 @@ internal static class PackageEndpoints
         PackageRevisionRequest request,
         IAntiforgery antiforgery,
         IPackageManagementService service,
+        SafeModeState safeMode,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+        if (safeMode.Enabled)
+        {
+            return Results.Conflict(new
+            {
+                code = "package.safe_mode",
+                detail = "Optional packages cannot be enabled while JulOS is in safe mode.",
+            });
+        }
+
         try
         {
             return TypedResults.Ok(ToResponse(await service.EnableAsync(
