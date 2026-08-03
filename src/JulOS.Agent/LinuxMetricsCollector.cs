@@ -10,6 +10,8 @@ internal sealed class LinuxMetricsCollector
     private readonly string procMemInfoPath;
     private readonly string procLoadAveragePath;
     private readonly string diskPath;
+    private readonly string procUptimePath;
+    private readonly string procNetworkPath;
     private readonly TimeProvider timeProvider;
     private CpuSample? previousCpu;
 
@@ -18,13 +20,17 @@ internal sealed class LinuxMetricsCollector
         string procStatPath = "/proc/stat",
         string procMemInfoPath = "/proc/meminfo",
         string procLoadAveragePath = "/proc/loadavg",
-        string diskPath = "/")
+        string diskPath = "/",
+        string procUptimePath = "/proc/uptime",
+        string procNetworkPath = "/proc/net/dev")
     {
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this.procStatPath = procStatPath;
         this.procMemInfoPath = procMemInfoPath;
         this.procLoadAveragePath = procLoadAveragePath;
         this.diskPath = diskPath;
+        this.procUptimePath = procUptimePath;
+        this.procNetworkPath = procNetworkPath;
     }
 
     internal async Task<IReadOnlyList<AgentMetricContract>> CollectAsync(
@@ -32,21 +38,36 @@ internal sealed class LinuxMetricsCollector
     {
         var observedAt = this.timeProvider.GetUtcNow();
         var metrics = new List<AgentMetricContract>();
-        var cpu = await ReadCpuAsync(cancellationToken).ConfigureAwait(false);
-        metrics.Add(Metric("host.cpu.utilization", CpuUtilization(cpu), "ratio", observedAt));
+        var cpu = await this.ReadCpuAsync(cancellationToken).ConfigureAwait(false);
+        metrics.Add(Metric("host.cpu.utilization", this.CpuUtilization(cpu), "ratio", observedAt));
 
-        var memory = await ReadMemoryAsync(cancellationToken).ConfigureAwait(false);
+        var memory = await this.ReadMemoryAsync(cancellationToken).ConfigureAwait(false);
         metrics.Add(Metric("host.memory.total_bytes", memory.TotalBytes, "bytes", observedAt));
         metrics.Add(Metric("host.memory.used_bytes", memory.UsedBytes, "bytes", observedAt));
 
-        var load = await ReadLoadAsync(cancellationToken).ConfigureAwait(false);
+        var load = await this.ReadLoadAsync(cancellationToken).ConfigureAwait(false);
         metrics.Add(Metric("host.load.one", load.One, "load", observedAt));
         metrics.Add(Metric("host.load.five", load.Five, "load", observedAt));
         metrics.Add(Metric("host.load.fifteen", load.Fifteen, "load", observedAt));
 
-        var disk = ReadDisk();
+        var uptime = await this.ReadUptimeAsync(cancellationToken).ConfigureAwait(false);
+        metrics.Add(Metric("host.uptime.seconds", uptime, "seconds", observedAt));
+
+        var disk = this.ReadDisk();
         metrics.Add(Metric("host.disk.total_bytes", disk.TotalBytes, "bytes", observedAt));
         metrics.Add(Metric("host.disk.used_bytes", disk.UsedBytes, "bytes", observedAt));
+
+        var network = await this.ReadNetworkAsync(cancellationToken).ConfigureAwait(false);
+        metrics.Add(Metric(
+            "host.network.receive_bytes_total",
+            network.ReceiveBytes,
+            "bytes",
+            observedAt));
+        metrics.Add(Metric(
+            "host.network.transmit_bytes_total",
+            network.TransmitBytes,
+            "bytes",
+            observedAt));
         return metrics;
     }
 
@@ -152,6 +173,10 @@ internal sealed class LinuxMetricsCollector
         {
             return new MemorySample(null, null);
         }
+        catch (OverflowException)
+        {
+            return new MemorySample(null, null);
+        }
     }
 
     private async Task<LoadSample> ReadLoadAsync(CancellationToken cancellationToken)
@@ -175,6 +200,26 @@ internal sealed class LinuxMetricsCollector
         }
     }
 
+    private async Task<double?> ReadUptimeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var text = await File.ReadAllTextAsync(this.procUptimePath, cancellationToken)
+                .ConfigureAwait(false);
+            var value = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            var uptime = value is null ? null : ParseDouble(value);
+            return uptime is >= 0 ? uptime : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private DiskSample ReadDisk()
     {
         try
@@ -191,6 +236,60 @@ internal sealed class LinuxMetricsCollector
         catch (UnauthorizedAccessException)
         {
             return new DiskSample(null, null);
+        }
+    }
+
+    private async Task<NetworkSample> ReadNetworkAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            ulong receiveBytes = 0;
+            ulong transmitBytes = 0;
+            var interfaces = 0;
+            foreach (var line in await File.ReadAllLinesAsync(this.procNetworkPath, cancellationToken)
+                         .ConfigureAwait(false))
+            {
+                var separator = line.IndexOf(':');
+                if (separator <= 0)
+                {
+                    continue;
+                }
+
+                var interfaceName = line[..separator].Trim();
+                if (interfaceName.Length == 0 || string.Equals(interfaceName, "lo", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var fields = line[(separator + 1)..]
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length < 16
+                    || !ulong.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var received)
+                    || !ulong.TryParse(fields[8], NumberStyles.None, CultureInfo.InvariantCulture, out var transmitted))
+                {
+                    return new NetworkSample(null, null);
+                }
+
+                receiveBytes = checked(receiveBytes + received);
+                transmitBytes = checked(transmitBytes + transmitted);
+                interfaces++;
+            }
+
+            return interfaces == 0
+                ? new NetworkSample(null, null)
+                : new NetworkSample(receiveBytes, transmitBytes);
+        }
+        catch (IOException)
+        {
+            return new NetworkSample(null, null);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new NetworkSample(null, null);
+        }
+        catch (OverflowException)
+        {
+            return new NetworkSample(null, null);
         }
     }
 
@@ -214,4 +313,5 @@ internal sealed class LinuxMetricsCollector
     private sealed record MemorySample(double? TotalBytes, double? UsedBytes);
     private sealed record LoadSample(double? One, double? Five, double? Fifteen);
     private sealed record DiskSample(double? TotalBytes, double? UsedBytes);
+    private sealed record NetworkSample(double? ReceiveBytes, double? TransmitBytes);
 }
