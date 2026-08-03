@@ -4,14 +4,13 @@ on:
   push:
     branches:
       - agent/julos-1.0-agent-integration-gates
-    paths:
-      - .github/workflows/renormalize-text.yml
 
 permissions:
   contents: write
 
 jobs:
   renormalize:
+    if: github.actor != 'github-actions[bot]'
     name: Renormalize tracked text blobs
     runs-on: ubuntu-latest
     timeout-minutes: 10
