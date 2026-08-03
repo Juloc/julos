@@ -4,6 +4,22 @@
 
 Set `JULOS_SAFE_MODE=true` before Server startup. The Server reports the state at `GET /api/v1/system/safe-mode` and rejects optional package enablement while safe mode is active. Disable safe mode only after the failing package or configuration has been corrected.
 
+## Agent enrollment
+
+Create a short-lived enrollment token through the authenticated Server API. Configure a new Linux Agent with:
+
+- `JULOS_SERVER_URL`: HTTPS URL of the JulOS Server. Plain HTTP is accepted only for a loopback development endpoint.
+- `JULOS_AGENT_ENROLLMENT_TOKEN`: one short-lived token used only until durable enrollment succeeds.
+- `JULOS_AGENT_NAME`: optional administrator-visible host name.
+- `JULOS_AGENT_IDENTITY_PATH`: optional absolute path; defaults to `/var/lib/julos-agent/identity.json` on Linux.
+- `JULOS_AGENT_MACHINE_ID_PATH`: optional absolute machine-identity source; defaults to `/etc/machine-id`.
+
+The Agent creates its durable credential locally, writes a pending identity document atomically, and retries only the exact same enrollment attempt after transient failures. The Server accepts an exact retry for recovery from a lost response and rejects any changed reuse of the token.
+
+On Linux, the identity document must be a regular file with mode `0600`. Symbolic links and group- or world-readable files are rejected. After successful enrollment, remove `JULOS_AGENT_ENROLLMENT_TOKEN` from the service configuration. Restarts load the durable Agent ID and credential from the protected identity document.
+
+Do not print, copy into diagnostics, or place enrollment tokens or identity documents in Compose files, command history, issue reports, or logs. Revoke the Agent from JulOS before intentionally deleting its identity document.
+
 ## Backup
 
 Run `tools/backup.sh` with `JULOS_BACKUP_POSTGRES` and, when package data is outside the default path, `JULOS_PACKAGE_ROOT`. The command creates a PostgreSQL custom-format dump, package-data archive, metadata and SHA-256 manifest in a temporary directory before atomically publishing the backup.
