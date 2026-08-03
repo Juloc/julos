@@ -12,8 +12,7 @@ internal sealed class AgentClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] SupportedCommands =
     [
-        "agent.ping",
-        "agent.collect-diagnostics",
+        "diagnostics.snapshot",
     ];
 
     private readonly HttpClient httpClient;
