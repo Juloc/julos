@@ -1,4 +1,4 @@
-﻿namespace JulOS.Server.System;
+﻿namespace JulOS.Server.SafeMode;
 
 internal sealed record SafeModeState(bool Enabled, string Source)
 {
@@ -8,16 +8,16 @@ internal sealed record SafeModeState(bool Enabled, string Source)
         var configured = configuration["SafeMode:Enabled"];
         if (!string.IsNullOrWhiteSpace(configured))
         {
-            return bool.TryParse(configured, out var enabled)
-                ? new SafeModeState(enabled, "configuration")
+            return bool.TryParse(configured, out var configuredEnabled)
+                ? new SafeModeState(configuredEnabled, "configuration")
                 : throw new InvalidOperationException("SafeMode:Enabled must be true or false.");
         }
 
         var environment = Environment.GetEnvironmentVariable("JULOS_SAFE_MODE");
         return string.IsNullOrWhiteSpace(environment)
             ? new SafeModeState(false, "default")
-            : bool.TryParse(environment, out var enabled)
-                ? new SafeModeState(enabled, "environment")
+            : bool.TryParse(environment, out var environmentEnabled)
+                ? new SafeModeState(environmentEnabled, "environment")
                 : throw new InvalidOperationException("JULOS_SAFE_MODE must be true or false.");
     }
 }
