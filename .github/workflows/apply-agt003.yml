@@ -1,0 +1,65 @@
+name: Apply AGT-003 service insertion
+
+on:
+  push:
+    branches:
+      - agent/julos-1.0-agent-command-capabilities
+    paths:
+      - .github/workflows/apply-agt003.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: Insert command capability enforcement
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/julos-1.0-agent-command-capabilities
+
+      - name: Apply exact source transformation
+        shell: pwsh
+        run: |
+          $path = 'src/JulOS.Infrastructure/Agents/PostgresAgentControlService.cs'
+          $source = [System.IO.File]::ReadAllText($path)
+          $before = @"
+                  if (existing is not null)
+                  {
+                      return ToResponse(existing);
+                  }
+
+                  var now = this.timeProvider.GetUtcNow();
+          "@
+          $after = @"
+                  if (existing is not null)
+                  {
+                      return ToResponse(existing);
+                  }
+
+                  await this.EnsureCommandAdvertisedAsync(
+                      agentId,
+                      request.CommandType,
+                      cancellationToken).ConfigureAwait(false);
+
+                  var now = this.timeProvider.GetUtcNow();
+          "@
+          $matches = [regex]::Matches($source, [regex]::Escape($before)).Count
+          if ($matches -ne 1) {
+            throw "Expected exactly one CreateCommandAsync insertion point, found $matches."
+          }
+          $source = $source.Replace($before, $after)
+          [System.IO.File]::WriteAllText($path, $source, [System.Text.UTF8Encoding]::new($true))
+
+      - name: Commit transformed service and remove workflow
+        run: |
+          git add src/JulOS.Infrastructure/Agents/PostgresAgentControlService.cs
+          git rm .github/workflows/apply-agt003.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(agent): require advertised commands before queueing"
+          git push origin HEAD:agent/julos-1.0-agent-command-capabilities
