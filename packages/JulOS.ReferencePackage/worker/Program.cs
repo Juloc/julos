@@ -1,36 +1,27 @@
 ﻿using JulOS.PackageSdk;
 
-var worker = new ReferencePackageWorker();
-var lifetime = new CancellationTokenSource();
-Console.CancelKeyPress += (_, eventArgs) =>
-{
-    eventArgs.Cancel = true;
-    lifetime.Cancel();
-};
-
-try
-{
-    await worker.StartAsync(lifetime.Token).ConfigureAwait(false);
-    await Task.Delay(Timeout.InfiniteTimeSpan, lifetime.Token).ConfigureAwait(false);
-}
-catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
-{
-}
-finally
-{
-    await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
-}
+return await PackageWorkerHost.RunAsync(
+    new ReferencePackageWorker(TimeProvider.System),
+    args).ConfigureAwait(false);
 
 internal sealed class ReferencePackageWorker : IJulOsPackageWorker
 {
+    private readonly TimeProvider timeProvider;
     private PackageWorkerContext? context;
     private bool running;
     private bool faultMode;
+
+    internal ReferencePackageWorker(TimeProvider timeProvider)
+    {
+        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    }
 
     public Task<PackageValidationResult> ValidateConfigurationAsync(
         IReadOnlyDictionary<string, string> configuration,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(configuration);
+        cancellationToken.ThrowIfCancellationRequested();
         var issues = new List<PackageValidationIssue>();
         foreach (var key in configuration.Keys)
         {
@@ -71,6 +62,7 @@ internal sealed class ReferencePackageWorker : IJulOsPackageWorker
     public Task ConfigureAsync(PackageWorkerContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        cancellationToken.ThrowIfCancellationRequested();
         this.context = context;
         this.faultMode = context.Configuration.TryGetValue("faultMode", out var value)
             && bool.TryParse(value, out var enabled)
@@ -78,8 +70,10 @@ internal sealed class ReferencePackageWorker : IJulOsPackageWorker
         return Task.CompletedTask;
     }
 
-    public Task<PackageRegistration> RegisterAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(new PackageRegistration(
+    public Task<PackageRegistration> RegisterAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(new PackageRegistration(
             [
                 new RegisteredApplication(
                     "reference",
@@ -104,9 +98,11 @@ internal sealed class ReferencePackageWorker : IJulOsPackageWorker
                 "reference.intentional_fault",
                 "warning",
                 "problem.reference.intentional_fault.title")]));
+    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (this.context is null)
         {
             throw new InvalidOperationException("Reference worker must be configured before start.");
@@ -117,17 +113,19 @@ internal sealed class ReferencePackageWorker : IJulOsPackageWorker
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         this.running = false;
         return Task.CompletedTask;
     }
 
     public Task<PackageHealthSnapshot> ReadHealthAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var status = !this.running ? "stopped" : this.faultMode ? "error" : "healthy";
         var detail = this.faultMode ? "Intentional reference-package fault mode is enabled." : null;
         return Task.FromResult(new PackageHealthSnapshot(
             status,
-            DateTimeOffset.UtcNow,
+            this.timeProvider.GetUtcNow(),
             detail,
             new Dictionary<string, decimal?>
             {
