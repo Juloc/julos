@@ -1,4 +1,6 @@
 ﻿using JulOS.Browser.Worker;
+using JulOS.PackageSdk;
 
-var worker = new BrowserWorker(TimeProvider.System);
-Console.WriteLine(worker.GetType().FullName);
+return await PackageWorkerHost.RunAsync(
+    new BrowserWorker(TimeProvider.System),
+    args).ConfigureAwait(false);
