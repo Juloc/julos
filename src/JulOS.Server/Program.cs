@@ -90,6 +90,7 @@ app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsDesktopLayouts();
 app.MapJulOsPackages();
+app.MapJulOsPackageCapabilities();
 app.MapJulOsPackageUpdates();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();

@@ -30,9 +30,9 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | AGT-002 | Agent identity and outbound connection | Done | First-run enrollment, recoverable exact retries, protected local identity persistence, restart loading and full repository validation are complete. |
 | AGT-003 | Agent command dispatcher | Done | Typed polling, deadlines, diagnostics execution and server-side advertised-command authorization are implemented and integration-tested. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection plus valid/missing/malformed fixture tests are complete; deployed Debian validation remains. |
-| AGT-005 | Host metrics package and widgets | Blocked | Frontend requests `host.metrics.read`, but no runtime capability provider currently exists. |
+| AGT-005 | Host metrics package and widgets | In progress | Persisted-metric provider, signed-manifest authorization, authenticated frontend bridge and live/stale/offline/error view logic are implemented; installed-package end-to-end validation remains. |
 | AGT-006 | Agent diagnostics and update foundation | In progress | Diagnostics snapshot and explicit update policy exist; compatibility diagnostics and installation/update runbook remain. |
-| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport and command authorization are implemented; Host Metrics provider and final operational validation block completion. |
+| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization and Host Metrics provider are implemented; deployed-host and installed-package validation remain. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -41,20 +41,22 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### AGT-004 — Validate complete Linux host metric collection
+### AGT-005 — Validate the installed Host Metrics package path
 
 Scope:
 
-- collect CPU, memory, load, uptime, storage and aggregate network counters
-- preserve one authoritative observation timestamp per collection batch
-- represent missing, malformed and inaccessible kernel values as unknown
-- validate behavior on a deployed Debian host
+- install, configure and enable the signed official Host Metrics package
+- invoke `host.metrics.read` through the authenticated package frontend endpoint
+- verify manifest-derived grant enforcement and package lifecycle rejection
+- validate live, stale, offline and unknown-value behavior in the running Desktop
+- preserve broker deadlines, cancellation and audit records
 
 Acceptance:
 
-- every required Linux metric group is present
-- unknown values are never replaced with zero
-- fixture and deployed-host checks pass
+- the installed package reads persisted metrics without direct Agent references
+- disabled, unhealthy and ungranted packages cannot invoke the capability
+- package app and widget show live, stale, offline and unavailable states
+- unknown values remain null and never render as zero
 - full repository validation remains green
 
 ## Specification status

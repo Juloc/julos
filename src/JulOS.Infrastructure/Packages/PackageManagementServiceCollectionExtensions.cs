@@ -63,8 +63,21 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<IPackageWorkerSupervisor>(),
             packageRoot,
             provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped<CapabilityBroker>();
-        services.AddScoped<ICapabilityClient>(provider => provider.GetRequiredService<CapabilityBroker>());
+        services.AddScoped<PackageCapabilityAuthorizer>(provider => new PackageCapabilityAuthorizer(
+            provider.GetRequiredService<CoreDbContext>(),
+            packageRoot));
+        services.AddScoped<HostMetricsCapabilityProvider>();
+        services.AddScoped<CapabilityBroker>(provider =>
+        {
+            var broker = new CapabilityBroker(
+                provider.GetRequiredService<JulOS.Application.Auditing.IAuditService>(),
+                provider.GetRequiredService<TimeProvider>());
+            var hostMetrics = provider.GetRequiredService<HostMetricsCapabilityProvider>();
+            broker.Register(hostMetrics.Descriptor.ProviderPackageId, hostMetrics);
+            return broker;
+        });
+        services.AddScoped<ICapabilityClient>(
+            provider => provider.GetRequiredService<CapabilityBroker>());
         return services;
     }
 

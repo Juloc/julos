@@ -11,8 +11,10 @@ namespace JulOS.HostMetrics.Worker
     internal sealed class HostMetricsWorker : IJulOsPackageWorker
     {
         private const string PackageId = "de.juloc.julos.hostmetrics";
+        private const string MetricsCapability = "host.metrics.read";
         private readonly TimeProvider timeProvider;
         private PackageWorkerContext? context;
+        private bool capabilityGranted;
         private bool running;
 
         internal HostMetricsWorker(TimeProvider timeProvider)
@@ -46,6 +48,9 @@ namespace JulOS.HostMetrics.Worker
             }
 
             this.context = context;
+            this.capabilityGranted = context.GrantedCapabilities.Contains(
+                MetricsCapability,
+                StringComparer.Ordinal);
             return Task.CompletedTask;
         }
 
@@ -93,6 +98,12 @@ namespace JulOS.HostMetrics.Worker
                 throw new InvalidOperationException("Host Metrics must be configured before start.");
             }
 
+            if (!this.capabilityGranted)
+            {
+                throw new InvalidOperationException(
+                    "Host Metrics requires the host.metrics.read capability grant.");
+            }
+
             this.running = true;
             return Task.CompletedTask;
         }
@@ -107,10 +118,21 @@ namespace JulOS.HostMetrics.Worker
         public Task<PackageHealthSnapshot> ReadHealthAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var status = !this.running
+                ? "stopped"
+                : this.capabilityGranted
+                    ? "healthy"
+                    : "unhealthy";
+            var detail = status switch
+            {
+                "stopped" => "Host Metrics worker is stopped.",
+                "unhealthy" => "The required host.metrics.read capability is not granted.",
+                _ => null,
+            };
             return Task.FromResult(new PackageHealthSnapshot(
-                this.running ? "healthy" : "stopped",
+                status,
                 this.timeProvider.GetUtcNow(),
-                this.running ? null : "Host Metrics worker is stopped.",
+                detail,
                 new Dictionary<string, decimal?>(StringComparer.Ordinal)));
         }
     }

@@ -7,21 +7,31 @@
       const surface = document.createElement('main');
       const heading = document.createElement('h1');
       const status = document.createElement('p');
+      const refresh = document.createElement('button');
       const list = document.createElement('dl');
       heading.textContent = context.language === 'de' ? 'Host-Metriken' : 'Host metrics';
-      status.textContent = context.language === 'de' ? 'Wird geladen' : 'Loading';
-      surface.append(heading, status, list);
+      refresh.type = 'button';
+      refresh.textContent = context.language === 'de' ? 'Aktualisieren' : 'Refresh';
+      surface.append(heading, status, refresh, list);
       shadow.append(surface);
-      void read().then((snapshot) => {
-        renderMetrics(list, snapshot);
-        status.textContent = snapshot.stale
-          ? (context.language === 'de' ? 'Veraltete Messung' : 'Stale observation')
-          : (context.language === 'de' ? 'Aktuell' : 'Current');
-      }).catch(() => {
-        status.textContent = context.language === 'de'
-          ? 'Metriken sind offline oder nicht erlaubt.'
-          : 'Metrics are offline or unauthorized.';
-      });
+
+      const load = async () => {
+        status.textContent = context.language === 'de' ? 'Wird geladen' : 'Loading';
+        refresh.disabled = true;
+        try {
+          const snapshot = await read();
+          renderMetrics(list, snapshot);
+          status.textContent = snapshotStatusText(snapshot, context.language);
+        } catch {
+          list.replaceChildren();
+          status.textContent = snapshotErrorText(context.language);
+        } finally {
+          refresh.disabled = false;
+        }
+      };
+
+      refresh.addEventListener('click', () => void load());
+      void load();
     }
   }
 
@@ -38,15 +48,12 @@
       button.addEventListener('click', () => context.openApplication('host-metrics'));
       shadow.append(button);
       void read().then((snapshot) => {
-        const cpu = snapshot.metrics?.find((metric) => metric.name === 'host.cpu.utilization');
-        if (typeof cpu?.value === 'number') {
-          value.textContent = `${Math.round(cpu.value * 100)}%`;
-          label.textContent = snapshot.stale
-            ? (context.language === 'de' ? 'CPU · veraltet' : 'CPU · stale')
-            : 'CPU';
-        }
+        const summary = cpuWidgetSummary(snapshot, context.language);
+        value.textContent = summary.value;
+        label.textContent = summary.label;
       }).catch(() => {
-        label.textContent = context.language === 'de' ? 'Agent offline' : 'Agent offline';
+        value.textContent = '—';
+        label.textContent = snapshotErrorText(context.language);
       });
     }
   }
@@ -59,9 +66,49 @@
   }
 }
 
+export function snapshotStatusText(snapshot, language) {
+  const german = language === 'de';
+  switch (snapshot?.state) {
+    case 'live':
+      return german ? 'Aktuell' : 'Current';
+    case 'stale':
+      return german ? 'Veraltete Messung' : 'Stale observation';
+    case 'offline':
+      return german ? 'Agent offline' : 'Agent offline';
+    case 'unavailable':
+      return german ? 'Noch keine Messwerte' : 'No observations yet';
+    default:
+      return snapshotErrorText(language);
+  }
+}
+
+export function snapshotErrorText(language) {
+  return language === 'de'
+    ? 'Metriken sind nicht verfügbar oder nicht erlaubt.'
+    : 'Metrics are unavailable or unauthorized.';
+}
+
+export function cpuWidgetSummary(snapshot, language) {
+  const cpu = snapshot?.metrics?.find((metric) => metric.name === 'host.cpu.utilization');
+  const status = snapshotStatusText(snapshot, language);
+  if (typeof cpu?.value !== 'number') {
+    return {
+      value: '—',
+      label: status,
+    };
+  }
+
+  return {
+    value: `${Math.round(cpu.value * 100)}%`,
+    label: snapshot?.state === 'live'
+      ? 'CPU'
+      : `CPU · ${status}`,
+  };
+}
+
 function renderMetrics(list, snapshot) {
   list.replaceChildren();
-  for (const metric of snapshot.metrics ?? []) {
+  for (const metric of snapshot?.metrics ?? []) {
     const term = document.createElement('dt');
     const value = document.createElement('dd');
     term.textContent = metric.name;
