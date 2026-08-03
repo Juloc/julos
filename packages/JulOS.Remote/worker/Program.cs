@@ -1,4 +1,6 @@
-﻿using JulOS.Remote.Worker;
+﻿using JulOS.PackageSdk;
+using JulOS.Remote.Worker;
 
-var worker = new RemoteWorker(TimeProvider.System);
-Console.WriteLine(worker.GetType().FullName);
+return await PackageWorkerHost.RunAsync(
+    new RemoteWorker(TimeProvider.System),
+    args).ConfigureAwait(false);
