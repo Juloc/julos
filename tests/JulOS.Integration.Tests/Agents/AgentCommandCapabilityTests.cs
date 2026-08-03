@@ -50,7 +50,7 @@ public sealed class AgentCommandCapabilityTests
             metadataVersion: 1,
             JsonSerializer.SerializeToElement(new
             {
-                commands = new[] { "diagnostics.snapshot" },
+                commands = AgentTestData.DiagnosticCommands,
             })).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.OK, enabledHeartbeat.StatusCode);
 
@@ -79,7 +79,7 @@ public sealed class AgentCommandCapabilityTests
             metadataVersion: 1,
             JsonSerializer.SerializeToElement(new
             {
-                commands = new[] { "diagnostics.snapshot" },
+                commands = AgentTestData.DiagnosticCommands,
             })).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.OK, disabledHeartbeat.StatusCode);
 
@@ -101,7 +101,7 @@ public sealed class AgentCommandCapabilityTests
             metadataVersion: 1,
             JsonSerializer.SerializeToElement(new
             {
-                commands = new[] { "diagnostics.snapshot" },
+                commands = AgentTestData.DiagnosticCommands,
             })).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.OK, incompatibleHeartbeat.StatusCode);
 
