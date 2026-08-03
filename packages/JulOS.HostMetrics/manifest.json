@@ -57,7 +57,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/host-metrics.js",
-    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "Sha256": "773693da1dd07c36be8498961d4997422c6994fa34df624331eb24a2871def60",
     "ExportedElements": [
       "julos-host-metrics-app",
       "julos-host-metrics-widget"
