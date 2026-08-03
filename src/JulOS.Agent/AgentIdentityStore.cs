@@ -29,6 +29,12 @@ internal sealed class AgentIdentityStore
 
     internal IDisposable AcquireProvisioningLock()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            throw new PlatformNotSupportedException(
+                "JulOS Agent provisioning locks are not supported on macOS.");
+        }
+
         var directory = this.EnsureDirectory();
         var lockPath = this.path + ".lock";
         RejectSymbolicLink(lockPath);
