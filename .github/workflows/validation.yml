@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          sh tools/validate.sh 2>&1 | tee validation-output.txt
+          sh tools/validate.sh 2>&1 | tee /tmp/validation-output.txt
 
       - name: Capture validation working-tree diagnostics
         if: always()
@@ -88,7 +88,7 @@ jobs:
         with:
           name: validation-diagnostics-${{ github.run_id }}
           path: |
-            validation-output.txt
+            /tmp/validation-output.txt
             validation-working-tree.txt
             validation-changed-files.txt
             validation-diff-stat.txt
