@@ -2,26 +2,9 @@
 
 using JulOS.HostMetrics.Worker;
 
-var worker = new HostMetricsWorker(TimeProvider.System);
-using var lifetime = new CancellationTokenSource();
-Console.CancelKeyPress += (_, eventArgs) =>
-{
-    eventArgs.Cancel = true;
-    lifetime.Cancel();
-};
-
-try
-{
-    await worker.StartAsync(lifetime.Token).ConfigureAwait(false);
-    await Task.Delay(Timeout.InfiniteTimeSpan, lifetime.Token).ConfigureAwait(false);
-}
-catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
-{
-}
-finally
-{
-    await worker.StopAsync(CancellationToken.None).ConfigureAwait(false);
-}
+return await PackageWorkerHost.RunAsync(
+    new HostMetricsWorker(TimeProvider.System),
+    args).ConfigureAwait(false);
 
 namespace JulOS.HostMetrics.Worker
 {
