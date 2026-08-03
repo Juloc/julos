@@ -45,12 +45,7 @@ export class PackageCapabilityClient {
 }
 
 function validateSegment(value: string, label: string): void {
-  if (
-    value.trim().length === 0
-    || value !== value.trim()
-    || value.length > 128
-    || /[\u0000-\u001f\u007f]/u.test(value)
-  ) {
+  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(value)) {
     throw new TypeError(`The ${label} is invalid.`);
   }
 }
