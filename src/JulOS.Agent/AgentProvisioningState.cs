@@ -103,7 +103,8 @@ internal sealed record AgentProvisioningState(
             return;
         }
 
-        if (this.AgentId is null or { } id && id == Guid.Empty
+        if (this.AgentId is not Guid agentId
+            || agentId == Guid.Empty
             || this.EnrolledAtUtc is null
             || this.HeartbeatIntervalSeconds is < 5 or > 300
             || this.CommandPollIntervalSeconds is < 1 or > 60)
