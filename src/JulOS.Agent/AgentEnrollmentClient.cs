@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -49,6 +50,12 @@ internal sealed class AgentEnrollmentClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.UpgradeRequired)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_incompatible",
+                "The Server rejected the Agent protocol version.");
+        }
         if (!response.IsSuccessStatusCode)
         {
             throw new HttpRequestException(
