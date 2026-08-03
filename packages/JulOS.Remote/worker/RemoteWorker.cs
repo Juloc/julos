@@ -123,7 +123,7 @@ public sealed class RemoteWorker : IJulOsPackageWorker
         string key,
         int minimum,
         int maximum,
-        ICollection<PackageValidationIssue> issues)
+        List<PackageValidationIssue> issues)
     {
         if (configuration.TryGetValue(key, out var value)
             && (!int.TryParse(value, out var parsed) || parsed < minimum || parsed > maximum))
