@@ -106,15 +106,15 @@ public sealed class AgentEndpointTests
                     Enabled: true,
                     MetadataVersion: 1,
                     JsonSerializer.SerializeToElement(new { platform = "linux" })),
-            new AgentCapabilityContract(
-                "agent.commands.core",
-                1,
-                Enabled: true,
-                MetadataVersion: 1,
-                JsonSerializer.SerializeToElement(new
-                {
-                    commands = new[] { "diagnostics.snapshot" },
-                })),
+                new AgentCapabilityContract(
+                    "agent.commands.core",
+                    1,
+                    Enabled: true,
+                    MetadataVersion: 1,
+                    JsonSerializer.SerializeToElement(new
+                    {
+                        commands = AgentTestData.DiagnosticCommands,
+                    })),
             ],
             observedAt);
         using var heartbeatResponse = await SendAgentRequestAsync(
