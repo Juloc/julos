@@ -2,20 +2,23 @@
 // Local authentication protects the control plane; feature endpoints follow later work items.
 
 using JulOS.Contracts.Diagnostics;
+using JulOS.Infrastructure.Agents;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
+using JulOS.Server.Agents;
 using JulOS.Server.Auditing;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
 using JulOS.Server.Events;
 using JulOS.Server.Layouts;
+using JulOS.Server.Operations;
 using JulOS.Server.Packages;
 using JulOS.Server.Profile;
-using JulOS.Server.Operations;
+using JulOS.Server.SafeMode;
 using JulOS.Server.Secrets;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -45,8 +48,10 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
+builder.Services.AddJulOsAgentControl();
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();
+builder.Services.AddSingleton(SafeModeState.Read(builder.Configuration));
 builder.Services.AddJulOsRealtimeEvents();
 builder.Services.AddJulOsPackageManagement(builder.Configuration, coreDatabase);
 var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
@@ -88,7 +93,9 @@ app.MapJulOsPackages();
 app.MapJulOsPackageUpdates();
 app.MapJulOsOperations();
 app.MapJulOsSecretReferences();
+app.MapJulOsSafeMode();
 app.MapJulOsAudit();
+app.MapJulOsAgents();
 app.MapJulOsRealtimeEvents();
 
 app.MapGet(
