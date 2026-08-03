@@ -1,6 +1,7 @@
 ﻿using System.Security.Cryptography;
 
 using JulOS.Agent;
+using JulOS.Contracts.Agents;
 
 namespace JulOS.Agent.Tests;
 
@@ -8,7 +9,7 @@ namespace JulOS.Agent.Tests;
 public sealed class AgentUpdatePolicyTests
 {
     [TestMethod]
-    public void UpgradeRequiresMatchingDigest()
+    public void UpgradeRequiresMatchingDigestAndManualInstallation()
     {
         var artifact = "agent-binary"u8.ToArray();
         var digest = Convert.ToHexStringLower(SHA256.HashData(artifact));
@@ -20,8 +21,11 @@ public sealed class AgentUpdatePolicyTests
             artifact,
             digest);
 
+        Assert.AreEqual(AgentUpdateContract.CurrentVersion, decision.ContractVersion);
         Assert.IsFalse(decision.IsDowngrade);
         Assert.AreEqual(digest, decision.ArtifactDigest);
+        Assert.IsTrue(decision.RequiresManualInstallation);
+        Assert.IsFalse(decision.AutomaticApplySupported);
     }
 
     [TestMethod]
@@ -38,6 +42,24 @@ public sealed class AgentUpdatePolicyTests
             digest));
 
         Assert.AreEqual("agent.update.downgrade_requires_approval", failure.Code);
+    }
+
+    [TestMethod]
+    public void ExplicitDowngradeStillRequiresManualInstallation()
+    {
+        var artifact = "agent-binary"u8.ToArray();
+        var digest = Convert.ToHexStringLower(SHA256.HashData(artifact));
+
+        var decision = new AgentUpdatePolicy().Validate(
+            "2.0.0",
+            "1.9.0",
+            allowExplicitDowngrade: true,
+            artifact,
+            digest);
+
+        Assert.IsTrue(decision.IsDowngrade);
+        Assert.IsTrue(decision.RequiresManualInstallation);
+        Assert.IsFalse(decision.AutomaticApplySupported);
     }
 
     [TestMethod]
