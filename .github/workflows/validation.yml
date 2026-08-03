@@ -20,103 +20,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integrate-agt003:
-    if: >-
-      github.event_name == 'pull_request'
-      && github.head_ref == 'agent/julos-1.0-agent-command-capabilities'
-      && github.actor != 'github-actions[bot]'
-    name: Integrate the reviewed AGT-003 source changes once
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out the pull-request branch
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Apply exact transformations
-        shell: pwsh
-        run: |
-          function Replace-ExactlyOnce {
-            param(
-              [string] $Path,
-              [string] $Before,
-              [string] $After,
-              [string] $Label
-            )
-            $source = [System.IO.File]::ReadAllText($Path).Replace("`r`n", "`n")
-            $matches = [regex]::Matches($source, [regex]::Escape($Before)).Count
-            if ($matches -ne 1) {
-              throw "$Label expected exactly one source match, found $matches."
-            }
-            $source = $source.Replace($Before, $After).Replace("`n", "`r`n")
-            [System.IO.File]::WriteAllText($Path, $source, [System.Text.UTF8Encoding]::new($true))
-          }
-
-          $serviceBefore = @'
-                  if (existing is not null)
-                  {
-                      return ToResponse(existing);
-                  }
-
-                  var now = this.timeProvider.GetUtcNow();
-          '@.TrimStart("`n")
-          $serviceAfter = @'
-                  if (existing is not null)
-                  {
-                      return ToResponse(existing);
-                  }
-
-                  await this.EnsureCommandAdvertisedAsync(
-                      agentId,
-                      request.CommandType,
-                      cancellationToken).ConfigureAwait(false);
-
-                  var now = this.timeProvider.GetUtcNow();
-          '@.TrimStart("`n")
-          Replace-ExactlyOnce `
-            'src/JulOS.Infrastructure/Agents/PostgresAgentControlService.cs' `
-            $serviceBefore `
-            $serviceAfter `
-            'CreateCommandAsync insertion'
-
-          $testBefore = 'JsonSerializer.SerializeToElement(new { platform = "linux" })),'
-          $testAfter = @'
-          JsonSerializer.SerializeToElement(new { platform = "linux" })),
-                      new AgentCapabilityContract(
-                          "agent.commands.core",
-                          1,
-                          Enabled: true,
-                          MetadataVersion: 1,
-                          JsonSerializer.SerializeToElement(new
-                          {
-                              commands = new[] { "diagnostics.snapshot" },
-                          })),
-          '@.TrimStart("`n").TrimEnd("`n")
-          Replace-ExactlyOnce `
-            'tests/JulOS.Integration.Tests/Agents/AgentEndpointTests.cs' `
-            $testBefore `
-            $testAfter `
-            'Agent lifecycle command advertisement'
-
-      - name: Remove temporary integration wiring and commit
-        run: |
-          git fetch origin agent/julos-1.0-agent-enrollment-bootstrap-clean
-          git show origin/agent/julos-1.0-agent-enrollment-bootstrap-clean:.github/workflows/validation.yml > .github/workflows/validation.yml
-          git rm .github/workflows/apply-agt003.yml
-          git add \
-            .github/workflows/validation.yml \
-            src/JulOS.Infrastructure/Agents/PostgresAgentControlService.cs \
-            tests/JulOS.Integration.Tests/Agents/AgentEndpointTests.cs
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "feat(agent): require advertised commands before queueing"
-          git push origin HEAD:${{ github.head_ref }}
-
   validate:
     name: Validate the repository
     runs-on: ubuntu-latest
@@ -155,6 +58,9 @@ jobs:
           cache: npm
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
+      # Only downloaded packages are cached. Build output, node_modules and
+      # generated assets are never restored, so a missing generated dependency
+      # fails the run instead of being served from an earlier one.
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -186,6 +92,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # The validation must not modify tracked files. A difference here means a
+      # generated artefact is committed out of date. Print the paths and diff
+      # summary first so the required deterministic update is actionable.
       - name: Verify the working tree is unchanged
         run: |
           git status --short
