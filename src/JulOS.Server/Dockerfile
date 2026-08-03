@@ -30,6 +30,7 @@ COPY .editorconfig global.json Directory.Build.props Directory.Packages.props VE
 COPY src/JulOS.Domain/JulOS.Domain.csproj src/JulOS.Domain/
 COPY src/JulOS.Contracts/JulOS.Contracts.csproj src/JulOS.Contracts/
 COPY src/JulOS.Application/JulOS.Application.csproj src/JulOS.Application/
+COPY src/JulOS.PackageSdk/JulOS.PackageSdk.csproj src/JulOS.PackageSdk/
 COPY src/JulOS.Infrastructure/JulOS.Infrastructure.csproj src/JulOS.Infrastructure/
 COPY src/JulOS.Server/JulOS.Server.csproj src/JulOS.Server/
 RUN dotnet restore src/JulOS.Server/JulOS.Server.csproj
@@ -37,6 +38,7 @@ RUN dotnet restore src/JulOS.Server/JulOS.Server.csproj
 COPY src/JulOS.Domain/ src/JulOS.Domain/
 COPY src/JulOS.Contracts/ src/JulOS.Contracts/
 COPY src/JulOS.Application/ src/JulOS.Application/
+COPY src/JulOS.PackageSdk/ src/JulOS.PackageSdk/
 COPY src/JulOS.Infrastructure/ src/JulOS.Infrastructure/
 COPY src/JulOS.Server/ src/JulOS.Server/
 RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
