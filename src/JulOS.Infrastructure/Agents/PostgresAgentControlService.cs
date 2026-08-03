@@ -452,6 +452,11 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
             return ToResponse(existing);
         }
 
+        await this.EnsureCommandAdvertisedAsync(
+            agentId,
+            request.CommandType,
+            cancellationToken).ConfigureAwait(false);
+
         var now = this.timeProvider.GetUtcNow();
         var row = new AgentCommandRow
         {
