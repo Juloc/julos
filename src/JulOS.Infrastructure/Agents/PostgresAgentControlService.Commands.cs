@@ -51,7 +51,7 @@ internal sealed partial class PostgresAgentControlService
                 "The Agent command capability observation is stale.");
         }
 
-        IReadOnlySet<string> commands;
+        HashSet<string> commands;
         try
         {
             commands = ParseAdvertisedCommands(capability.Metadata);
@@ -72,7 +72,7 @@ internal sealed partial class PostgresAgentControlService
         }
     }
 
-    private static IReadOnlySet<string> ParseAdvertisedCommands(string metadata)
+    private static HashSet<string> ParseAdvertisedCommands(string metadata)
     {
         using var document = JsonDocument.Parse(metadata);
         var root = document.RootElement;
