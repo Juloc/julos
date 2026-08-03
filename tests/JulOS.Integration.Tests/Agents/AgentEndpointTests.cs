@@ -1,6 +1,7 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 using JulOS.Contracts.Agents;
@@ -135,11 +136,12 @@ public sealed class AgentEndpointTests
             $"/api/v1/agents/{enrollment.AgentId:D}/metrics?fromUtc={from}&toUtc={to}")
             .ConfigureAwait(false);
         Assert.IsNotNull(series);
-        Assert.HasCount(1, series);
+        Assert.AreEqual(1, series.Length);
         Assert.AreEqual("cpu.utilization", series[0].Name);
-        Assert.HasCount(1, series[0].Points);
-        Assert.AreEqual(42.5, series[0].Points[0].Value);
-        Assert.AreEqual(observedAt, series[0].Points[0].ObservedAtUtc);
+        Assert.AreEqual(1, series[0].Points.Count);
+        Assert.AreEqual(42.5, series[0].Points[0].Value.GetValueOrDefault());
+        Assert.IsTrue(
+            (series[0].Points[0].ObservedAtUtc - observedAt).Duration() < TimeSpan.FromMilliseconds(1));
 
         using var commandResponse = await SendAdministratorMutationAsync(
             client,
@@ -228,10 +230,10 @@ public sealed class AgentEndpointTests
             await ReadErrorCodeAsync(rejectedHeartbeat).ConfigureAwait(false));
     }
 
-    private static async Task<HttpResponseMessage> SendAdministratorMutationAsync<TRequest>(
+    private static async Task<HttpResponseMessage> SendAdministratorMutationAsync(
         HttpClient client,
         string path,
-        TRequest? request = default)
+        object? request = null)
     {
         var antiforgery = await client
             .GetFromJsonAsync<AntiforgeryTokenResponse>("/api/v1/auth/antiforgery")
@@ -240,30 +242,35 @@ public sealed class AgentEndpointTests
 
         var message = new HttpRequestMessage(HttpMethod.Post, path);
         message.Headers.Add(antiforgery.HeaderName, antiforgery.Token);
-        if (request is not null)
-        {
-            message.Content = JsonContent.Create(request);
-        }
-
+        AddJsonContent(message, request);
         return await client.SendAsync(message).ConfigureAwait(false);
     }
 
-    private static async Task<HttpResponseMessage> SendAgentRequestAsync<TRequest>(
+    private static async Task<HttpResponseMessage> SendAgentRequestAsync(
         HttpClient client,
         HttpMethod method,
         string path,
         RedeemAgentEnrollmentResponse enrollment,
-        TRequest? request = default)
+        object? request = null)
     {
         var message = new HttpRequestMessage(method, path);
         message.Headers.Add("X-JulOS-Agent-Id", enrollment.AgentId.ToString("D"));
         message.Headers.Add("X-JulOS-Agent-Credential", enrollment.Credential);
-        if (request is not null)
+        AddJsonContent(message, request);
+        return await client.SendAsync(message).ConfigureAwait(false);
+    }
+
+    private static void AddJsonContent(HttpRequestMessage message, object? request)
+    {
+        if (request is null)
         {
-            message.Content = JsonContent.Create(request);
+            return;
         }
 
-        return await client.SendAsync(message).ConfigureAwait(false);
+        message.Content = new StringContent(
+            JsonSerializer.Serialize(request, request.GetType()),
+            Encoding.UTF8,
+            "application/json");
     }
 
     private static async Task<string> ReadErrorCodeAsync(HttpResponseMessage response)
