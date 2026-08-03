@@ -1,0 +1,36 @@
+name: Transfer AGT-004 implementation
+
+on:
+  push:
+    branches:
+      - agent/julos-1.0-linux-metrics-completion-clean
+    paths:
+      - .github/workflows/copy-agt004.yml
+
+permissions:
+  contents: write
+
+jobs:
+  transfer:
+    name: Copy only reviewed AGT-004 files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the clean branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/julos-1.0-linux-metrics-completion-clean
+          fetch-depth: 0
+
+      - name: Copy reviewed implementation and remove this workflow
+        run: |
+          git fetch origin agent/julos-1.0-linux-metrics-completion
+          git checkout origin/agent/julos-1.0-linux-metrics-completion -- \
+            src/JulOS.Agent/LinuxMetricsCollector.cs \
+            tests/JulOS.Agent.Tests/LinuxMetricsCollectorTests.cs
+          git rm .github/workflows/copy-agt004.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(agent): complete Linux host metric collection"
+          git push origin HEAD:agent/julos-1.0-linux-metrics-completion-clean
