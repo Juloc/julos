@@ -8,8 +8,10 @@ internal static class Program
     private static readonly string[] EnvironmentNames =
     [
         "JULOS_SERVER_URL",
-        "JULOS_AGENT_ID",
-        "JULOS_AGENT_CREDENTIAL",
+        "JULOS_AGENT_IDENTITY_PATH",
+        "JULOS_AGENT_MACHINE_ID_PATH",
+        "JULOS_AGENT_ENROLLMENT_TOKEN",
+        "JULOS_AGENT_NAME",
         "JULOS_AGENT_VERSION",
         "JULOS_AGENT_HEARTBEAT_SECONDS",
         "JULOS_AGENT_COMMAND_POLL_SECONDS",
@@ -17,13 +19,14 @@ internal static class Program
 
     private static async Task<int> Main()
     {
-        AgentOptions options;
+        AgentBootstrapOptions bootstrap;
         try
         {
-            options = AgentOptions.Read(EnvironmentNames.ToDictionary(
+            bootstrap = AgentBootstrapOptions.Read(EnvironmentNames.ToDictionary(
                 name => name,
                 Environment.GetEnvironmentVariable,
                 StringComparer.Ordinal));
+            Environment.SetEnvironmentVariable("JULOS_AGENT_ENROLLMENT_TOKEN", null);
         }
         catch (InvalidOperationException exception)
         {
@@ -40,11 +43,34 @@ internal static class Program
 
         try
         {
-            return await RunAsync(options, shutdown.Token).ConfigureAwait(false);
+            return await RunAsync(bootstrap, shutdown.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
             return 0;
+        }
+        catch (HttpRequestException exception)
+        {
+            var status = exception.StatusCode is null
+                ? "transport unavailable"
+                : $"HTTP {(int)exception.StatusCode.Value}";
+            Console.Error.WriteLine($"JulOS Agent enrollment failed ({status}).");
+            return 3;
+        }
+        catch (InvalidOperationException exception)
+        {
+            Console.Error.WriteLine($"JulOS Agent identity error: {exception.Message}");
+            return 4;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine("JulOS Agent identity state is not accessible.");
+            return 4;
+        }
+        catch (IOException)
+        {
+            Console.Error.WriteLine("JulOS Agent identity state could not be read or written.");
+            return 4;
         }
         catch (Exception exception)
         {
@@ -54,16 +80,26 @@ internal static class Program
         }
     }
 
-    private static async Task<int> RunAsync(AgentOptions options, CancellationToken cancellationToken)
+    private static async Task<int> RunAsync(
+        AgentBootstrapOptions bootstrap,
+        CancellationToken cancellationToken)
     {
         using var httpClient = new HttpClient
         {
-            BaseAddress = options.ServerEndpoint,
+            BaseAddress = bootstrap.ServerEndpoint,
             Timeout = TimeSpan.FromSeconds(30),
         };
-        httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("JulOS-Agent", options.Version));
+        httpClient.DefaultRequestHeaders.UserAgent.Add(
+            new ProductInfoHeaderValue("JulOS-Agent", bootstrap.Version));
 
         var timeProvider = TimeProvider.System;
+        var identityStore = new AgentIdentityStore(bootstrap.IdentityPath);
+        var provisioner = new AgentProvisioner(
+            identityStore,
+            new AgentEnrollmentClient(httpClient),
+            timeProvider);
+        var identity = await provisioner.ResolveAsync(bootstrap, cancellationToken).ConfigureAwait(false);
+        var options = AgentOptions.Create(bootstrap, identity);
         var client = new AgentClient(
             httpClient,
             options,
