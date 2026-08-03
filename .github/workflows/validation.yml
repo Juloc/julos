@@ -72,6 +72,10 @@ jobs:
         run: sh tools/validate.sh
 
       # The validation must not modify tracked files. A difference here means a
-      # generated artefact is committed out of date.
+      # generated artefact is committed out of date. Print the paths and diff
+      # summary first so the required deterministic update is actionable.
       - name: Verify the working tree is unchanged
-        run: git diff --exit-code
+        run: |
+          git status --short
+          git diff --stat
+          git diff --exit-code
