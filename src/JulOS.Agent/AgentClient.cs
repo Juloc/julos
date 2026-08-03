@@ -10,6 +10,12 @@ namespace JulOS.Agent;
 internal sealed class AgentClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly string[] SupportedCommands =
+    [
+        "agent.ping",
+        "agent.collect-diagnostics",
+    ];
+
     private readonly HttpClient httpClient;
     private readonly AgentOptions options;
     private readonly LinuxMetricsCollector metricsCollector;
@@ -70,7 +76,7 @@ internal sealed class AgentClient
                     1,
                     JsonSerializer.SerializeToElement(new
                     {
-                        commands = new[] { "agent.ping", "agent.collect-diagnostics" },
+                        commands = SupportedCommands,
                     })),
             ],
             this.timeProvider.GetUtcNow());
@@ -178,6 +184,7 @@ internal sealed class AgentClient
         {
             detail = detail[..512];
         }
+
         throw new HttpRequestException(
             $"JulOS Agent request failed with status {(int)response.StatusCode}: {detail}",
             inner: null,
