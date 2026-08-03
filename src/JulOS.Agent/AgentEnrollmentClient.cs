@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿using System.Globalization;
+using System.Net.Http.Json;
 using System.Text.Json;
 
 using JulOS.Contracts.Agents;
@@ -30,8 +31,11 @@ internal sealed class AgentEnrollmentClient
         var token = options.EnrollmentToken
             ?? throw new InvalidOperationException(
                 "JULOS_AGENT_ENROLLMENT_TOKEN is required until enrollment succeeds.");
-        using var response = await this.httpClient.PostAsJsonAsync(
-            "/api/v1/agent/enroll",
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/agent/enroll");
+        request.Headers.Add(
+            AgentProtocolContract.HeaderName,
+            AgentProtocolContract.CurrentVersion.ToString(CultureInfo.InvariantCulture));
+        request.Content = JsonContent.Create(
             new RedeemAgentEnrollmentRequest(
                 token,
                 pending.Credential,
@@ -40,7 +44,10 @@ internal sealed class AgentEnrollmentClient
                 pending.OperatingSystem,
                 pending.Architecture,
                 pending.Version),
-            JsonOptions,
+            options: JsonOptions);
+        using var response = await this.httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -50,10 +57,38 @@ internal sealed class AgentEnrollmentClient
                 response.StatusCode);
         }
 
+        ValidateNegotiatedProtocol(response);
         var enrollment = await response.Content.ReadFromJsonAsync<RedeemAgentEnrollmentResponse>(
             JsonOptions,
             cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Agent enrollment response is empty.");
         return pending.Complete(enrollment);
     }
+
+    private static void ValidateNegotiatedProtocol(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues(AgentProtocolContract.HeaderName, out var values)
+            || !int.TryParse(
+                values.SingleOrDefault(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var negotiated)
+            || negotiated != AgentProtocolContract.CurrentVersion)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_negotiation_failed",
+                "The Server did not confirm the requested Agent protocol version.");
+        }
+    }
+}
+
+internal sealed class AgentProtocolException : Exception
+{
+    internal AgentProtocolException(string code, string message)
+        : base(message)
+    {
+        this.Code = code;
+    }
+
+    internal string Code { get; }
 }
