@@ -54,22 +54,86 @@ namespace JulOS.HostMetrics.Worker
             return Task.CompletedTask;
         }
 
-        public Task<PackageRegistration> RegisterAsync(C`[˜Ù[][Û•ÚÙ[ˆØ[˜Ù[][Û•ÚÙ[ŠCBˆÃBˆØ[˜Ù[][Û•ÚÙ[‹•›İÒYØ[˜Ù[][Û”™\]Y\İY
+        public Task<PackageRegistration> RegisterAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new PackageRegistration(
+                [
+                    new RegisteredApplication(
+                        "host-metrics",
+                        "app.hostmetrics.name",
+                        "single-instance-per-user",
+                        920,
+                        680,
+                        480,
+                        360,
+                        ["desktop", "tablet", "mobile"]),
+                ],
+                [
+                    new RegisteredWidget(
+                        "host-summary",
+                        "widget.hostmetrics.summary.name",
+                        "julos-host-metrics-widget",
+                        ["small", "medium", "wide"],
+                        "medium"),
+                ],
+                [],
+                [
+                    new RegisteredProblemCondition(
+                        "agent-offline",
+                        "warning",
+                        "problem.hostmetrics.agent_offline"),
+                    new RegisteredProblemCondition(
+                        "metrics-stale",
+                        "warning",
+                        "problem.hostmetrics.metrics_stale"),
+                ]));
+        }
 
-NÃBˆ™]\›ˆ\ÚË‘œ›ÛT™\İ[
-™]ÈXÚØYÙT™YÚ\İ˜][ÛŠBˆÃBˆ™]È™YÚ\İ\™Y\XØ][ÛŠBˆšÜİ[Y]šXÜÈ‹Bˆ˜\šÜİY]šXÜË›˜[YH‹BˆœÚ[™ÛKZ[œİ[˜ÙK\\‹]\Ù\ˆ‹BˆLŒBˆBˆBˆÍŒBˆÈ™\ÚİÜ‹X›]‹›[Øš[H—JKBˆKBˆÃBˆ™]È™YÚ\İ\™YÚYÙ]
-BˆšÜİ\İ[[X\H‹BˆÚYÙ]šÜİY]šXÜËœİ[[X\K›˜[YH‹Bˆš[ÜËZÜİ[Y]šXÜË]ÚYÙ]‹BˆÈœÛX[‹›YY][H‹ÚYH—KBˆ›YY][HŠKBˆKBˆ×KBˆÃBˆ™]È™YÚ\İ\™Y›Ø›[PÛÛ™][ÛŠBˆ˜YÙ[[Ù™›[™H‹BˆØ\›š[™È‹Bˆœ›Ø›[KšÜİY]šXÜË˜YÙ[ÛÙ™›[™HŠKBˆ™]È™YÚ\İ\™Y›Ø›[PÛÛ™][ÛŠBˆ›Y]šXÜË\İ[H‹BˆØ\›š[™È‹Bˆœ›Ø›[KšÜİY]šXÜË›Y]šXÜ×Üİ[HŠKBˆJJNÃBˆCBƒBˆX›XÈ\ÚÈİ\\Ş[˜ÊØ[˜Ù[][Û•ÚÙ[ˆØ[˜Ù[][Û•ÚÙ[ŠCBˆÃBˆØ[˜Ù[][Û•ÚÙ[‹•›İÒYØ[˜Ù[][Û”™\]Y\İY
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (this.context is null)
+            {
+                throw new InvalidOperationException("Host Metrics must be configured before start.");
+            }
 
-NÃBˆYˆ
-\Ë˜ÛÛ^\È[
-CBˆÃBˆ›İÈ™]È[˜[YÜ\˜][Û‘^Ù\[ÛŠ’ÜİY]šXÜÈ]\İ™HÛÛ™šYİ\™Y™Y›Ü™Hİ\ˆŠNÃBˆCBƒBˆYˆ
-]\Ë˜Ø\Xš[]QÜ˜[Y
-CBˆÃBˆ›İÈ™]È[˜[YÜ\˜][Û‘^Ù\[ÛŠBˆ’ÜİY]šXÜÈ™\]Z\™\ÈHÜİ›Y]šXÜËœ™XYØ\Xš[]HÜ˜[ˆŠNÃBˆCBƒBˆ\Ëœ[›š[™ÈHYNÃBˆ™]\›ˆ\ÚËÛÛ\]Y\ÚÎÃBˆCBƒBˆX›XÈ\ÚÈİÜ\Ş[˜ÊØ[˜Ù[][Û•ÚÙ[ˆØ[˜Ù[][Û•ÚÙ[ŠCBˆÃBˆØ[˜Ù[][Û•ÚÙ[‹•›İÒYØ[˜Ù[][Û”™\]Y\İY
+            if (!this.capabilityGranted)
+            {
+                throw new InvalidOperationException(
+                    "Host Metrics requires the host.metrics.read capability grant.");
+            }
 
-NÃBˆ\Ëœ[›š[™ÈH˜[ÙNÃBˆ™]\›ˆ\ÚËÛÛ\]Y\ÚÎÃBˆCBƒBˆX›XÈ\ÚÏXÚØYÙRX[Û˜\Úİˆ™XYX[\Ş[˜ÊØ[˜Ù[][Û•ÚÙ[ˆØ[˜Ù[][Û•ÚÙ[ŠCBˆÃBˆØ[˜Ù[][Û•ÚÙ[‹•›İÒYØ[˜Ù[][Û”™\]Y\İY
+            this.running = true;
+            return Task.CompletedTask;
+        }
 
-NÃBˆ˜\ˆİ]\ÈH]\Ëœ[›š[™ÃBˆÈœİÜYƒBˆˆ\Ë˜Ø\Xš[]QÜ˜[YBˆÈšX[HƒBˆˆ[šX[HÃBˆ˜\ˆ]Z[Hİ]\ÈİÚ]ÚBˆÃBˆœİÜYˆOˆ’ÜİY]šXÜÈÛÜšÙ\ˆ\ÈİÜYˆ‹Bˆ[šX[HˆOˆ•H™\]Z\™YÜİ›Y]šXÜËœ™XYØ\Xš[]H\È›İÜ˜[Yˆ‹BˆÈOˆ[BˆNÃBˆ™]\›ˆ\ÚË‘œ›ÛT™\İ[
-™]ÈXÚØYÙRX[Û˜\Úİ
-Bˆİ]\ËBˆ\Ë[YT›İšY\‹‘Ù]]Ó›İÊ
-KBˆ]Z[Bˆ™]ÈXİ[Û˜\Oİš[™ËXÚ[X[ÏŠİš[™ĞÛÛ\\™\‹“Ü™[˜[
-JJNÃBˆCBˆCBŸCB
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            this.running = false;
+            return Task.CompletedTask;
+        }
+
+        public Task<PackageHealthSnapshot> ReadHealthAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var status = !this.running
+                ? "stopped"
+                : this.capabilityGranted
+                    ? "healthy"
+                    : "unhealthy";
+            var detail = status switch
+            {
+                "stopped" => "Host Metrics worker is stopped.",
+                "unhealthy" => "The required host.metrics.read capability is not granted.",
+                _ => null,
+            };
+            return Task.FromResult(new PackageHealthSnapshot(
+                status,
+                this.timeProvider.GetUtcNow(),
+                detail,
+                new Dictionary<string, decimal?>(StringComparer.Ordinal)));
+        }
+    }
+}
