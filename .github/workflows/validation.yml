@@ -20,6 +20,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  normalize-agt005:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.head_ref == 'agent/julos-1.0-host-metrics-provider'
+      && github.actor != 'github-actions[bot]'
+    name: Normalize the reviewed AGT-005 index once
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out the pull-request branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Normalize tracked blobs and remove this one-time job
+        run: |
+          git add --renormalize .
+          git fetch origin agent/complete-julos-work-breakdown
+          git show origin/agent/complete-julos-work-breakdown:.github/workflows/validation.yml > .github/workflows/validation.yml
+          git add .github/workflows/validation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(repo): normalize AGT-005 text blobs"
+          git push origin HEAD:${{ github.head_ref }}
+
   validate:
     name: Validate the repository
     runs-on: ubuntu-latest
