@@ -71,7 +71,32 @@ jobs:
       - name: Run repository validation
         run: sh tools/validate.sh
 
+      - name: Capture validation working-tree diagnostics
+        if: always()
+        run: |
+          git status --short > validation-working-tree.txt
+          git diff --name-only > validation-changed-files.txt
+          git diff --stat > validation-diff-stat.txt
+          git diff --binary > validation-working-tree.patch
+
+      - name: Upload validation working-tree diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-working-tree-${{ github.run_id }}
+          path: |
+            validation-working-tree.txt
+            validation-changed-files.txt
+            validation-diff-stat.txt
+            validation-working-tree.patch
+          if-no-files-found: error
+          retention-days: 7
+
       # The validation must not modify tracked files. A difference here means a
-      # generated artefact is committed out of date.
+      # generated artefact is committed out of date. Print the paths and diff
+      # summary first so the required deterministic update is actionable.
       - name: Verify the working tree is unchanged
-        run: git diff --exit-code
+        run: |
+          git status --short
+          git diff --stat
+          git diff --exit-code

@@ -11,16 +11,19 @@ namespace JulOS.Agent.Tests;
 public sealed class AgentCommandExecutorTests
 {
     [TestMethod]
-    public async Task PingCommandReturnsBoundedTypedResult()
+    public async Task DiagnosticsSnapshotReturnsBoundedTypedResult()
     {
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 2, 22, 0, 0, TimeSpan.Zero));
         var executor = new AgentCommandExecutor(clock, "1.0.0");
 
-        var result = await executor.ExecuteAsync(Command("agent.ping", clock.GetUtcNow().AddMinutes(1)), CancellationToken.None);
+        var result = await executor.ExecuteAsync(
+            Command("diagnostics.snapshot", clock.GetUtcNow().AddMinutes(1)),
+            CancellationToken.None);
 
         Assert.IsTrue(result.Succeeded);
         Assert.IsNull(result.ErrorCode);
-        Assert.IsTrue(result.Result.GetProperty("pong").GetBoolean());
+        Assert.AreEqual("1.0.0", result.Result.GetProperty("version").GetString());
+        Assert.AreEqual(clock.GetUtcNow(), result.Result.GetProperty("observedAtUtc").GetDateTimeOffset());
     }
 
     [TestMethod]
@@ -44,7 +47,7 @@ public sealed class AgentCommandExecutorTests
         var executor = new AgentCommandExecutor(clock, "1.0.0");
 
         var result = await executor.ExecuteAsync(
-            Command("agent.ping", clock.GetUtcNow().AddSeconds(-1)),
+            Command("diagnostics.snapshot", clock.GetUtcNow().AddSeconds(-1)),
             CancellationToken.None);
 
         Assert.IsFalse(result.Succeeded);

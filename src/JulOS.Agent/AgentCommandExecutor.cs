@@ -11,6 +11,7 @@ internal sealed record AgentCommandExecution(
 
 internal sealed class AgentCommandExecutor
 {
+    private const string DiagnosticsSnapshotCommand = "diagnostics.snapshot";
     private readonly TimeProvider timeProvider;
     private readonly string version;
 
@@ -35,12 +36,7 @@ internal sealed class AgentCommandExecutor
 
         return command.CommandType switch
         {
-            "agent.ping" => Task.FromResult(Success(new
-            {
-                pong = true,
-                observedAtUtc = this.timeProvider.GetUtcNow(),
-            })),
-            "agent.collect-diagnostics" => Task.FromResult(Success(new
+            DiagnosticsSnapshotCommand => Task.FromResult(Success(new
             {
                 version = this.version,
                 operatingSystem = Environment.OSVersion.Platform.ToString(),

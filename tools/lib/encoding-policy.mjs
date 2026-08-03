@@ -4,7 +4,9 @@
 // runtime executes or parses is UTF-8 with LF and no mark. Files that a tool
 // rewrites itself are excluded, because the policy cannot survive that tool.
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, extname, join } from 'node:path';
 
 import { repositoryRoot, toRepositoryPath, walkFiles } from './repository.mjs';
@@ -116,6 +118,47 @@ export async function findUnpinnedExtensions() {
   return missing;
 }
 
+/**
+ * Returns tracked files whose committed blobs bypass Git's configured clean
+ * conversion. This catches files written through APIs that do not apply
+ * `.gitattributes`, which would otherwise appear dirty after a tool rewrites
+ * them with the same logical content.
+ */
+async function findNonCanonicalBlobs() {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'julos-index-'));
+  const indexPath = join(temporaryDirectory, 'index');
+  const environment = { ...process.env, GIT_INDEX_FILE: indexPath };
+  const runGit = (arguments_) => spawnSync('git', arguments_, {
+    cwd: repositoryRoot,
+    env: environment,
+    encoding: 'utf8',
+  });
+
+  try {
+    const readTree = runGit(['read-tree', 'HEAD']);
+    if (readTree.error || readTree.status !== 0) {
+      return [`git read-tree failed during blob-normalization validation: ${readTree.stderr?.trim() ?? readTree.error?.message ?? 'unknown error'}`];
+    }
+
+    const renormalize = runGit(['add', '--renormalize', '.']);
+    if (renormalize.error || renormalize.status !== 0) {
+      return [`git add --renormalize failed during blob-normalization validation: ${renormalize.stderr?.trim() ?? renormalize.error?.message ?? 'unknown error'}`];
+    }
+
+    const difference = runGit(['diff', '--cached', '--name-only', 'HEAD', '--']);
+    if (difference.error || difference.status !== 0) {
+      return [`git diff failed during blob-normalization validation: ${difference.stderr?.trim() ?? difference.error?.message ?? 'unknown error'}`];
+    }
+
+    return difference.stdout
+      .split(/\r?\n/)
+      .filter((path) => path.length > 0)
+      .map((path) => `${path} (committed blob is not normalized through .gitattributes)`);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+}
+
 /** Returns the repository-relative paths of every file that violates the policy. */
 export async function findViolations() {
   const violations = [];
@@ -134,6 +177,7 @@ export async function findViolations() {
     }
   }
 
+  violations.push(...await findNonCanonicalBlobs());
   return violations;
 }
 
