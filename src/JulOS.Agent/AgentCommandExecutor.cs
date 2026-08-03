@@ -13,6 +13,7 @@ internal sealed record AgentCommandExecution(
 internal sealed class AgentCommandExecutor
 {
     private const string DiagnosticsSnapshotCommand = "diagnostics.snapshot";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider timeProvider;
     private readonly string version;
     private readonly AgentCapabilityInventory capabilityInventory;
@@ -67,8 +68,8 @@ internal sealed class AgentCommandExecutor
             AgentUpdateContract.AutomaticRestartSupported));
 
     private static AgentCommandExecution Success<T>(T value) =>
-        new(true, JsonSerializer.SerializeToElement(value), null);
+        new(true, JsonSerializer.SerializeToElement(value, JsonOptions), null);
 
     private static AgentCommandExecution Failure(string code) =>
-        new(false, JsonSerializer.SerializeToElement(new { }), code);
+        new(false, JsonSerializer.SerializeToElement(new { }, JsonOptions), code);
 }
