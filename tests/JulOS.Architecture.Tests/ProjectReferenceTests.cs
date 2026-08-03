@@ -21,6 +21,7 @@ public sealed class ProjectReferenceTests
         [PlatformProjects.PackageSdk] = [PlatformProjects.Contracts],
         [PlatformProjects.Agent] = [PlatformProjects.Contracts],
         [PlatformProjects.RuntimeManager] = [PlatformProjects.Contracts],
+        ["tests/JulOS.Agent.Tests/JulOS.Agent.Tests.csproj"] = [PlatformProjects.Agent],
         [PlatformProjects.ArchitectureTests] = [],
         [PlatformProjects.DomainTests] = [PlatformProjects.Domain],
         [PlatformProjects.InfrastructureTests] = [
