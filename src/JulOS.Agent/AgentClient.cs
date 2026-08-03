@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -83,6 +84,7 @@ internal sealed class AgentClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
         if (response.StatusCode == HttpStatusCode.NoContent)
         {
             return;
@@ -140,6 +142,7 @@ internal sealed class AgentClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
@@ -150,9 +153,31 @@ internal sealed class AgentClient
         request.Headers.Add("X-JulOS-Agent-Credential", this.options.Credential);
         request.Headers.Add(
             AgentProtocolContract.HeaderName,
-            AgentProtocolContract.CurrentVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            AgentProtocolContract.CurrentVersion.ToString(CultureInfo.InvariantCulture));
         request.Headers.Accept.ParseAdd("application/json");
         return request;
+    }
+
+    private static void ValidateServerProtocol(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.UpgradeRequired)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_incompatible",
+                "The Server rejected the Agent protocol version.");
+        }
+        if (!response.Headers.TryGetValues(AgentProtocolContract.HeaderName, out var values)
+            || !int.TryParse(
+                values.SingleOrDefault(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var protocolVersion)
+            || protocolVersion != AgentProtocolContract.CurrentVersion)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_negotiation_failed",
+                "The Server did not confirm the current Agent protocol version.");
+        }
     }
 
     private static async Task EnsureSuccessAsync(
