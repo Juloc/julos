@@ -61,7 +61,11 @@ export class LauncherCatalog {
       .filter(({ entry }) => isAuthorized(entry, grantedPermissions))
       .map(({ entry, normalized }) => ({ entry, score: scoreEntry(entry, normalized, terms) }))
       .filter((result) => terms.length === 0 || result.score > 0)
-      .sort((left, right) => right.score - left.score || left.entry.title.localeCompare(right.entry.title))
+      .sort((left, right) => (
+        right.score - left.score
+        || normalize(left.entry.title).length - normalize(right.entry.title).length
+        || left.entry.title.localeCompare(right.entry.title)
+      ))
       .slice(0, limit);
   }
 
