@@ -7,7 +7,7 @@ namespace JulOS.Agent;
 
 internal sealed class AgentCapabilityInventory
 {
-    private static readonly string[] SupportedCommands =
+    private readonly string[] supportedCommands =
     [
         "diagnostics.snapshot",
     ];
@@ -31,7 +31,7 @@ internal sealed class AgentCapabilityInventory
             MetadataVersion: 1,
             JsonSerializer.SerializeToElement(new
             {
-                commands = SupportedCommands,
+                commands = this.supportedCommands,
             })),
         new AgentCapabilityContract(
             "agent.diagnostics.core",
