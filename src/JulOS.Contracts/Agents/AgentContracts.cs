@@ -20,6 +20,7 @@ public sealed record AgentEnrollmentTokenResponse(
 
 /// <summary>Redeems one enrollment token and declares immutable Agent identity facts.</summary>
 /// <param name="Token">One-time enrollment token.</param>
+/// <param name="Credential">Client-generated durable credential for recoverable retries.</param>
 /// <param name="Name">Administrator-visible Agent name.</param>
 /// <param name="MachineIdentity">Stable host machine identity.</param>
 /// <param name="OperatingSystem">Agent operating-system description.</param>
@@ -27,6 +28,7 @@ public sealed record AgentEnrollmentTokenResponse(
 /// <param name="Version">Agent software version.</param>
 public sealed record RedeemAgentEnrollmentRequest(
     string Token,
+    string Credential,
     string Name,
     string MachineIdentity,
     string OperatingSystem,
@@ -35,7 +37,7 @@ public sealed record RedeemAgentEnrollmentRequest(
 
 /// <summary>Durable identity and credential returned after enrollment.</summary>
 /// <param name="AgentId">Created Agent identity.</param>
-/// <param name="Credential">Plaintext durable credential returned only at issuance.</param>
+/// <param name="Credential">Client-generated credential confirmed by the Server.</param>
 /// <param name="EnrolledAtUtc">Enrollment time.</param>
 /// <param name="HeartbeatIntervalSeconds">Required heartbeat interval.</param>
 /// <param name="CommandPollIntervalSeconds">Required command polling interval.</param>
