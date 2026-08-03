@@ -28,11 +28,11 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 4 | Package platform | Done | Complete package platform is implemented. |
 | AGT-001 | Enrollment tokens and server identity issuance | Done | One-time hashed token redemption, durable credentials, audit, reuse rejection and HTTP integration coverage are implemented. |
 | AGT-002 | Agent identity and outbound connection | Done | First-run enrollment, recoverable exact retries, protected local identity persistence, restart loading and full repository validation are complete. |
-| AGT-003 | Agent command dispatcher | In progress | Typed polling, deadlines and `diagnostics.snapshot` execution exist; server-side advertised-command enforcement remains. |
+| AGT-003 | Agent command dispatcher | Done | Typed polling, deadlines, diagnostics execution and server-side advertised-command authorization are implemented and integration-tested. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection exists; deployed-host validation remains. |
 | AGT-005 | Host metrics package and widgets | Blocked | Frontend requests `host.metrics.read`, but no runtime capability provider currently exists. |
 | AGT-006 | Agent diagnostics and update foundation | In progress | Diagnostics snapshot and explicit update policy exist; compatibility diagnostics and installation/update runbook remain. |
-| Phase 5 | Agent and host observability | In progress | Agent enrollment and runtime transport are implemented; command authorization and the Host Metrics provider block phase completion. |
+| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport and command authorization are implemented; Host Metrics provider and final operational validation block completion. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -41,22 +41,21 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### AGT-003 — Enforce advertised Agent command contracts
+### AGT-004 — Validate complete Linux host metric collection
 
 Scope:
 
-- resolve the target Agent's latest enabled command capability
-- reject commands that the Agent did not advertise
-- validate command payload version and bounded size before queueing
-- preserve idempotency, deadline and audit behavior
-- make unsupported and temporarily unavailable states explicit
+- collect CPU, memory, load, uptime, storage and aggregate network counters
+- preserve one authoritative observation timestamp per collection batch
+- represent missing, malformed and inaccessible kernel values as unknown
+- validate behavior on a deployed Debian host
 
 Acceptance:
 
-- the Server cannot queue a command absent from the Agent capability inventory
-- capability downgrade or disablement takes effect without Agent restart
-- malformed capability metadata fails closed
-- integration tests cover allowed, unadvertised, disabled and malformed cases
+- every required Linux metric group is present
+- unknown values are never replaced with zero
+- fixture and deployed-host checks pass
+- full repository validation remains green
 
 ## Specification status
 
