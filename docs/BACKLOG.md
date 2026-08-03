@@ -27,12 +27,12 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | PKG-012 | Reference test package | Done | App, widget, worker, settings, capability and intentional fault mode are included. |
 | Phase 4 | Package platform | Done | Complete package platform is implemented. |
 | AGT-001 | Enrollment tokens and server identity issuance | Done | One-time hashed token redemption, durable credentials, audit, reuse rejection and HTTP integration coverage are implemented. |
-| AGT-002 | Agent identity and outbound connection | In progress | The executable transport, heartbeat, bounded reconnect and revocation behavior exist; first-run enrollment and protected local credential persistence remain. |
+| AGT-002 | Agent identity and outbound connection | Done | First-run enrollment, recoverable exact retries, protected local identity persistence, restart loading and full repository validation are complete. |
 | AGT-003 | Agent command dispatcher | In progress | Typed polling, deadlines and `diagnostics.snapshot` execution exist; server-side advertised-command enforcement remains. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection exists; deployed-host validation remains. |
 | AGT-005 | Host metrics package and widgets | Blocked | Frontend requests `host.metrics.read`, but no runtime capability provider currently exists. |
 | AGT-006 | Agent diagnostics and update foundation | In progress | Diagnostics snapshot and explicit update policy exist; compatibility diagnostics and installation/update runbook remain. |
-| Phase 5 | Agent and host observability | In progress | Server control plane and executable Agent runtime are present, but enrollment bootstrap and the Host Metrics provider block phase completion. |
+| Phase 5 | Agent and host observability | In progress | Agent enrollment and runtime transport are implemented; command authorization and the Host Metrics provider block phase completion. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -41,22 +41,22 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### AGT-002 — Complete first-run enrollment and protected identity persistence
+### AGT-003 — Enforce advertised Agent command contracts
 
 Scope:
 
-- accept one short-lived enrollment token only for an unprovisioned Agent
-- redeem it over the configured HTTPS endpoint
-- persist the returned Agent ID and credential atomically with owner-only access
-- restart from the protected identity without retaining the enrollment token
-- fail explicitly on malformed, insecure or unreadable identity state
+- resolve the target Agent's latest enabled command capability
+- reject commands that the Agent did not advertise
+- validate command payload version and bounded size before queueing
+- preserve idempotency, deadline and audit behavior
+- make unsupported and temporarily unavailable states explicit
 
 Acceptance:
 
-- a clean Agent installation enrolls once and reconnects after restart
-- the enrollment token and plaintext credential are never logged
-- non-owner access to the persisted identity is rejected on supported Linux hosts
-- revoked credentials cannot reconnect
+- the Server cannot queue a command absent from the Agent capability inventory
+- capability downgrade or disablement takes effect without Agent restart
+- malformed capability metadata fails closed
+- integration tests cover allowed, unadvertised, disabled and malformed cases
 
 ## Specification status
 
