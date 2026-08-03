@@ -39,7 +39,8 @@ public sealed class LinuxMetricsCollectorTests
         var second = await collector.CollectAsync(CancellationToken.None);
         var cpu = second.Single(metric => metric.Name == "host.cpu.utilization");
 
-        Assert.AreEqual(0.5d, cpu.Value, 0.0001d);
+        Assert.IsNotNull(cpu.Value);
+        Assert.AreEqual(0.5d, cpu.Value.Value, 0.0001d);
         Assert.AreEqual(clock.GetUtcNow(), cpu.ObservedAtUtc);
         Assert.AreEqual(1024000d, second.Single(metric => metric.Name == "host.memory.total_bytes").Value);
         Assert.AreEqual(614400d, second.Single(metric => metric.Name == "host.memory.used_bytes").Value);
