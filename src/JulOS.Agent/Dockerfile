@@ -1,4 +1,4 @@
-﻿# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 WORKDIR /source
