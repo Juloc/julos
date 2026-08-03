@@ -26,16 +26,6 @@ index ec97dc4..0000000 100644
              }
              if (token.ExpiresAtUtc <= now)
              {
-@@ -177,7 +183,7 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
-             };
-             var credential = new AgentCredentialRow
-             {
-                 AgentId = agentId,
--                CredentialHash = SHA256.HashData(credentialBytes),
-+                CredentialHash = SHA256.HashData(credentialBytes),
-                 CreatedAtUtc = now,
-                 Revision = 1,
-             };
 @@ -206,7 +212,7 @@ internal sealed partial class PostgresAgentControlService : IAgentControlService
              await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
              await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
