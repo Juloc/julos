@@ -31,8 +31,8 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | AGT-003 | Agent command dispatcher | Done | Typed polling, deadlines, diagnostics execution and server-side advertised-command authorization are implemented and integration-tested. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection plus valid/missing/malformed fixture tests are complete; deployed Debian validation remains. |
 | AGT-005 | Host metrics package and widgets | In progress | Persisted-metric provider, signed-manifest authorization, authenticated frontend bridge and live/stale/offline/error view logic are implemented; installed-package end-to-end validation remains. |
-| AGT-006 | Agent diagnostics and update foundation | In progress | Diagnostics snapshot and explicit update policy exist; compatibility diagnostics and installation/update runbook remain. |
-| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization and Host Metrics provider are implemented; deployed-host and installed-package validation remain. |
+| AGT-006 | Agent diagnostics and update foundation | Done | Exact protocol negotiation, shared capability inventory, bounded reconnect diagnostics and a manual-only digest-verified update preparation contract are implemented, documented and fully validated. |
+| Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -41,22 +41,23 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### AGT-005 — Validate the installed Host Metrics package path
+### REM-001 — Define protocol-neutral Remote session contracts
 
 Scope:
 
-- install, configure and enable the signed official Host Metrics package
-- invoke `host.metrics.read` through the authenticated package frontend endpoint
-- verify manifest-derived grant enforcement and package lifecycle rejection
-- validate live, stale, offline and unknown-value behavior in the running Desktop
-- preserve broker deadlines, cancellation and audit records
+- define versioned profile, session request, session state and display transport contracts
+- keep RDP, VNC and SSH protocol details outside Core
+- define explicit target, credential reference, network profile and viewport fields
+- define bounded lifecycle states, failure codes, deadlines and cancellation
+- provide a capability contract that later Remote workers can implement through Runtime Manager
 
 Acceptance:
 
-- the installed package reads persisted metrics without direct Agent references
-- disabled, unhealthy and ungranted packages cannot invoke the capability
-- package app and widget show live, stale, offline and unavailable states
-- unknown values remain null and never render as zero
+- Core and Desktop can represent a Remote session without referencing Julgate, Guacamole or one protocol library
+- credentials are referenced through secret handles and never embedded in session contracts
+- unsupported protocol, invalid target and expired request states fail closed
+- session identifiers and operation keys are idempotent and bounded
+- contracts and validation tests are complete before transport implementation starts
 - full repository validation remains green
 
 ## Specification status

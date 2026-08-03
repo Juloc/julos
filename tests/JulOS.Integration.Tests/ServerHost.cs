@@ -1,6 +1,8 @@
-﻿using System.Security.Cryptography;
+﻿using System.Globalization;
+using System.Security.Cryptography;
 
 using JulOS.Application.Concurrency;
+using JulOS.Contracts.Agents;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -52,6 +54,15 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         this.connectionString = connectionString;
         this.includeConcurrencyConflictEndpoint = includeConcurrencyConflictEndpoint;
         this.settings = settings ?? new Dictionary<string, string?>();
+    }
+
+    protected override void ConfigureClient(HttpClient client)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        base.ConfigureClient(client);
+        client.DefaultRequestHeaders.Add(
+            AgentProtocolContract.HeaderName,
+            AgentProtocolContract.CurrentVersion.ToString(CultureInfo.InvariantCulture));
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

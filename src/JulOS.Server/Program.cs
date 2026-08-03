@@ -71,6 +71,7 @@ builder.Services
 var app = builder.Build();
 
 app.UseJulOsErrorHandling();
+app.UseJulOsAgentProtocol();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRateLimiter();

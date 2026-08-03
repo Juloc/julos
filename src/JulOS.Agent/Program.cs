@@ -49,6 +49,11 @@ internal static class Program
         {
             return 0;
         }
+        catch (AgentProtocolException exception)
+        {
+            Console.Error.WriteLine($"JulOS Agent protocol error ({exception.Code}): {exception.Message}");
+            return 5;
+        }
         catch (HttpRequestException exception)
         {
             var status = exception.StatusCode is null
@@ -93,6 +98,8 @@ internal static class Program
             new ProductInfoHeaderValue("JulOS-Agent", bootstrap.Version));
 
         var timeProvider = TimeProvider.System;
+        var diagnostics = new AgentRuntimeDiagnostics(timeProvider.GetUtcNow());
+        var capabilityInventory = new AgentCapabilityInventory();
         var identityStore = new AgentIdentityStore(bootstrap.IdentityPath);
         var provisioner = new AgentProvisioner(
             identityStore,
@@ -100,16 +107,24 @@ internal static class Program
             timeProvider);
         var identity = await provisioner.ResolveAsync(bootstrap, cancellationToken).ConfigureAwait(false);
         var options = AgentOptions.Create(bootstrap, identity);
+        var commandExecutor = new AgentCommandExecutor(
+            timeProvider,
+            options.Version,
+            capabilityInventory,
+            diagnostics);
         var client = new AgentClient(
             httpClient,
             options,
             new LinuxMetricsCollector(timeProvider),
-            new AgentCommandExecutor(timeProvider, options.Version),
-            timeProvider);
+            commandExecutor,
+            timeProvider,
+            capabilityInventory,
+            diagnostics);
         var reconnectDelay = TimeSpan.FromSeconds(1);
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            diagnostics.RecordConnectionAttempt();
             try
             {
                 await client.RunAsync(cancellationToken).ConfigureAwait(false);
@@ -117,14 +132,27 @@ internal static class Program
             }
             catch (HttpRequestException exception)
             {
+                reconnectDelay = ResetDelayAfterRecovery(diagnostics, reconnectDelay);
                 var status = exception.StatusCode is null
                     ? "transport unavailable"
                     : $"HTTP {(int)exception.StatusCode.Value}";
+                var failureKind = exception.StatusCode is null
+                    ? "transport"
+                    : $"http-{(int)exception.StatusCode.Value}";
+                diagnostics.RecordConnectionFailure(
+                    timeProvider.GetUtcNow(),
+                    failureKind,
+                    reconnectDelay);
                 Console.Error.WriteLine(
                     $"JulOS Agent connection failed ({status}); retrying in {reconnectDelay.TotalSeconds:0} seconds.");
             }
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                reconnectDelay = ResetDelayAfterRecovery(diagnostics, reconnectDelay);
+                diagnostics.RecordConnectionFailure(
+                    timeProvider.GetUtcNow(),
+                    "timeout",
+                    reconnectDelay);
                 Console.Error.WriteLine(
                     $"JulOS Agent request timed out; retrying in {reconnectDelay.TotalSeconds:0} seconds.");
             }
@@ -135,4 +163,11 @@ internal static class Program
 
         return 0;
     }
+
+    private static TimeSpan ResetDelayAfterRecovery(
+        AgentRuntimeDiagnostics diagnostics,
+        TimeSpan currentDelay) =>
+        diagnostics.Snapshot().ConsecutiveFailures == 0
+            ? TimeSpan.FromSeconds(1)
+            : currentDelay;
 }

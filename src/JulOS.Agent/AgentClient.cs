@@ -1,6 +1,6 @@
-﻿using System.Net;
+﻿using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 
 using JulOS.Contracts.Agents;
@@ -10,29 +10,31 @@ namespace JulOS.Agent;
 internal sealed class AgentClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly string[] SupportedCommands =
-    [
-        "diagnostics.snapshot",
-    ];
 
     private readonly HttpClient httpClient;
     private readonly AgentOptions options;
     private readonly LinuxMetricsCollector metricsCollector;
     private readonly AgentCommandExecutor commandExecutor;
     private readonly TimeProvider timeProvider;
+    private readonly AgentCapabilityInventory capabilityInventory;
+    private readonly AgentRuntimeDiagnostics diagnostics;
 
     internal AgentClient(
         HttpClient httpClient,
         AgentOptions options,
         LinuxMetricsCollector metricsCollector,
         AgentCommandExecutor commandExecutor,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AgentCapabilityInventory? capabilityInventory = null,
+        AgentRuntimeDiagnostics? diagnostics = null)
     {
         this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         this.options = options ?? throw new ArgumentNullException(nameof(options));
         this.metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
         this.commandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        this.capabilityInventory = capabilityInventory ?? new AgentCapabilityInventory();
+        this.diagnostics = diagnostics ?? new AgentRuntimeDiagnostics(timeProvider.GetUtcNow());
     }
 
     internal async Task RunAsync(CancellationToken cancellationToken)
@@ -55,35 +57,17 @@ internal sealed class AgentClient
 
     private async Task SendHeartbeatAndMetricsAsync(CancellationToken cancellationToken)
     {
+        var observedAtUtc = this.timeProvider.GetUtcNow();
         var heartbeat = new AgentHeartbeatRequest(
             this.options.Version,
-            [
-                new AgentCapabilityContract(
-                    "host.metrics.linux",
-                    1,
-                    OperatingSystem.IsLinux(),
-                    1,
-                    JsonSerializer.SerializeToElement(new
-                    {
-                        operatingSystem = RuntimeInformation.OSDescription,
-                        architecture = RuntimeInformation.OSArchitecture.ToString(),
-                    })),
-                new AgentCapabilityContract(
-                    "agent.commands.core",
-                    1,
-                    true,
-                    1,
-                    JsonSerializer.SerializeToElement(new
-                    {
-                        commands = SupportedCommands,
-                    })),
-            ],
-            this.timeProvider.GetUtcNow());
+            this.capabilityInventory.CreateHeartbeatCapabilities(),
+            observedAtUtc);
         await this.SendAsync(
             HttpMethod.Post,
             "/api/v1/agent/heartbeat",
             heartbeat,
             cancellationToken).ConfigureAwait(false);
+        this.diagnostics.RecordHeartbeatSucceeded(observedAtUtc);
 
         var metrics = await this.metricsCollector.CollectAsync(cancellationToken).ConfigureAwait(false);
         await this.SendAsync(
@@ -100,6 +84,7 @@ internal sealed class AgentClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
         if (response.StatusCode == HttpStatusCode.NoContent)
         {
             return;
@@ -157,6 +142,7 @@ internal sealed class AgentClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
         await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
     }
 
@@ -165,8 +151,33 @@ internal sealed class AgentClient
         var request = new HttpRequestMessage(method, path);
         request.Headers.Add("X-JulOS-Agent-Id", this.options.AgentId.ToString("D"));
         request.Headers.Add("X-JulOS-Agent-Credential", this.options.Credential);
+        request.Headers.Add(
+            AgentProtocolContract.HeaderName,
+            AgentProtocolContract.CurrentVersion.ToString(CultureInfo.InvariantCulture));
         request.Headers.Accept.ParseAdd("application/json");
         return request;
+    }
+
+    private static void ValidateServerProtocol(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.UpgradeRequired)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_incompatible",
+                "The Server rejected the Agent protocol version.");
+        }
+        if (!response.Headers.TryGetValues(AgentProtocolContract.HeaderName, out var values)
+            || !int.TryParse(
+                values.SingleOrDefault(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var protocolVersion)
+            || protocolVersion != AgentProtocolContract.CurrentVersion)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_negotiation_failed",
+                "The Server did not confirm the current Agent protocol version.");
+        }
     }
 
     private static async Task EnsureSuccessAsync(

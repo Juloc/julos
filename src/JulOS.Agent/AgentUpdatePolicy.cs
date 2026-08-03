@@ -1,11 +1,13 @@
 ﻿using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
+using JulOS.Contracts.Agents;
+
 namespace JulOS.Agent;
 
 internal sealed partial class AgentUpdatePolicy
 {
-    internal AgentUpdateDecision Validate(
+    internal AgentUpdatePreparationResponse Validate(
         string currentVersion,
         string targetVersion,
         bool allowExplicitDowngrade,
@@ -39,11 +41,14 @@ internal sealed partial class AgentUpdatePolicy
             throw new AgentUpdateException("agent.update.digest_mismatch", "The Agent update digest does not match.");
         }
 
-        return new AgentUpdateDecision(
+        return new AgentUpdatePreparationResponse(
+            AgentUpdateContract.CurrentVersion,
             currentVersion,
             targetVersion,
             target.CompareTo(current) < 0,
-            Convert.ToHexString(digest).ToLowerInvariant());
+            Convert.ToHexString(digest).ToLowerInvariant(),
+            RequiresManualInstallation: true,
+            AgentUpdateContract.AutomaticApplySupported);
     }
 
     private static Version Parse(string value, string parameterName)
@@ -61,12 +66,6 @@ internal sealed partial class AgentUpdatePolicy
     [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     private static partial Regex Sha256Pattern();
 }
-
-internal sealed record AgentUpdateDecision(
-    string CurrentVersion,
-    string TargetVersion,
-    bool IsDowngrade,
-    string ArtifactDigest);
 
 internal sealed class AgentUpdateException : Exception
 {
