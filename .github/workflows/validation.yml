@@ -84,13 +84,9 @@ jobs:
             $serviceAfter `
             'CreateCommandAsync insertion'
 
-          $testBefore = @'
-                          JsonSerializer.SerializeToElement(new { platform = "linux" })),
-                  ],
-                  observedAt);
-          '@.TrimStart("`n")
+          $testBefore = 'JsonSerializer.SerializeToElement(new { platform = "linux" })),'
           $testAfter = @'
-                          JsonSerializer.SerializeToElement(new { platform = "linux" })),
+          JsonSerializer.SerializeToElement(new { platform = "linux" })),
                       new AgentCapabilityContract(
                           "agent.commands.core",
                           1,
@@ -100,9 +96,7 @@ jobs:
                           {
                               commands = new[] { "diagnostics.snapshot" },
                           })),
-                  ],
-                  observedAt);
-          '@.TrimStart("`n")
+          '@.TrimStart("`n").TrimEnd("`n")
           Replace-ExactlyOnce `
             'tests/JulOS.Integration.Tests/Agents/AgentEndpointTests.cs' `
             $testBefore `
