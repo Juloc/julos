@@ -132,6 +132,7 @@ internal static class Program
             }
             catch (HttpRequestException exception)
             {
+                reconnectDelay = ResetDelayAfterRecovery(diagnostics, reconnectDelay);
                 var status = exception.StatusCode is null
                     ? "transport unavailable"
                     : $"HTTP {(int)exception.StatusCode.Value}";
@@ -147,6 +148,7 @@ internal static class Program
             }
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                reconnectDelay = ResetDelayAfterRecovery(diagnostics, reconnectDelay);
                 diagnostics.RecordConnectionFailure(
                     timeProvider.GetUtcNow(),
                     "timeout",
@@ -161,4 +163,11 @@ internal static class Program
 
         return 0;
     }
+
+    private static TimeSpan ResetDelayAfterRecovery(
+        AgentRuntimeDiagnostics diagnostics,
+        TimeSpan currentDelay) =>
+        diagnostics.Snapshot().ConsecutiveFailures == 0
+            ? TimeSpan.FromSeconds(1)
+            : currentDelay;
 }
