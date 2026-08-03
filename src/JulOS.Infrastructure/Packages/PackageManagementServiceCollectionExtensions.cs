@@ -27,6 +27,15 @@ public static class PackageManagementServiceCollectionExtensions
         var packageRoot = configuration["Packages:Root"]
             ?? Environment.GetEnvironmentVariable("JULOS_PACKAGE_ROOT")
             ?? "/var/lib/julos/packages";
+        var serverEndpointValue = configuration["Packages:ServerEndpoint"]
+            ?? Environment.GetEnvironmentVariable("JULOS_PACKAGE_SERVER_ENDPOINT")
+            ?? "http://127.0.0.1:8080";
+        if (!Uri.TryCreate(serverEndpointValue, UriKind.Absolute, out var serverEndpoint)
+            || serverEndpoint.Scheme is not ("http" or "https"))
+        {
+            throw new InvalidOperationException("Packages:ServerEndpoint must be an absolute HTTP or HTTPS URI.");
+        }
+
         var publishers = configuration.GetSection("Packages:TrustedPublishers")
             .Get<TrustedPublisherConfiguration[]>()
             ?? [];
@@ -37,7 +46,10 @@ public static class PackageManagementServiceCollectionExtensions
                 publisher.KeyId,
                 publisher.PublicKeyPem))));
         services.AddSingleton(new PostgresPackageStorageProvisioner(coreDatabaseConnectionString));
-        services.AddScoped<IPackageWorkerSupervisor, DisabledPackageWorkerSupervisor>();
+        services.AddSingleton<IPackageWorkerSupervisor>(new ProcessPackageWorkerSupervisor(
+            packageRoot,
+            serverEndpoint,
+            coreDatabaseConnectionString));
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
