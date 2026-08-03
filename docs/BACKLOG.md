@@ -27,7 +27,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | PKG-012 | Reference test package | Done | App, widget, worker, settings, capability and intentional fault mode are included. |
 | Phase 4 | Package platform | Done | Complete package platform is implemented. |
 | AGT-001 | Enrollment tokens and server identity issuance | Done | One-time hashed token redemption, durable credentials, audit, reuse rejection and HTTP integration coverage are implemented. |
-| AGT-002 | Agent identity and outbound connection | In progress | First-run enrollment, recoverable exact retries, protected local identity persistence and restart loading are implemented; full repository validation is pending. |
+| AGT-002 | Agent identity and outbound connection | Done | First-run enrollment, recoverable exact retries, protected local identity persistence, restart loading and full repository validation are complete. |
 | AGT-003 | Agent command dispatcher | In progress | Typed polling, deadlines and `diagnostics.snapshot` execution exist; server-side advertised-command enforcement remains. |
 | AGT-004 | Linux system metrics collectors | In progress | CPU, memory, load, uptime, storage and network collection exists; deployed-host validation remains. |
 | AGT-005 | Host metrics package and widgets | Blocked | Frontend requests `host.metrics.read`, but no runtime capability provider currently exists. |
