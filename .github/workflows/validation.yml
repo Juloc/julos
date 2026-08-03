@@ -69,10 +69,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Run repository validation
-        shell: bash
-        run: |
-          set -o pipefail
-          sh tools/validate.sh 2>&1 | tee /tmp/validation-output.txt
+        run: sh tools/validate.sh
 
       - name: Capture validation working-tree diagnostics
         if: always()
@@ -82,13 +79,12 @@ jobs:
           git diff --stat > validation-diff-stat.txt
           git diff --binary > validation-working-tree.patch
 
-      - name: Upload validation diagnostics
+      - name: Upload validation working-tree diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: validation-diagnostics-${{ github.run_id }}
+          name: validation-working-tree-${{ github.run_id }}
           path: |
-            /tmp/validation-output.txt
             validation-working-tree.txt
             validation-changed-files.txt
             validation-diff-stat.txt
