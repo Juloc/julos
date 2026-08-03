@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -52,8 +53,10 @@ public sealed class AgentEndpointTests
         Assert.IsNotNull(token);
         Assert.IsTrue(token.ExpiresAtUtc > DateTimeOffset.UtcNow);
 
+        var credential = CreateCredential();
         var enrollmentRequest = new RedeemAgentEnrollmentRequest(
             token.Token,
+            credential,
             "homelab-agent",
             "machine-identity-001",
             "Debian 13",
@@ -68,8 +71,21 @@ public sealed class AgentEndpointTests
             .ReadFromJsonAsync<RedeemAgentEnrollmentResponse>()
             .ConfigureAwait(false);
         Assert.IsNotNull(enrollment);
+        Assert.AreEqual(credential, enrollment.Credential);
         Assert.AreEqual(30, enrollment.HeartbeatIntervalSeconds);
         Assert.AreEqual(5, enrollment.CommandPollIntervalSeconds);
+
+        using var retryResponse = await client.PostAsJsonAsync(
+            "/api/v1/agent/enroll",
+            enrollmentRequest)
+            .ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, retryResponse.StatusCode);
+        var retriedEnrollment = await retryResponse.Content
+            .ReadFromJsonAsync<RedeemAgentEnrollmentResponse>()
+            .ConfigureAwait(false);
+        Assert.IsNotNull(retriedEnrollment);
+        Assert.AreEqual(enrollment.AgentId, retriedEnrollment.AgentId);
+        Assert.AreEqual(credential, retriedEnrollment.Credential);
 
         using var reusedToken = await client.PostAsJsonAsync(
             "/api/v1/agent/enroll",
@@ -279,6 +295,22 @@ public sealed class AgentEndpointTests
             await response.Content.ReadAsStringAsync().ConfigureAwait(false));
         return document.RootElement.GetProperty("code").GetString()
             ?? throw new AssertFailedException("The error response has no code.");
+    }
+
+    private static string CreateCredential()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(48);
+        try
+        {
+            return Convert.ToBase64String(bytes)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
     }
 
     private static async Task<PostgreSqlTestDatabase> CreateMigratedDatabaseAsync()
