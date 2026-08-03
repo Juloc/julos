@@ -80,7 +80,9 @@ export class DesktopLayoutPersistence {
   readonly #onFailure: (error: unknown) => void | Promise<void>;
   readonly #pending = new Map<DesktopViewport, PendingSave>();
   readonly #revisions = new Map<DesktopViewport, number>();
+  readonly #documents = new Map<DesktopViewport, DesktopLayoutDocument>();
   #antiforgery: AntiforgeryToken | null = null;
+  #disposed = false;
 
   public constructor(
     fetchImplementation: typeof fetch = globalThis.fetch.bind(globalThis),
@@ -96,9 +98,21 @@ export class DesktopLayoutPersistence {
   }
 
   public async load(viewport: DesktopViewport): Promise<DesktopLayoutDocument> {
+    this.#ensureActive();
     const layout = await this.#api.get<DesktopLayoutDocument>(layoutPath(viewport));
-    this.#revisions.set(viewport, layout.revision);
-    return layout;
+    const snapshot = cloneDocument(layout);
+    this.#revisions.set(viewport, snapshot.revision);
+    this.#documents.set(viewport, snapshot);
+    return cloneDocument(snapshot);
+  }
+
+  public snapshot(viewport: DesktopViewport): DesktopLayoutDocument {
+    this.#ensureActive();
+    const document = this.#documents.get(viewport);
+    if (document === undefined) {
+      throw new Error(`No ${viewport} layout has been loaded or saved.`);
+    }
+    return cloneDocument(document);
   }
 
   public schedule(
@@ -106,6 +120,7 @@ export class DesktopLayoutPersistence {
     windows: readonly PersistedDesktopWindow[],
     widgets: readonly PersistedWidgetPlacement[],
   ): void {
+    this.#ensureActive();
     const revision = this.#revisions.get(viewport) ?? 0;
     const pending = this.#pending.get(viewport) ?? {
       document: { revision, windows: [], widgets: [] },
@@ -124,6 +139,7 @@ export class DesktopLayoutPersistence {
   }
 
   public async flush(viewport?: DesktopViewport): Promise<void> {
+    this.#ensureActive();
     if (viewport !== undefined) {
       const pending = this.#pending.get(viewport);
       if (pending !== undefined) {
@@ -146,20 +162,19 @@ export class DesktopLayoutPersistence {
   }
 
   public cancel(viewport?: DesktopViewport): void {
-    const targets = viewport === undefined
-      ? [...this.#pending.values()]
-      : [this.#pending.get(viewport)].filter((value): value is PendingSave => value !== undefined);
-    for (const pending of targets) {
-      if (pending.timer !== null) {
-        globalThis.clearTimeout(pending.timer);
-        pending.timer = null;
-      }
+    this.#ensureActive();
+    this.#cancel(viewport);
+  }
+
+  public dispose(): void {
+    if (this.#disposed) {
+      return;
     }
-    if (viewport === undefined) {
-      this.#pending.clear();
-    } else {
-      this.#pending.delete(viewport);
-    }
+    this.#cancel();
+    this.#documents.clear();
+    this.#revisions.clear();
+    this.#antiforgery = null;
+    this.#disposed = true;
   }
 
   async #flush(viewport: DesktopViewport, pending: PendingSave): Promise<DesktopLayoutDocument> {
@@ -180,10 +195,11 @@ export class DesktopLayoutPersistence {
     pending.inFlight = save;
 
     try {
-      const stored = await save;
+      const stored = cloneDocument(await save);
       this.#revisions.set(viewport, stored.revision);
+      this.#documents.set(viewport, stored);
       pending.document = { ...pending.document, revision: stored.revision };
-      return stored;
+      return cloneDocument(stored);
     } catch (error) {
       if (error instanceof JulOsApiError && error.status === 409) {
         await this.#onConflict({
@@ -206,6 +222,29 @@ export class DesktopLayoutPersistence {
       this.#antiforgery = await this.#api.get<AntiforgeryToken>('/api/v1/auth/antiforgery');
     }
     return this.#antiforgery;
+  }
+
+  #cancel(viewport?: DesktopViewport): void {
+    const targets = viewport === undefined
+      ? [...this.#pending.values()]
+      : [this.#pending.get(viewport)].filter((value): value is PendingSave => value !== undefined);
+    for (const pending of targets) {
+      if (pending.timer !== null) {
+        globalThis.clearTimeout(pending.timer);
+        pending.timer = null;
+      }
+    }
+    if (viewport === undefined) {
+      this.#pending.clear();
+    } else {
+      this.#pending.delete(viewport);
+    }
+  }
+
+  #ensureActive(): void {
+    if (this.#disposed) {
+      throw new Error('Desktop layout persistence has been disposed.');
+    }
   }
 }
 
@@ -230,6 +269,14 @@ export function windowsForPersistence(store: WindowStore): readonly PersistedDes
 
 function layoutPath(viewport: DesktopViewport): string {
   return `/api/v1/desktop/layouts/${viewport}`;
+}
+
+function cloneDocument(document: DesktopLayoutDocument): DesktopLayoutDocument {
+  return {
+    ...document,
+    windows: cloneWindows(document.windows),
+    widgets: cloneWidgets(document.widgets),
+  };
 }
 
 function cloneWindows(windows: readonly PersistedDesktopWindow[]): readonly PersistedDesktopWindow[] {
