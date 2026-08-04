@@ -30,6 +30,9 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Normalize the current slice before compilation
+        run: node tools/normalize-encoding.mjs
+
       - name: Restore tools and solution
         run: |
           dotnet tool restore
@@ -60,7 +63,7 @@ jobs:
           path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
           PY
 
-      - name: Normalize repository encoding
+      - name: Normalize generated files
         run: node tools/normalize-encoding.mjs
 
       - name: Commit generated model and normalized slice
