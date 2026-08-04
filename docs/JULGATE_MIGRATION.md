@@ -7,8 +7,11 @@ Move reusable Julgate remote-session behavior into shared transport components a
 Current status:
 
 - REM-001 protocol-neutral session contracts: implemented
-- REM-002 Julgate inventory and extraction boundaries: [`JULGATE-REMOTE-EXTRACTION.md`](JULGATE-REMOTE-EXTRACTION.md)
-- REM-003 shared transport extraction: next
+- REM-002 Julgate inventory and extraction boundaries: implemented in [`JULGATE-REMOTE-EXTRACTION.md`](JULGATE-REMOTE-EXTRACTION.md)
+- REM-003 shared transport extraction: complete
+- `JulOS.Remote.Transport` `0.1.0`: published immutably with digests and attestations
+- JulOS Remote and Julgate: consuming the same implementation
+- REM-004 worker and lifecycle integration: next
 - Julgate retirement: prohibited until parity and migration acceptance
 
 Final target:
@@ -95,28 +98,41 @@ Terminal states do not resume. Reconnect policy is implemented later without cha
 
 ## 5. J2 shared transport extraction — REM-003
 
-Extract reusable transport behavior into one shared implementation consumed by Julgate and JulOS Remote.
+REM-003 is complete.
 
-Required sequence:
+The reusable Guacamole transport boundary is implemented once in the JulOS monorepo as `JulOS.Remote.Transport`. It owns:
 
-1. add behavior tests around the current Julgate component;
-2. identify its dependency boundary;
-3. move the component without behavior changes;
-4. make Julgate consume the extracted component;
-5. validate Julgate deployment and tests;
-6. make JulOS Remote consume the same component;
-7. remove the original implementation location;
-8. prove no duplicate source path remains.
+- concrete supported-protocol identifiers used by the adapter;
+- Guacamole connection-parameter translation;
+- JSON-auth payload serialization;
+- client identifier construction;
+- HMAC-SHA256 signing;
+- Guacamole-required AES-CBC encryption;
+- bounded input validation and temporary-buffer clearing.
 
-Candidate shared responsibilities are limited to the classification in the Extraction Map. Authentication, Julgate JSON persistence, workspaces, file gateway, website proxy and Julgate UI are excluded.
+It does not own Julgate authentication, JSON persistence, authorization, target storage, workspaces, file gateway, website proxy, UI or launch-URL policy.
 
-Acceptance:
+Completed sequence:
 
-- no copied source tree
-- Julgate and JulOS consume one implementation
-- Julgate remains deployable
-- concrete dependencies remain outside Core and Contracts
-- affected repository validators are green
+1. behavior tests were added around payload, protocol and cryptographic compatibility;
+2. the dependency boundary was isolated outside Core and Contracts;
+3. JulOS Remote began consuming the shared project directly;
+4. immutable NuGet package `JulOS.Remote.Transport` `0.1.0` was built and published;
+5. package, symbol and checksum artifacts were recorded with SHA-256 and GitHub attestations;
+6. a separate verification probe restored the exact package and verified evidence and provenance;
+7. Julgate was migrated to the exact published package;
+8. Julgate's original payload, signing and encryption implementation was removed;
+9. Julgate's complete build, test, container, security, E2E, protocol and operations gates passed;
+10. no duplicate or fallback implementation remains.
+
+Acceptance status:
+
+- no copied source tree: passed
+- Julgate and JulOS consume one implementation: passed
+- Julgate remains deployable: passed
+- concrete dependencies remain outside Core and Contracts: passed
+- affected repository validators are green: passed
+- package version is immutable and attested: passed
 
 ## 6. J3 worker and lifecycle integration — REM-004
 
@@ -139,6 +155,8 @@ Acceptance:
 - repeated create operations preserve exact idempotency
 - expired display grants cannot reconnect
 - runtime failure produces a caller-safe failure and an operator-visible problem
+- no provider launch material is returned to package JavaScript
+- provider runtimes are allowlisted, bounded and cleaned up after every terminal state
 
 ## 7. J4 display client — REM-005
 
@@ -251,17 +269,21 @@ The importer must be idempotent and produce an operation-scoped rollback report.
 
 | Capability | Julgate evidence | Shared transport | JulOS Remote | Tests | Accepted |
 |---|---:|---:|---:|---:|---:|
-| RDP connect | Yes | Planned | Planned | Planned | No |
-| RDP resize | Yes | Planned | Planned | Planned | No |
-| Mobile keyboard | Defect risk | Planned | Planned | Planned | No |
-| VNC connect | Yes | Planned | Planned | Planned | No |
-| SSH connect | Yes | Planned | Planned | Planned | No |
-| Clipboard | Runtime review required | Planned | Planned | Planned | No |
-| Drive redirection | Permission risk | Planned | Planned | Planned | No |
-| Reconnect | Runtime review required | Planned | Planned | Planned | No |
-| Diagnostics | Runtime review required | Planned | Planned | Planned | No |
+| RDP payload and option mapping | Yes | Implemented | Consumed | Shared and Julgate parity tests | Yes |
+| VNC payload and option mapping | Yes | Implemented | Consumed | Shared and Julgate parity tests | Yes |
+| SSH payload and option mapping | Yes | Implemented | Consumed | Shared behavior tests | Transport only |
+| Payload signing and encryption | Yes | Implemented once | Consumed | Known vectors, digest and attestation evidence | Yes |
+| RDP live connect | Yes | Foundation ready | Planned | Planned | No |
+| RDP resize | Yes | Not in REM-003 | Planned | Planned | No |
+| Mobile keyboard | Defect risk | Not in REM-003 | Planned | Planned | No |
+| VNC live connect | Yes | Foundation ready | Planned | Planned | No |
+| SSH live connect | Yes | Foundation ready | Planned | Planned | No |
+| Clipboard | Runtime review required | Not in REM-003 | Planned | Planned | No |
+| Drive redirection | Permission risk | Mapping implemented | Planned | Julgate payload parity only | No |
+| Reconnect | Runtime review required | Not in REM-003 | Planned | Planned | No |
+| Diagnostics | Runtime review required | Not in REM-003 | Planned | Planned | No |
 
-Every row must be updated from repository and runtime evidence. A package shell, mocked success response or undocumented manual test does not count as acceptance.
+Transport acceptance does not imply live-session parity. Every remaining row must be updated from repository and runtime evidence. A package shell, mocked success response or undocumented manual test does not count as acceptance.
 
 ## 13. Archive criteria
 
