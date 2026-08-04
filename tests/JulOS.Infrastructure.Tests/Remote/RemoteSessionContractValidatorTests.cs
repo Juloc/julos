@@ -14,10 +14,10 @@ public sealed class RemoteSessionContractValidatorTests
         new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
 
     [TestMethod]
-    [DataRow(RemoteProtocolIds.Rdp, 3389)]
-    [DataRow(RemoteProtocolIds.Vnc, 5900)]
-    [DataRow(RemoteProtocolIds.Ssh, 22)]
-    public void SupportedProtocolsValidate(string protocol, int port)
+    [DataRow("rdp", 3389)]
+    [DataRow("vnc", 5900)]
+    [DataRow("ssh", 22)]
+    public void PackageDefinedProtocolsValidate(string protocol, int port)
     {
         var validator = CreateValidator();
 
@@ -30,10 +30,13 @@ public sealed class RemoteSessionContractValidatorTests
     }
 
     [TestMethod]
-    public void UnsupportedProtocolFailsClosed()
+    [DataRow("Invalid")]
+    [DataRow("invalid/protocol")]
+    [DataRow("-invalid")]
+    public void InvalidProtocolIdentityFailsClosed(string protocol)
     {
         var failure = Assert.ThrowsExactly<RemoteSessionContractException>(() =>
-            CreateValidator().ValidateCreate(CreateRequest("telnet", 23)));
+            CreateValidator().ValidateCreate(CreateRequest(protocol, 22)));
 
         Assert.AreEqual(RemoteSessionFailureCodes.ProtocolUnsupported, failure.Code);
     }
@@ -45,7 +48,7 @@ public sealed class RemoteSessionContractValidatorTests
     [DataRow("host.example.test:3389")]
     public void TargetCannotEmbedTransportOrCredentials(string host)
     {
-        var request = CreateRequest(RemoteProtocolIds.Rdp, 3389) with
+        var request = CreateRequest("rdp", 3389) with
         {
             Target = new RemoteTargetContract(host, 3389),
         };
@@ -59,7 +62,7 @@ public sealed class RemoteSessionContractValidatorTests
     [TestMethod]
     public void CredentialMaterialCannotReplaceSecretReference()
     {
-        var request = CreateRequest(RemoteProtocolIds.Ssh, 22) with
+        var request = CreateRequest("ssh", 22) with
         {
             SecretReferenceId = Guid.Empty,
         };
@@ -73,11 +76,11 @@ public sealed class RemoteSessionContractValidatorTests
     [TestMethod]
     public void InvalidViewportAndTimeoutsFailClosed()
     {
-        var invalidViewport = CreateRequest(RemoteProtocolIds.Vnc, 5900) with
+        var invalidViewport = CreateRequest("vnc", 5900) with
         {
             Viewport = new RemoteViewportContract(100, 100, 1m),
         };
-        var invalidTimeout = CreateRequest(RemoteProtocolIds.Vnc, 5900) with
+        var invalidTimeout = CreateRequest("vnc", 5900) with
         {
             IdleTimeoutSeconds = 600,
             MaximumSessionSeconds = 300,
@@ -96,11 +99,11 @@ public sealed class RemoteSessionContractValidatorTests
     [TestMethod]
     public void ExpiredOrUnboundedRequestDeadlineFailsClosed()
     {
-        var expired = CreateRequest(RemoteProtocolIds.Rdp, 3389) with
+        var expired = CreateRequest("rdp", 3389) with
         {
             DeadlineUtc = Now.AddSeconds(-1),
         };
-        var unbounded = CreateRequest(RemoteProtocolIds.Rdp, 3389) with
+        var unbounded = CreateRequest("rdp", 3389) with
         {
             DeadlineUtc = Now.AddMinutes(11),
         };
@@ -119,9 +122,9 @@ public sealed class RemoteSessionContractValidatorTests
     public void RequestIdentityRequiresAnExactlyMatchingRequest()
     {
         var validator = CreateValidator();
-        var first = validator.ValidateCreate(CreateRequest(RemoteProtocolIds.Rdp, 3389));
-        var replay = validator.ValidateCreate(CreateRequest(RemoteProtocolIds.Rdp, 3389));
-        var changed = validator.ValidateCreate(CreateRequest(RemoteProtocolIds.Rdp, 3390));
+        var first = validator.ValidateCreate(CreateRequest("rdp", 3389));
+        var replay = validator.ValidateCreate(CreateRequest("rdp", 3389));
+        var changed = validator.ValidateCreate(CreateRequest("rdp", 3390));
 
         Assert.AreEqual(
             RemoteSessionContractValidator.ComputeRequestIdentity(first),
