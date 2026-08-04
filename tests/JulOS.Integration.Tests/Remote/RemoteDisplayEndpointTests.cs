@@ -26,10 +26,10 @@ namespace JulOS.Integration.Tests.Remote;
 [DoNotParallelize]
 public sealed class RemoteDisplayEndpointTests
 {
-    private const string AdministratorPassword = \"Valid-Initial-Password-42!\";
-    private const string CallerPackageId = \"de.juloc.julos.remote\";
-    private const string PublicOrigin = \"https://localhost\";
-    private const string RuntimeId = \"remote-55555555555545558555555555555555\";
+    private const string AdministratorPassword = "Valid-Initial-Password-42!";
+    private const string CallerPackageId = "de.juloc.julos.remote";
+    private const string PublicOrigin = "https://localhost";
+    private const string RuntimeId = "remote-55555555555545558555555555555555";
 
     private static readonly WebApplicationFactoryClientOptions ClientOptions = new()
     {
@@ -62,7 +62,7 @@ public sealed class RemoteDisplayEndpointTests
         using (var wrongOrigin = DisplayRequest(
             session.Descriptor.Endpoint,
             authentication.Cookie,
-            \"https://attacker.example\"))
+            "https://attacker.example"))
         using (var response = await client.SendAsync(wrongOrigin).ConfigureAwait(false))
         {
             Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode);
@@ -71,7 +71,7 @@ public sealed class RemoteDisplayEndpointTests
         using (var wrongPackage = DisplayRequest(
             session.Descriptor.Endpoint.Replace(
                 CallerPackageId,
-                \"de.juloc.other\",
+                "de.juloc.other",
                 StringComparison.Ordinal),
             authentication.Cookie,
             PublicOrigin))
@@ -144,16 +144,16 @@ public sealed class RemoteDisplayEndpointTests
         var webSocketClient = host.Server.CreateWebSocketClient();
         webSocketClient.ConfigureRequest = request =>
         {
-            request.Headers[\"Cookie\] = authentication.Cookie;
-            request.Headers[\"Origin\"] = PublicOrigin;
+            request.Headers["Cookie\] = authentication.Cookie;
+            request.Headers["Origin"] = PublicOrigin;
         };
 
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         using var socket = await webSocketClient.ConnectAsync(
-            new Uri($\"ws://localhost{session.Descriptor.Endpoint}\"),
+            new Uri($"ws://localhost{session.Descriptor.Endpoint}"),
             cancellation.Token).ConfigureAwait(false);
 
-        var payload = Encoding.UTF8.GetBytes(\"remote-display-roundtrip\");
+        var payload = Encoding.UTF8.GetBytes("remote-display-roundtrip");
         await socket.SendAsync(
             payload,
             WebSocketMessageType.Binary,
@@ -171,7 +171,7 @@ public sealed class RemoteDisplayEndpointTests
         {
             await socket.CloseAsync(
                 WebSocketCloseStatus.NormalClosure,
-                \"test complete\",
+                "test complete",
                 cancellation.Token).ConfigureAwait(false);
         }
     }
@@ -184,9 +184,9 @@ public sealed class RemoteDisplayEndpointTests
             connectionString,
             new Dictionary<string, string?>
             {
-                [\"Remote:Display:ProviderEndpointTemplate\"] = providerEndpointTemplate,
-                [\"Remote:Display:PublicOrigin\"] = PublicOrigin,
-                [\"Remote:Display:GrantLifetimeSeconds\"] = \"60\",
+                ["Remote:Display:ProviderEndpointTemplate"] = providerEndpointTemplate,
+                ["Remote:Display:PublicOrigin"] = PublicOrigin,
+                ["Remote:Display:GrantLifetimeSeconds"] = "60",
             },
             services =>
             {
@@ -197,20 +197,20 @@ public sealed class RemoteDisplayEndpointTests
     private static async Task<AuthenticationResult> SetupAdministratorAsync(HttpClient client)
     {
         using var response = await client.PostAsJsonAsync(
-            \"/api/v1/auth/setup\",
+            "/api/v1/auth/setup",
             new InitialAdministratorRequest(
-                \"admin\",
-                \"Administrator\",
+                "admin",
+                "Administrator",
                 AdministratorPassword)).ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
 
         var user = await response.Content
             .ReadFromJsonAsync<AuthenticatedUserResponse>()
             .ConfigureAwait(false)
-            ?? throw new AssertFailedException(\"Initial setup returned no user.\");
+            ?? throw new AssertFailedException("Initial setup returned no user.");
         var cookie = string.Join(
-            \"; \",
-            response.Headers.GetValues(\"Set-Cookie\")
+            "; ",
+            response.Headers.GetValues("Set-Cookie")
                 .Select(value => value.Split(';', 2, StringSplitOptions.None)[0]));
 
         Assert.IsFalse(string.IsNullOrWhiteSpace(cookie));
@@ -225,7 +225,7 @@ public sealed class RemoteDisplayEndpointTests
         await using var scope = host.Services.CreateAsyncScope();
         var gateway = scope.ServiceProvider.GetRequiredService<RemoteDisplayGateway>();
         var context = scope.ServiceProvider.GetRequiredService<CoreDbContext>();
-        var sessionId = Guid.Parse(\"55555555-5555-4555-8555-555555555555\");
+        var sessionId = Guid.Parse("55555555-5555-4555-8555-555555555555");
         const int revision = 5;
         var descriptor = gateway.Issue(
             sessionId,
@@ -240,12 +240,12 @@ public sealed class RemoteDisplayEndpointTests
             Id = sessionId,
             OwnerUserId = ownerUserId,
             CallerPackageId = CallerPackageId,
-            OperationKey = \"remote-display-endpoint\",
+            OperationKey = "remote-display-endpoint",
             RequestIdentity = new string('a', 64),
-            Protocol = \"rdp\",
-            TargetHost = \"server.example.test\",
+            Protocol = "rdp",
+            TargetHost = "server.example.test",
             TargetPort = 3389,
-            SecretReferenceId = Guid.Parse(\"66666666-6666-4666-8666-666666666666\"),
+            SecretReferenceId = Guid.Parse("66666666-6666-4666-8666-666666666666"),
             ViewportWidth = 1440,
             ViewportHeight = 900,
             DeviceScaleFactor = 1m,
@@ -290,9 +290,9 @@ public sealed class RemoteDisplayEndpointTests
         var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         if (cookie is not null)
         {
-            request.Headers.TryAddWithoutValidation(\"Cookie\", cookie);
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
         }
-        request.Headers.TryAddWithoutValidation(\"Origin\", origin);
+        request.Headers.TryAddWithoutValidation("Origin", origin);
         return request;
     }
 
@@ -344,7 +344,7 @@ public sealed class RemoteDisplayEndpointTests
             var application = builder.Build();
             application.UseWebSockets();
             application.MapGet(
-                \"/runtime/{runtimeId}\",
+                "/runtime/{runtimeId}",
                 async context =>
                 {
                     if (!context.WebSockets.IsWebSocketRequest)
@@ -373,11 +373,11 @@ public sealed class RemoteDisplayEndpointTests
                 .Features
                 .Get<IServerAddressesFeature>()
                 ?.Addresses
-                ?? throw new InvalidOperationException(\"Echo provider has no listening address.\");
+                ?? throw new InvalidOperationException("Echo provider has no listening address.");
             var address = new Uri(addresses.Single());
             return new EchoProvider(
                 application,
-                $\"ws://127.0.0.1:{address.Port}/runtime/{runtimeId}\");
+                $"ws://127.0.0.1:{address.Port}/runtime/{runtimeId}");
         }
 
         public async ValueTask DisposeAsync()

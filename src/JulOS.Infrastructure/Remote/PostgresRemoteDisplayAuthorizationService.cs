@@ -121,11 +121,11 @@ public sealed class RemoteDisplayAuthorizationException : Exception
     public RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure failure)
         : base(failure switch
         {
-            RemoteDisplayAuthorizationFailure.Unauthorized => \"Remote display authorization failed.\",
-            RemoteDisplayAuthorizationFailure.Unavailable => \"The Remote display is unavailable.\",
-            RemoteDisplayAuthorizationFailure.Stale => \"The Remote display descriptor is stale.\",
-            RemoteDisplayAuthorizationFailure.Expired => \"The Remote display descriptor expired.\",
-            _ => \"Remote display authorization failed.\",
+            RemoteDisplayAuthorizationFailure.Unauthorized => "Remote display authorization failed.",
+            RemoteDisplayAuthorizationFailure.Unavailable => "The Remote display is unavailable.",
+            RemoteDisplayAuthorizationFailure.Stale => "The Remote display descriptor is stale.",
+            RemoteDisplayAuthorizationFailure.Expired => "The Remote display descriptor expired.",
+            _ => "Remote display authorization failed.",
         })
     {
         this.Failure = failure;

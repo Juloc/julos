@@ -10,10 +10,10 @@ namespace JulOS.Infrastructure.Remote;
 public sealed class RemoteDisplayGateway
 {
     /// <summary>JulOS 1.0 graphical display kind.</summary>
-    public const string DisplayKind = \"graphical\";
+    public const string DisplayKind = "graphical";
 
     /// <summary>JulOS 1.0 display transport contract version.</summary>
-    public const string ContractVersion = \"1.0.0\";
+    public const string ContractVersion = "1.0.0";
 
     private const int DefaultGrantLifetimeSeconds = 60;
     private const int MaximumGrantLifetimeSeconds = 300;
@@ -45,12 +45,12 @@ public sealed class RemoteDisplayGateway
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        var providerTemplate = configuration[\"Remote:Display:ProviderEndpointTemplate\"]
-            ?? Environment.GetEnvironmentVariable(\"JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE\");
-        var configuredOrigin = configuration[\"Remote:Display:PublicOrigin\"]
-            ?? Environment.GetEnvironmentVariable(\"JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN\");
-        var lifetimeValue = configuration[\"Remote:Display:GrantLifetimeSeconds\"]
-            ?? Environment.GetEnvironmentVariable(\"JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS\");
+        var providerTemplate = configuration["Remote:Display:ProviderEndpointTemplate"]
+            ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE");
+        var configuredOrigin = configuration["Remote:Display:PublicOrigin"]
+            ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN");
+        var lifetimeValue = configuration["Remote:Display:GrantLifetimeSeconds"]
+            ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS");
 
         if (string.IsNullOrWhiteSpace(providerTemplate)
             && string.IsNullOrWhiteSpace(configuredOrigin))
@@ -77,7 +77,7 @@ public sealed class RemoteDisplayGateway
         if (lifetimeSeconds is < 1 or > MaximumGrantLifetimeSeconds)
         {
             throw new InvalidOperationException(
-                $\"Remote display grant lifetime must be from 1 through {MaximumGrantLifetimeSeconds} seconds.\");
+                $"Remote display grant lifetime must be from 1 through {MaximumGrantLifetimeSeconds} seconds.");
         }
 
         return new RemoteDisplayGateway(
@@ -108,8 +108,8 @@ public sealed class RemoteDisplayGateway
         if (expiresAtUtc <= now)
         {
             throw new RemoteDisplayGatewayException(
-                \"remote.display_session_expired\",
-                \"The Remote session cannot receive a display descriptor after its lifetime ended.\");
+                "remote.display_session_expired",
+                "The Remote session cannot receive a display descriptor after its lifetime ended.");
         }
 
         var expires = expiresAtUtc.ToUnixTimeSeconds();
@@ -184,7 +184,7 @@ public sealed class RemoteDisplayGateway
         ValidateRuntimeId(runtimeId);
 
         return new Uri(
-            this.providerEndpointTemplate.Replace(\"{runtimeId}\", runtimeId, StringComparison.Ordinal),
+            this.providerEndpointTemplate.Replace("{runtimeId}", runtimeId, StringComparison.Ordinal),
             UriKind.Absolute);
     }
 
@@ -197,7 +197,7 @@ public sealed class RemoteDisplayGateway
         var package = Uri.EscapeDataString(callerPackageId);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $\"/api/v1/remote/sessions/{sessionId:D}/display?package={package}&revision={revision}&expires={expires}\");
+            $"/api/v1/remote/sessions/{sessionId:D}/display?package={package}&revision={revision}&expires={expires}");
     }
 
     private static string ValidateProviderTemplate(string? value)
@@ -205,20 +205,20 @@ public sealed class RemoteDisplayGateway
         if (string.IsNullOrWhiteSpace(value)
             || value.Count(character => character == '{') != 1
             || value.Count(character => character == '}') != 1
-            || !value.Contains(\"{runtimeId}\", StringComparison.Ordinal))
+            || !value.Contains("{runtimeId}", StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                \"Remote display provider endpoint template must contain exactly one {runtimeId} placeholder.\");
+                "Remote display provider endpoint template must contain exactly one {runtimeId} placeholder.");
         }
 
-        var probe = value.Replace(\"{runtimeId}\", \"remote-probe\", StringComparison.Ordinal);
+        var probe = value.Replace("{runtimeId}", "remote-probe", StringComparison.Ordinal);
         if (!Uri.TryCreate(probe, UriKind.Absolute, out var endpoint)
-            || endpoint.Scheme is not (\"ws\" or \"wss\")
+            || endpoint.Scheme is not ("ws" or "wss")
             || !string.IsNullOrEmpty(endpoint.UserInfo)
             || !string.IsNullOrEmpty(endpoint.Fragment))
         {
             throw new InvalidOperationException(
-                \"Remote display provider endpoint template must resolve to an absolute WS or WSS URI without user information or fragment.\");
+                "Remote display provider endpoint template must resolve to an absolute WS or WSS URI without user information or fragment.");
         }
 
         return value;
@@ -227,17 +227,17 @@ public sealed class RemoteDisplayGateway
     private static string ValidatePublicOrigin(string? value) =>
         TryNormalizePublicOrigin(value)
         ?? throw new InvalidOperationException(
-            \"Remote display public origin must be one absolute HTTP or HTTPS origin without path, query, fragment or user information.\");
+            "Remote display public origin must be one absolute HTTP or HTTPS origin without path, query, fragment or user information.");
 
     private static string? TryNormalizePublicOrigin(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)
             || !UriTryCreate(value, UriKind.Absolute, out var origin)
-            || origin.Scheme is not (\"http\" or \"https\")
+            || origin.Scheme is not ("http" or "https")
             || !string.IsNullOrEmpty(origin.UserInfo)
             || !string.IsNullOrEmpty(origin.Query)
             || !string.IsNullOrEmpty(origin.Fragment)
-            || origin.AbsolutePath is not \"/\")
+            || origin.AbsolutePath is not "/")
         {
             return null;
         }
@@ -262,8 +262,8 @@ public sealed class RemoteDisplayGateway
         if (sessionId == Guid.Empty || ownerUserId == Guid.Empty || revision < 1)
         {
             throw new RemoteDisplayGatewayException(
-                \"remote.display_identity_invalid\",
-                \"Remote display descriptor identity is invalid.\");
+                "remote.display_identity_invalid",
+                "Remote display descriptor identity is invalid.");
         }
         if (string.IsNullOrWhiteSpace(callerPackageId)
             || callerPackageId != callerPackageId.Trim()
@@ -271,8 +271,8 @@ public sealed class RemoteDisplayGateway
             || callerPackageId.Any(char.IsControl))
         {
             throw new RemoteDisplayGatewayException(
-                \"remote.display_package_invalid\",
-                \"Remote display package identity is invalid.\");
+                "remote.display_package_invalid",
+                "Remote display package identity is invalid.");
         }
 
         ValidateRuntimeId(runtimeId);
@@ -286,8 +286,8 @@ public sealed class RemoteDisplayGateway
             || runtimeId.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-'))
         {
             throw new RemoteDisplayGatewayException(
-                \"remote.display_runtime_invalid\",
-                \"Remote display runtime identity is invalid.\");
+                "remote.display_runtime_invalid",
+                "Remote display runtime identity is invalid.");
         }
     }
 
@@ -296,8 +296,8 @@ public sealed class RemoteDisplayGateway
         if (!this.IsConfigured)
         {
             throw new RemoteDisplayGatewayException(
-                \"remote.display_not_configured\",
-                \"Remote display transport is not configured.\");
+                "remote.display_not_configured",
+                "Remote display transport is not configured.");
         }
     }
 }

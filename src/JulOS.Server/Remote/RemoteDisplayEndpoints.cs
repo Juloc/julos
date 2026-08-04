@@ -16,9 +16,9 @@ internal static class RemoteDisplayEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet(
-                \"/api/v1/remote/sessions/{sessionId:guid}/display\",
+                "/api/v1/remote/sessions/{sessionId:guid}/display",
                 ConnectAsync)
-            .WithTags(\"Remote\")
+            .WithTags("Remote")
             .RequireAuthorization();
 
         return endpoints;
@@ -35,20 +35,20 @@ internal static class RemoteDisplayEndpoints
         {
             return Failure(
                 StatusCodes.Status403Forbidden,
-                \"remote.display_origin_denied\",
-                \"Remote display requires the configured same-origin browser origin.\");
+                "remote.display_origin_denied",
+                "Remote display requires the configured same-origin browser origin.");
         }
 
         var ownerUserId = CurrentUserId(context.User);
-        var callerPackageId = context.Request.Query[\"package\"].ToString();
+        var callerPackageId = context.Request.Query["package"].ToString();
         if (ownerUserId is null
-            || !TryReadLong(context, \"revision\", out var revision)
-            || !TryReadLong(context, \"expires\", out var expires))
+            || !TryReadLong(context, "revision", out var revision)
+            || !TryReadLong(context, "expires", out var expires))
         {
             return Failure(
                 StatusCodes.Status401Unauthorized,
-                \"remote.display_authorization_required\",
-                \"Remote display authorization failed.\");
+                "remote.display_authorization_required",
+                "Remote display authorization failed.");
         }
 
         var requestedEndpoint = string.Concat(
@@ -77,8 +77,8 @@ internal static class RemoteDisplayEndpoints
         {
             return Failure(
                 StatusCodes.Status400BadRequest,
-                \"remote.display_websocket_required\",
-                \"Remote display requires a WebSocket request.\");
+                "remote.display_websocket_required",
+                "Remote display requires a WebSocket request.");
         }
 
         using var provider = new ClientWebSocket();
@@ -90,15 +90,15 @@ internal static class RemoteDisplayEndpoints
         {
             return Failure(
                 StatusCodes.Status502BadGateway,
-                \"remote.display_provider_unavailable\",
-                \"The Remote display provider is unavailable.\");
+                "remote.display_provider_unavailable",
+                "The Remote display provider is unavailable.");
         }
         catch (HttpRequestException)
         {
             return Failure(
                 StatusCodes.Status502BadGateway,
-                \"remote.display_provider_unavailable\",
-                \"The Remote display provider is unavailable.\");
+                "remote.display_provider_unavailable",
+                "The Remote display provider is unavailable.");
         }
 
         using var browser = await context.WebSockets
@@ -186,19 +186,19 @@ internal static class RemoteDisplayEndpoints
         {
             RemoteDisplayAuthorizationFailure.Expired => Failure(
                 StatusCodes.Status410Gone,
-                \"remote.display_descriptor_expired\",
+                "remote.display_descriptor_expired",
                 exception.Message),
             RemoteDisplayAuthorizationFailure.Stale => Failure(
                 StatusCodes.Status409Conflict,
-                \"remote.display_descriptor_stale\",
+                "remote.display_descriptor_stale",
                 exception.Message),
             RemoteDisplayAuthorizationFailure.Unavailable => Failure(
                 StatusCodes.Status409Conflict,
-                \"remote.display_unavailable\",
+                "remote.display_unavailable",
                 exception.Message),
             _ => Failure(
                 StatusCodes.Status401Unauthorized,
-                \"remote.display_authorization_required\",
+                "remote.display_authorization_required",
                 exception.Message),
         };
 
