@@ -94,22 +94,45 @@ public sealed class CapabilityBroker : ICapabilityClient
             "capability.caller_required",
             "Capability invocation requires an explicit caller package identity.");
 
-    /// <summary>Invokes the highest-priority healthy compatible provider for an authorized package caller.</summary>
+    /// <summary>Invokes a capability for a package-only internal caller.</summary>
     /// <param name="callerPackageId">Package invoking the capability.</param>
     /// <param name="request">Versioned capability request with absolute deadline.</param>
     /// <param name="cancellationToken">Caller cancellation.</param>
     /// <returns>The provider response.</returns>
+    public Task<CapabilityResponse> InvokeAsync(
+        string callerPackageId,
+        CapabilityRequest request,
+        CancellationToken cancellationToken = default) =>
+        this.InvokeAsync(callerPackageId, callerUserId: null, request, cancellationToken);
+
+    /// <summary>Invokes the highest-priority healthy compatible provider for an authorized caller.</summary>
+    /// <param name="callerPackageId">Package invoking the capability.</param>
+    /// <param name="callerUserId">Authenticated user identity supplied by the control plane.</param>
+    /// <param name="request">Untrusted versioned capability request with absolute deadline.</param>
+    /// <param name="cancellationToken">Caller cancellation.</param>
+    /// <returns>The provider response.</returns>
     public async Task<CapabilityResponse> InvokeAsync(
         string callerPackageId,
+        Guid? callerUserId,
         CapabilityRequest request,
         CancellationToken cancellationToken = default)
     {
         ValidatePackageId(callerPackageId);
+        ValidateUserId(callerUserId);
         ValidateRequest(request);
+        if (request.Caller is not null)
+        {
+            throw new CapabilityBrokerException(
+                "capability.caller_context_untrusted",
+                "Capability caller metadata must be supplied by the control plane.");
+        }
         if (request.DeadlineUtc <= this.timeProvider.GetUtcNow())
         {
             throw new CapabilityBrokerException("capability.deadline_expired", "Capability request deadline has expired.");
         }
+
+        var caller = new CapabilityCallerContext(callerPackageId, callerUserId);
+        var effectiveRequest = request with { Caller = caller };
 
         ICapabilityProvider provider;
         lock (this.sync)
@@ -133,9 +156,9 @@ public sealed class CapabilityBroker : ICapabilityClient
         deadline.CancelAfter(request.DeadlineUtc - this.timeProvider.GetUtcNow());
         try
         {
-            var response = await provider.InvokeAsync(request, deadline.Token).ConfigureAwait(false);
+            var response = await provider.InvokeAsync(effectiveRequest, deadline.Token).ConfigureAwait(false);
             await this.audit.AppendAsync(new AuditRecord(
-                UserId: null,
+                caller.UserId,
                 AgentId: null,
                 SourcePackageId: callerPackageId,
                 Action: "capability.invoke",
@@ -152,7 +175,7 @@ public sealed class CapabilityBroker : ICapabilityClient
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await this.audit.AppendAsync(new AuditRecord(
-                UserId: null,
+                caller.UserId,
                 AgentId: null,
                 SourcePackageId: callerPackageId,
                 Action: "capability.invoke",
@@ -178,6 +201,16 @@ public sealed class CapabilityBroker : ICapabilityClient
         if (request.Payload.GetRawText().Length > 1024 * 1024)
         {
             throw new CapabilityBrokerException("capability.payload_too_large", "Capability payload is too large.");
+        }
+    }
+
+    private static void ValidateUserId(Guid? userId)
+    {
+        if (userId == Guid.Empty)
+        {
+            throw new CapabilityBrokerException(
+                "capability.user_identity_invalid",
+                "Capability user identity is invalid.");
         }
     }
 
