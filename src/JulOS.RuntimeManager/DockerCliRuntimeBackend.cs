@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 
 namespace JulOS.RuntimeManager;
 
@@ -41,69 +42,39 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             throw Failure("runtime.already_exists", "A runtime with that identifier already exists.");
         }
 
-        var arguments = new List<string>
+        var arguments = CreateArguments(request);
+        string? secretEnvironmentFile = null;
+        try
         {
-            "container",
-            "create",
-            "--name",
-            $"julos-{request.RuntimeId}",
-            "--label",
-            ManagedLabel,
-            "--label",
-            RuntimePolicy.OwnershipLabel(request.PackageId),
-            "--label",
-            RuntimePolicy.RuntimeLabel(request.RuntimeId),
-            "--label",
-            $"{PackageVersionLabelName}={request.PackageVersion}",
-            "--label",
-            $"{InstanceLabelName}={request.InstanceId}",
-            "--cpus",
-            request.CpuLimit.ToString(CultureInfo.InvariantCulture),
-            "--memory",
-            $"{request.MemoryLimitMb.ToString(CultureInfo.InvariantCulture)}m",
-            "--pids-limit",
-            request.PidsLimit.ToString(CultureInfo.InvariantCulture),
-            "--security-opt",
-            "no-new-privileges=true",
-            "--cap-drop",
-            "ALL",
-        };
+            if (request.SecretEnvironment.Count > 0)
+            {
+                secretEnvironmentFile = await WriteSecretEnvironmentAsync(
+                    request.SecretEnvironment,
+                    cancellationToken).ConfigureAwait(false);
+                arguments.Add("--env-file");
+                arguments.Add(secretEnvironmentFile);
+            }
 
-        foreach (var network in request.Networks)
-        {
-            arguments.Add("--network");
-            arguments.Add(network);
+            arguments.Add(request.Image);
+            var containerId = (await this.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false)).Trim();
+            if (containerId.Length == 0)
+            {
+                throw Failure("runtime.create.failed", "Docker did not return a container identifier.");
+            }
+
+            return new RuntimeResource(
+                request.RuntimeId,
+                request.PackageId,
+                request.PackageVersion,
+                request.InstanceId,
+                containerId,
+                "created",
+                request.Image);
         }
-
-        foreach (var volume in request.Volumes)
+        finally
         {
-            arguments.Add("--mount");
-            arguments.Add(
-                $"type=volume,src={volume.Name},dst={volume.Target}"
-                + (volume.ReadOnly ? ",readonly" : string.Empty));
+            DeleteSecretEnvironmentFile(secretEnvironmentFile);
         }
-
-        foreach (var pair in request.Environment.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            arguments.Add("--env");
-            arguments.Add($"{pair.Key}={pair.Value}");
-        }
-
-        arguments.Add(request.Image);
-        var containerId = (await this.ExecuteAsync(arguments, cancellationToken).ConfigureAwait(false)).Trim();
-        if (containerId.Length == 0)
-        {
-            throw Failure("runtime.create.failed", "Docker did not return a container identifier.");
-        }
-
-        return new RuntimeResource(
-            request.RuntimeId,
-            request.PackageId,
-            request.PackageVersion,
-            request.InstanceId,
-            containerId,
-            "created",
-            request.Image);
     }
 
     /// <inheritdoc />
@@ -186,6 +157,59 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             .ConfigureAwait(false);
     }
 
+    private static List<string> CreateArguments(RuntimeCreateRequest request)
+    {
+        var arguments = new List<string>
+        {
+            "container",
+            "create",
+            "--name",
+            $"julos-{request.RuntimeId}",
+            "--label",
+            ManagedLabel,
+            "--label",
+            RuntimePolicy.OwnershipLabel(request.PackageId),
+            "--label",
+            RuntimePolicy.RuntimeLabel(request.RuntimeId),
+            "--label",
+            $"{PackageVersionLabelName}={request.PackageVersion}",
+            "--label",
+            $"{InstanceLabelName}={request.InstanceId}",
+            "--cpus",
+            request.CpuLimit.ToString(CultureInfo.InvariantCulture),
+            "--memory",
+            $"{request.MemoryLimitMb.ToString(CultureInfo.InvariantCulture)}m",
+            "--pids-limit",
+            request.PidsLimit.ToString(CultureInfo.InvariantCulture),
+            "--security-opt",
+            "no-new-privileges=true",
+            "--cap-drop",
+            "ALL",
+        };
+
+        foreach (var network in request.Networks)
+        {
+            arguments.Add("--network");
+            arguments.Add(network);
+        }
+
+        foreach (var volume in request.Volumes)
+        {
+            arguments.Add("--mount");
+            arguments.Add(
+                $"type=volume,src={volume.Name},dst={volume.Target}"
+                + (volume.ReadOnly ? ",readonly" : string.Empty));
+        }
+
+        foreach (var pair in request.Environment.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            arguments.Add("--env");
+            arguments.Add($"{pair.Key}={pair.Value}");
+        }
+
+        return arguments;
+    }
+
     private async Task<RuntimeResource> RequireAsync(
         string runtimeId,
         CancellationToken cancellationToken)
@@ -237,6 +261,63 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         }
 
         return output;
+    }
+
+    private static async Task<string> WriteSecretEnvironmentAsync(
+        IReadOnlyDictionary<string, string> environment,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"julos-runtime-{Guid.NewGuid():N}.env");
+        try
+        {
+            await using (var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            await using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            {
+                writer.NewLine = "\n";
+                foreach (var pair in environment.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+                {
+                    await writer.WriteLineAsync($"{pair.Key}={pair.Value}".AsMemory(), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            return path;
+        }
+        catch
+        {
+            DeleteSecretEnvironmentFile(path);
+            throw;
+        }
+    }
+
+    private static void DeleteSecretEnvironmentFile(string? path)
+    {
+        if (path is null)
+        {
+            return;
+        }
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // The temporary file contains only an expiring runtime credential and is never reused.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Cleanup is best effort; directory permissions still restrict the temporary file.
+        }
     }
 
     private static string Sanitize(string value)
