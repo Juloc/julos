@@ -5,6 +5,8 @@ namespace JulOS.RuntimeManager;
 /// <summary>Validates every package runtime request against immutable isolation policy.</summary>
 public sealed class RuntimePolicy
 {
+    private const int MaximumSecretEnvironmentEntries = 8;
+    private const int MaximumSecretEnvironmentValueLength = 4096;
     private static readonly Regex IdentifierPattern = new(
         "^[a-z0-9]+(?:[.-][a-z0-9]+)+$",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
@@ -51,7 +53,7 @@ public sealed class RuntimePolicy
         this.allowedNetworks = networks;
     }
 
-    /// <summary>Rejects unpinned images, unapproved networks, foreign volumes and secret-like environment fields.</summary>
+    /// <summary>Rejects unpinned images, unapproved networks, foreign volumes and invalid environment fields.</summary>
     /// <param name="request">Runtime request to validate.</param>
     public void Validate(RuntimeCreateRequest request)
     {
@@ -113,6 +115,20 @@ public sealed class RuntimePolicy
             }
         }
 
+        ValidateVolumes(request);
+        ValidateEnvironment(request);
+    }
+
+    /// <summary>Returns the Docker ownership label for a package.</summary>
+    public static string OwnershipLabel(string packageId) =>
+        $"com.juloc.julos.package={packageId}";
+
+    /// <summary>Returns the Docker identity label for a managed runtime.</summary>
+    public static string RuntimeLabel(string runtimeId) =>
+        $"com.juloc.julos.runtime={runtimeId}";
+
+    private static void ValidateVolumes(RuntimeCreateRequest request)
+    {
         var volumeNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var volume in request.Volumes)
         {
@@ -133,27 +149,43 @@ public sealed class RuntimePolicy
                     "Runtime volume targets must be absolute container paths without traversal.");
             }
         }
+    }
 
+    private static void ValidateEnvironment(RuntimeCreateRequest request)
+    {
         foreach (var pair in request.Environment)
         {
             if (!IsEnvironmentName(pair.Key)
                 || pair.Value.Contains('\0')
-                || LooksLikeSecretName(pair.Key))
+                || LooksLikeSecretName(pair.Key)
+                || request.SecretEnvironment.ContainsKey(pair.Key))
             {
                 throw Failure(
                     "runtime.environment.invalid",
                     "Runtime environment entries contain an invalid name, value or secret-like field.");
             }
         }
+
+        if (request.SecretEnvironment.Count > MaximumSecretEnvironmentEntries)
+        {
+            throw Failure(
+                "runtime.secret_environment.invalid",
+                "Runtime secret environment contains too many entries.");
+        }
+        foreach (var pair in request.SecretEnvironment)
+        {
+            if (!IsEnvironmentName(pair.Key)
+                || !LooksLikeSecretName(pair.Key)
+                || string.IsNullOrEmpty(pair.Value)
+                || pair.Value.Length > MaximumSecretEnvironmentValueLength
+                || pair.Value.ContainsAny('\0', '\r', '\n'))
+            {
+                throw Failure(
+                    "runtime.secret_environment.invalid",
+                    "Runtime secret environment contains an invalid name or value.");
+            }
+        }
     }
-
-    /// <summary>Returns the Docker ownership label for a package.</summary>
-    public static string OwnershipLabel(string packageId) =>
-        $"com.juloc.julos.package={packageId}";
-
-    /// <summary>Returns the Docker identity label for a managed runtime.</summary>
-    public static string RuntimeLabel(string runtimeId) =>
-        $"com.juloc.julos.runtime={runtimeId}";
 
     private static bool IsAbsoluteContainerPath(string value)
     {
