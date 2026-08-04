@@ -16,19 +16,16 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
     private static readonly TimeSpan MinimumActivityWriteInterval = TimeSpan.FromSeconds(15);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly CoreDbContext context;
-    private readonly IRemoteSessionService sessions;
     private readonly IRealtimeEventPublisher events;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Creates the PostgreSQL-backed provider result service.</summary>
     public PostgresRemoteSessionConnectionService(
         CoreDbContext context,
-        IRemoteSessionService sessions,
         IRealtimeEventPublisher events,
         TimeProvider timeProvider)
     {
         this.context = context ?? throw new ArgumentNullException(nameof(context));
-        this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         this.events = events ?? throw new ArgumentNullException(nameof(events));
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
@@ -45,7 +42,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         ValidateRuntime(row, command.RuntimeId);
         if (string.Equals(row.State, RemoteSessionStates.Connected, StringComparison.Ordinal))
         {
-            return await this.ReadAsync(row, cancellationToken).ConfigureAwait(false);
+            return ToResponse(row);
         }
         ValidateRevision(row, command.ExpectedRevision);
         ValidateTransition(row.State, RemoteSessionStates.Connected);
@@ -57,7 +54,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         row.LastActivityAtUtc = now;
         row.Revision = checked(row.Revision + 1);
         await this.SaveAsync(cancellationToken).ConfigureAwait(false);
-        return await this.ReadAndPublishAsync(row, cancellationToken).ConfigureAwait(false);
+        return await this.PublishAsync(row, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -74,7 +71,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         {
             if (MatchesFailure(row, command.RuntimeId, failure))
             {
-                return await this.ReadAsync(row, cancellationToken).ConfigureAwait(false);
+                return ToResponse(row);
             }
             throw new RemoteSessionServiceException(RemoteSessionServiceFailureReason.InvalidTransition);
         }
@@ -97,7 +94,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         row.EndedAtUtc = now;
         row.Revision = checked(row.Revision + 1);
         await this.SaveAsync(cancellationToken).ConfigureAwait(false);
-        return await this.ReadAndPublishAsync(row, cancellationToken).ConfigureAwait(false);
+        return await this.PublishAsync(row, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -132,11 +129,11 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
             .ConfigureAwait(false)
         ?? throw new RemoteSessionServiceException(RemoteSessionServiceFailureReason.NotFound);
 
-    private async Task<RemoteSessionResponse> ReadAndPublishAsync(
+    private async Task<RemoteSessionResponse> PublishAsync(
         RemoteSessionRow row,
         CancellationToken cancellationToken)
     {
-        var response = await this.ReadAsync(row, cancellationToken).ConfigureAwait(false);
+        var response = ToResponse(row);
         await this.events.PublishAsync(
             new RealtimeEventNotification(
                 "remote.session.changed",
@@ -147,16 +144,6 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
             cancellationToken).ConfigureAwait(false);
         return response;
     }
-
-    private Task<RemoteSessionResponse> ReadAsync(
-        RemoteSessionRow row,
-        CancellationToken cancellationToken) =>
-        this.sessions.ReadAsync(
-            new ReadRemoteSessionCommand(
-                row.OwnerUserId,
-                row.CallerPackageId,
-                new ReadRemoteSessionRequest(row.Id)),
-            cancellationToken);
 
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
@@ -236,9 +223,15 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
                 "remote.provider_failure_invalid",
                 "Remote provider failure code is invalid.");
         }
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            throw new RemoteSessionContractException(
+                "remote.provider_failure_invalid",
+                "Remote provider failure detail is invalid.");
+        }
 
         detail = detail.Trim();
-        if (detail.Length is < 1 or > 1024 || detail.Any(char.IsControl))
+        if (detail.Length > 1024 || detail.Any(char.IsControl))
         {
             throw new RemoteSessionContractException(
                 "remote.provider_failure_invalid",
@@ -257,4 +250,39 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         && string.Equals(row.FailureCode, failure.Code, StringComparison.Ordinal)
         && string.Equals(row.FailureDetail, failure.Detail, StringComparison.Ordinal)
         && row.FailureRetryable == failure.Retryable;
+
+    private static RemoteSessionResponse ToResponse(RemoteSessionRow row)
+    {
+        var display = row.DisplayKind is not null
+            && row.DisplayContractVersion is not null
+            && row.DisplayEndpoint is not null
+            && row.DisplayExpiresAtUtc is not null
+            ? new RemoteDisplayTransportResponse(
+                row.DisplayKind,
+                row.DisplayContractVersion,
+                row.DisplayEndpoint,
+                row.DisplayExpiresAtUtc.Value)
+            : null;
+        var failure = row.FailureCode is not null
+            && row.FailureDetail is not null
+            && row.FailureRetryable is not null
+            ? new RemoteSessionFailureResponse(
+                row.FailureCode,
+                row.FailureDetail,
+                row.FailureRetryable.Value)
+            : null;
+        return new RemoteSessionResponse(
+            row.Id,
+            row.OperationKey,
+            row.RequestIdentity,
+            row.Protocol,
+            new RemoteTargetContract(row.TargetHost, row.TargetPort),
+            row.State,
+            row.CreatedAtUtc,
+            row.ConnectedAtUtc,
+            row.EndedAtUtc,
+            display,
+            failure,
+            row.Revision);
+    }
 }
