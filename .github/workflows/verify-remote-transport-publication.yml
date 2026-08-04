@@ -1,0 +1,135 @@
+# Temporary non-merge probe. The branch and PR are removed after verification.
+
+name: Verify Remote Transport Publication
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-remote-transport-publication.yml
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+  attestations: read
+
+jobs:
+  verify:
+    name: Verify package, evidence and provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUBLISH_SHA: 4ec0a2a07df0783e662eaa19abf96b2d877b518d
+      PACKAGE_VERSION: 0.1.0
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Resolve the publication run
+        id: publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${PUBLISH_SHA}&per_page=100")"
+          run_id="$(jq --raw-output '
+            [.workflow_runs[]
+              | select(.name == "Publish Remote Transport")
+              | select(.event == "push")]
+            | sort_by(.run_number)
+            | last
+            | .id // empty
+          ' <<<"$runs")"
+
+          if [[ -z "$run_id" ]]; then
+            echo "No push publication run exists for ${PUBLISH_SHA}." >&2
+            exit 1
+          fi
+
+          status="$(jq --raw-output --argjson id "$run_id" '
+            .workflow_runs[] | select(.id == $id) | .status
+          ' <<<"$runs")"
+          conclusion="$(jq --raw-output --argjson id "$run_id" '
+            .workflow_runs[] | select(.id == $id) | .conclusion // ""
+          ' <<<"$runs")"
+
+          if [[ "$status" != "completed" || "$conclusion" != "success" ]]; then
+            echo "Publication run ${run_id} is ${status}/${conclusion}." >&2
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download the evidence bundle
+        id: evidence
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.publication.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          artifact_name="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts" \
+            --jq ".artifacts[] | select(.expired == false) | .name" \
+            | grep "^JulOS.Remote.Transport-${PACKAGE_VERSION}-" \
+            | head -n 1)"
+
+          if [[ -z "$artifact_name" ]]; then
+            echo "The publication run has no current evidence bundle." >&2
+            exit 1
+          fi
+
+          evidence="$RUNNER_TEMP/remote-transport-evidence"
+          mkdir -p "$evidence"
+          gh run download "$RUN_ID" --name "$artifact_name" --dir "$evidence"
+
+          test -f "$evidence/JulOS.Remote.Transport.${PACKAGE_VERSION}.nupkg"
+          test -f "$evidence/JulOS.Remote.Transport.${PACKAGE_VERSION}.snupkg"
+          test -f "$evidence/SHA256SUMS"
+          echo "directory=$evidence" >> "$GITHUB_OUTPUT"
+
+      - name: Verify checksums and attestations
+        shell: bash
+        env:
+          EVIDENCE: ${{ steps.evidence.outputs.directory }}
+        run: |
+          set -euo pipefail
+          (
+            cd "$EVIDENCE"
+            sha256sum --check SHA256SUMS
+          )
+
+          gh attestation verify \
+            "$EVIDENCE/JulOS.Remote.Transport.${PACKAGE_VERSION}.nupkg" \
+            --repo "$GITHUB_REPOSITORY"
+          gh attestation verify \
+            "$EVIDENCE/JulOS.Remote.Transport.${PACKAGE_VERSION}.snupkg" \
+            --repo "$GITHUB_REPOSITORY"
+          gh attestation verify \
+            "$EVIDENCE/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY"
+
+      - name: Restore the exact package version
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet nuget add source \
+            --username "${{ github.repository_owner }}" \
+            --password "$GITHUB_TOKEN" \
+            --store-password-in-clear-text \
+            --valid-authentication-types basic \
+            --name github \
+            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+          probe="$RUNNER_TEMP/package-probe"
+          dotnet new classlib --name PackageProbe --framework net10.0 --output "$probe"
+          dotnet add "$probe/PackageProbe.csproj" package JulOS.Remote.Transport \
+            --version "$PACKAGE_VERSION" \
+            --source github
+          dotnet restore "$probe/PackageProbe.csproj" --locked-mode=false
+          grep --fixed-strings \
+            "<PackageReference Include=\"JulOS.Remote.Transport\" Version=\"${PACKAGE_VERSION}\"" \
+            "$probe/PackageProbe.csproj"
