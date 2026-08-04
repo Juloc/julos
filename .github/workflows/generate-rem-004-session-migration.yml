@@ -42,9 +42,9 @@ jobs:
           migration_dir="src/JulOS.Infrastructure/Persistence/Core/Migrations"
           snapshot="$migration_dir/CoreDbContextModelSnapshot.cs"
           before_snapshot="$(sha256sum "$snapshot" | cut -d' ' -f1)"
-          status=0
 
-          {
+          set +e
+          (
             set -e
             dotnet tool restore
             dotnet restore JulOS.slnx
@@ -65,26 +65,27 @@ jobs:
             after_snapshot="$(sha256sum "$snapshot" | cut -d' ' -f1)"
             test "$after_snapshot" != "$before_snapshot"
             git status --short -- "$migration_dir"
-          } >"$log" 2>&1 || status=$?
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          ) 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
 
           if [[ "$status" -ne 0 ]]; then
-            {
-              tail -n 350 "$log"
-              echo '--- migration directory ---'
-              find "$migration_dir" -maxdepth 2 -type f -printf '%p\n' | sort
-              echo '--- git status ---'
-              git status --short
-            } > REM004-GENERATOR-FAILURE.log
-            git add -f REM004-GENERATOR-FAILURE.log
-            git commit -m 'ci(remote): capture session migration generator failure'
-            git push origin HEAD:agent/rem-004-durable-session-service
+            echo '--- migration generator failed ---'
+            tail -n 350 "$log"
+            echo '--- migration directory ---'
+            find "$migration_dir" -maxdepth 2 -type f -printf '%p\n' | sort
+            echo '--- git status ---'
+            git status --short
             exit "$status"
           fi
 
-          rm -f REM004-GENERATOR-FAILURE.log
           git add "$migration_dir"
+          if git diff --cached --quiet; then
+            echo 'Migration generation completed without producing committed model changes.' >&2
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'feat(remote): add durable session migration'
           git push origin HEAD:agent/rem-004-durable-session-service
