@@ -36,7 +36,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
 | REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
-| REM-004 | Remote worker and session orchestration | In progress | Ownership, exact-idempotent sessions, allowlisted runtime allocation, lifecycle enforcement, trusted provider-result mutations and server-timed activity persistence are implemented; authenticated provider transport, display grants, reconnect and detach policy remain. |
+| REM-004 | Remote worker and session orchestration | In progress | Ownership, exact-idempotent sessions, allowlisted runtime allocation, lifecycle enforcement, authenticated provider events and server-timed activity are implemented; display grants, reconnect and detach policy remain. |
 | Phase 6 | Remote and Browser | In progress | REM-001 through REM-003 are complete; REM-004 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -79,13 +79,17 @@ Completed:
 - one flat connection service applies exact runtime-bound `connecting` to `connected` and active-session to `failed` transitions;
 - trusted provider failures are restricted to stable caller-safe codes and bounded detail;
 - connected activity uses the Server clock and coalesces frequent writes before persistence;
-- provider-result integration tests cover exact runtime matching, idempotent connection and failure, lifecycle cleanup and activity persistence;
-- unit, architecture and PostgreSQL integration tests cover policy rejection, exact allocation, retry idempotency, foreign-secret refusal, disconnect, expiry, provider results and cleanup retries.
+- one private Server endpoint routes `connected`, `failed` and `activity` events to the existing connection service;
+- provider callbacks use expiring HMAC tokens bound to the exact session and runtime identities;
+- callback credentials are supplied only to the provider runtime through a separate bounded secret-environment channel;
+- Runtime Manager writes secret environment values to a user-only temporary file, passes only its path to Docker and removes it on close;
+- normal runtime environment values remain non-secret and continue to reject secret-like names;
+- provider ingress, callback authentication, secret-environment policy and allocation wiring are covered by unit and integration tests;
+- unit, architecture and PostgreSQL integration tests cover policy rejection, exact allocation, retry idempotency, foreign-secret refusal, disconnect, expiry, provider events and cleanup retries.
 
 Remaining scope:
 
-- define one authenticated provider-to-Core transport and connect the Remote worker to the trusted provider-result service;
-- issue bounded same-origin display descriptors only after a successful authenticated provider handshake;
+- issue bounded same-origin display descriptors only after an authenticated successful provider handshake;
 - enforce reconnect authorization and reject stale or terminal display grants;
 - publish operation progress where a caller needs more than lifecycle events;
 - connect window detach behavior to the explicit session lifecycle policy.
