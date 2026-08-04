@@ -22,39 +22,6 @@ public static class RemoteSessionCapabilityContract
     public const string CancelOperation = "cancel";
 }
 
-/// <summary>Protocol identities understood by the protocol-neutral JulOS 1.0 Remote contract.</summary>
-public static class RemoteProtocolIds
-{
-    /// <summary>Remote Desktop Protocol.</summary>
-    public const string Rdp = "rdp";
-
-    /// <summary>Virtual Network Computing.</summary>
-    public const string Vnc = "vnc";
-
-    /// <summary>Secure Shell.</summary>
-    public const string Ssh = "ssh";
-
-    /// <summary>Returns whether the supplied protocol identity belongs to the 1.0 contract.</summary>
-    /// <param name="protocol">Protocol identity.</param>
-    /// <returns>Whether the protocol is supported by the contract.</returns>
-    public static bool IsSupported(string protocol) =>
-        string.Equals(protocol, Rdp, StringComparison.Ordinal)
-        || string.Equals(protocol, Vnc, StringComparison.Ordinal)
-        || string.Equals(protocol, Ssh, StringComparison.Ordinal);
-
-    /// <summary>Returns the conventional port for a supported protocol.</summary>
-    /// <param name="protocol">Supported protocol identity.</param>
-    /// <returns>The conventional protocol port.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The protocol is not supported.</exception>
-    public static int DefaultPort(string protocol) => protocol switch
-    {
-        Rdp => 3389,
-        Vnc => 5900,
-        Ssh => 22,
-        _ => throw new ArgumentOutOfRangeException(nameof(protocol), protocol, "Remote protocol is unsupported."),
-    };
-}
-
 /// <summary>Stable lifecycle states shared by all Remote transport implementations.</summary>
 public static class RemoteSessionStates
 {
@@ -98,13 +65,13 @@ public static class RemoteSessionStates
 /// <summary>Stable caller-safe Remote session failure codes.</summary>
 public static class RemoteSessionFailureCodes
 {
-    /// <summary>The requested protocol is unsupported.</summary>
+    /// <summary>The requested protocol identity is malformed or unavailable.</summary>
     public const string ProtocolUnsupported = "remote.protocol_unsupported";
 
     /// <summary>The target host or port is invalid.</summary>
     public const string TargetInvalid = "remote.target_invalid";
 
-    /// <summary>The referenced credential is missing or unavailable.</summary>
+    /// <summary>The referenced secret is missing or unavailable.</summary>
     public const string CredentialUnavailable = "remote.credential_unavailable";
 
     /// <summary>The selected network profile is missing or unavailable.</summary>
@@ -147,9 +114,9 @@ public sealed record RemoteViewportContract(
 
 /// <summary>Creates one protocol-neutral Remote session.</summary>
 /// <param name="OperationKey">Caller-owned idempotency key.</param>
-/// <param name="Protocol">One identity from <see cref="RemoteProtocolIds"/>.</param>
+/// <param name="Protocol">Lowercase package-defined protocol identity.</param>
 /// <param name="Target">Explicit remote network target.</param>
-/// <param name="SecretReferenceId">Secret-reference identity; no credential material is embedded.</param>
+/// <param name="SecretReferenceId">Secret-reference identity; no secret material is embedded.</param>
 /// <param name="ProfileId">Optional saved Remote profile identity.</param>
 /// <param name="NetworkProfileId">Optional saved network-profile identity.</param>
 /// <param name="Viewport">Requested initial viewport.</param>
@@ -218,8 +185,8 @@ public sealed record RemoteDisplayTransportResponse(
 /// <param name="SessionId">Stable session identity.</param>
 /// <param name="OperationKey">Original create operation key.</param>
 /// <param name="RequestIdentity">Canonical create-request digest used for exact idempotency.</param>
-/// <param name="Protocol">Remote protocol identity.</param>
-/// <param name="Target">Caller-visible target without credentials.</param>
+/// <param name="Protocol">Package-defined protocol identity.</param>
+/// <param name="Target">Caller-visible target without secrets.</param>
 /// <param name="State">One lifecycle state from <see cref="RemoteSessionStates"/>.</param>
 /// <param name="CreatedAtUtc">Durable creation timestamp.</param>
 /// <param name="ConnectedAtUtc">Connection timestamp when reached.</param>
