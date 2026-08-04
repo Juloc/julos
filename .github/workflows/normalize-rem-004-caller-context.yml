@@ -1,0 +1,59 @@
+name: Normalize REM-004 caller context
+
+on:
+  push:
+    branches:
+      - agent/rem-004-session-orchestration
+    paths:
+      - src/JulOS.PackageSdk/CapabilityContracts.cs
+      - src/JulOS.Infrastructure/Packages/CapabilityBroker.cs
+      - src/JulOS.Server/Packages/PackageCapabilityEndpoints.cs
+      - tests/JulOS.Infrastructure.Tests/Packages/CapabilityBrokerCallerContextTests.cs
+      - docs/REMOTE-SESSION-CONTRACT.md
+      - docs/BACKLOG.md
+      - .github/workflows/normalize-rem-004-caller-context.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: normalize-rem-004-caller-context
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-004-session-orchestration
+          persist-credentials: true
+
+      - name: Normalize repository encoding
+        run: node tools/normalize-encoding.mjs
+
+      - name: Commit normalized files
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed='^(src/JulOS.PackageSdk/CapabilityContracts.cs|src/JulOS.Infrastructure/Packages/CapabilityBroker.cs|src/JulOS.Server/Packages/PackageCapabilityEndpoints.cs|tests/JulOS.Infrastructure.Tests/Packages/CapabilityBrokerCallerContextTests.cs|docs/REMOTE-SESSION-CONTRACT.md|docs/BACKLOG.md)$'
+          changed="$(git status --short | sed 's/^...//')"
+          if [[ -z "$changed" ]]; then
+            exit 0
+          fi
+          while IFS= read -r path; do
+            [[ "$path" =~ $allowed ]] || { echo "Unexpected normalized file: $path" >&2; exit 1; }
+          done <<< "$changed"
+          git add \
+            src/JulOS.PackageSdk/CapabilityContracts.cs \
+            src/JulOS.Infrastructure/Packages/CapabilityBroker.cs \
+            src/JulOS.Server/Packages/PackageCapabilityEndpoints.cs \
+            tests/JulOS.Infrastructure.Tests/Packages/CapabilityBrokerCallerContextTests.cs \
+            docs/REMOTE-SESSION-CONTRACT.md \
+            docs/BACKLOG.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(remote): normalize caller-context encoding'
+          git push origin HEAD:agent/rem-004-session-orchestration
