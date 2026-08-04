@@ -28,7 +28,7 @@ public sealed class RemoteWorkerTransportIntegrationTests
         Assert.AreEqual("healthy", health.Status);
         Assert.AreEqual(observedAt, health.ObservedAtUtc);
         Assert.AreEqual(
-            RemoteTransportProtocols.All.Count,
+            (decimal)RemoteTransportProtocols.All.Count,
             health.Measurements["supportedProtocolCount"]);
     }
 
