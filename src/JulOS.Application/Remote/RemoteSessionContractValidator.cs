@@ -68,13 +68,7 @@ public sealed partial class RemoteSessionContractValidator
     {
         ArgumentNullException.ThrowIfNull(request);
         ValidateOperationKey(request.OperationKey);
-        if (!RemoteProtocolIds.IsSupported(request.Protocol))
-        {
-            throw Failure(
-                RemoteSessionFailureCodes.ProtocolUnsupported,
-                "The requested Remote protocol is unsupported.");
-        }
-
+        var protocol = ValidateProtocol(request.Protocol);
         var target = ValidateTarget(request.Target);
         if (request.SecretReferenceId == Guid.Empty)
         {
@@ -131,7 +125,7 @@ public sealed partial class RemoteSessionContractValidator
 
         return request with
         {
-            Protocol = request.Protocol.ToLowerInvariant(),
+            Protocol = protocol,
             Target = target,
             Viewport = viewport,
         };
@@ -233,6 +227,22 @@ public sealed partial class RemoteSessionContractValidator
         ArgumentNullException.ThrowIfNull(request);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(request, IdentityJsonOptions);
         return Convert.ToHexStringLower(SHA256.HashData(bytes));
+    }
+
+    private static string ValidateProtocol(string protocol)
+    {
+        ValidateBoundedText(
+            protocol,
+            32,
+            RemoteSessionFailureCodes.ProtocolUnsupported,
+            "Remote protocol identity is invalid.");
+        if (!ProtocolIdPattern().IsMatch(protocol))
+        {
+            throw Failure(
+                RemoteSessionFailureCodes.ProtocolUnsupported,
+                "Remote protocol identity is invalid.");
+        }
+        return protocol;
     }
 
     private static RemoteTargetContract ValidateTarget(RemoteTargetContract target)
@@ -338,6 +348,9 @@ public sealed partial class RemoteSessionContractValidator
 
     private static RemoteSessionContractException Failure(string code, string detail) =>
         new(code, detail);
+
+    [GeneratedRegex("^[a-z][a-z0-9.-]{0,31}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ProtocolIdPattern();
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant)]
     private static partial Regex OperationKeyPattern();
