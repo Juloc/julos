@@ -1,0 +1,43 @@
+name: Normalize REM-004 durable session slice
+
+on:
+  push:
+    branches:
+      - agent/rem-004-durable-session-service
+    paths:
+      - .github/workflows/normalize-rem-004-durable-session.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: normalize-rem-004-durable-session
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-004-durable-session-service
+          persist-credentials: true
+
+      - name: Normalize repository encoding
+        run: node tools/normalize-encoding.mjs
+
+      - name: Commit normalized source and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git add src tests
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(remote): normalize durable session encoding'
+          git push origin HEAD:agent/rem-004-durable-session-service
