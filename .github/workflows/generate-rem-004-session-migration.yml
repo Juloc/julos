@@ -1,4 +1,4 @@
-# One-shot repository-toolchain migration generation; removed after the generated commit.
+# One-shot repository-toolchain migration generation; retry after validated source fixes.
 name: Generate REM-004 session migration
 
 on:
