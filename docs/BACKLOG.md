@@ -1,4 +1,4 @@
-﻿# Backlog
+# Backlog
 
 This file is the current high-level implementation state. Detailed future work belongs in `WORK_BREAKDOWN.md` and GitHub issues.
 
@@ -35,42 +35,47 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
-| REM-003 | Shared transport implementation | In progress | Single-source library and tests are merged; immutable GitHub Packages publication and Julgate adoption remain. |
-| Phase 6 | Remote and Browser | In progress | REM-001 and REM-002 are complete; REM-003 is in progress. Existing package shells are not complete session implementations. |
+| REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
+| REM-004 | Remote worker and session orchestration | Ready | Next item: capability authorization, Runtime Manager allocation, durable REM-001 lifecycle, limits, cleanup, events and failure problems. |
+| Phase 6 | Remote and Browser | In progress | REM-001 through REM-003 are complete; REM-004 is next. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
 | Phase 9 | Discovery and operational hardening | Planned | Depends on stable Agent and package runtime. |
 | Phase 10 | Release and Julgate migration | Planned | Requires all 1.0 release gates. |
 
-## Current REM-003 slice
+## REM-003 completion evidence
+
+- the sole implementation lives in the JulOS monorepo as `JulOS.Remote.Transport`;
+- JulOS Remote consumes the library through a project reference;
+- immutable package version `0.1.0` was published to GitHub Packages;
+- package and symbol artifacts have SHA-256 evidence and GitHub provenance attestations;
+- a verification probe restored the exact package from GitHub Packages and verified its digests and attestations;
+- Julgate `main` consumes exactly `JulOS.Remote.Transport` `0.1.0`;
+- Julgate no longer contains its own Guacamole payload, HMAC or AES implementation;
+- Julgate passes restore, build, 123 unit tests, RDP/VNC parity tests, real SFTP/FTP/SMB roundtrips, hardened Compose smoke tests, migration tests, Playwright, Trivy, CodeQL, NuGet audit and backup/restore validation;
+- no PAT, package credential, copied source tree or fallback transport implementation is committed.
+
+## Current REM-004 slice
 
 Scope:
 
-- add the sole package-publication workflow
-- run the complete repository validator before publication
-- bind package metadata and version to the exact source commit
-- require exact versioned package and symbol artifacts
-- record SHA-256 digests and GitHub provenance attestations
-- publish with the workflow-scoped `GITHUB_TOKEN`
-- reject attempts to overwrite an existing version
+- authorize session creation through the capability broker;
+- resolve package-defined provider and target access;
+- allocate only allowlisted provider runtimes through Runtime Manager;
+- persist REM-001 lifecycle and exact idempotency state;
+- publish operation and lifecycle events;
+- enforce inactivity and maximum-duration policy;
+- implement explicit cancel, disconnect and cleanup behavior;
+- map provider/runtime failures to caller-safe failures and operator-visible problems.
 
 Acceptance:
 
-- pull requests have no package write permission
-- validation, Release pack, digest creation and attestation all pass
-- the evidence bundle is retained as a workflow artifact
-- publication is limited to the JulOS integration branch
-- no PAT or package credential is committed
-- `JulOS.Remote.Transport.0.1.0` is published once after the workflow merges
-
-## Remaining REM-003 slices
-
-1. verify the published `0.1.0` package, digest and provenance;
-2. grant the Julgate repository Actions read access to the package;
-3. update Julgate to consume exactly `JulOS.Remote.Transport` `0.1.0`;
-4. remove Julgate's original payload/signing/encryption implementation;
-5. validate and deploy-test Julgate;
-6. mark REM-003 done only when both repositories use one implementation.
+- no provider launch material reaches package JavaScript;
+- repeated create requests preserve exact idempotency;
+- expired or cancelled sessions cannot reconnect through stale display grants;
+- closing or detaching a window follows explicit policy and does not silently kill a session;
+- runtime failure leaves no orphan runtime and creates a deduplicated problem;
+- implementation, tests and documentation pass the full repository validator.
 
 ## Specification status
 
@@ -87,7 +92,7 @@ These do not block current implementation:
 - final package signing key custody procedure
 - final public package-registry host
 - public third-party package support after 1.0
-- exact Remote runtime composition after shared extraction and parity evidence
+- exact provider runtime composition within the accepted REM-004 boundaries
 
 ## Backlog maintenance rule
 
