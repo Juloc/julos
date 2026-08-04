@@ -1,4 +1,4 @@
-﻿using JulOS.Application.Auditing;
+using JulOS.Application.Auditing;
 using JulOS.Domain.Observability;
 using JulOS.PackageSdk;
 
@@ -111,6 +111,16 @@ public sealed class CapabilityBroker : ICapabilityClient
             throw new CapabilityBrokerException("capability.deadline_expired", "Capability request deadline has expired.");
         }
 
+        var caller = request.Caller ?? new CapabilityCallerContext(callerPackageId, UserId: null);
+        ValidateCaller(caller);
+        if (!string.Equals(caller.PackageId, callerPackageId, StringComparison.Ordinal))
+        {
+            throw new CapabilityBrokerException(
+                "capability.caller_identity_mismatch",
+                "Capability caller metadata does not match the authorized package caller.");
+        }
+        var effectiveRequest = request with { Caller = caller };
+
         ICapabilityProvider provider;
         lock (this.sync)
         {
@@ -133,9 +143,9 @@ public sealed class CapabilityBroker : ICapabilityClient
         deadline.CancelAfter(request.DeadlineUtc - this.timeProvider.GetUtcNow());
         try
         {
-            var response = await provider.InvokeAsync(request, deadline.Token).ConfigureAwait(false);
+            var response = await provider.InvokeAsync(effectiveRequest, deadline.Token).ConfigureAwait(false);
             await this.audit.AppendAsync(new AuditRecord(
-                UserId: null,
+                caller.UserId,
                 AgentId: null,
                 SourcePackageId: callerPackageId,
                 Action: "capability.invoke",
@@ -152,7 +162,7 @@ public sealed class CapabilityBroker : ICapabilityClient
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await this.audit.AppendAsync(new AuditRecord(
-                UserId: null,
+                caller.UserId,
                 AgentId: null,
                 SourcePackageId: callerPackageId,
                 Action: "capability.invoke",
@@ -178,6 +188,18 @@ public sealed class CapabilityBroker : ICapabilityClient
         if (request.Payload.GetRawText().Length > 1024 * 1024)
         {
             throw new CapabilityBrokerException("capability.payload_too_large", "Capability payload is too large.");
+        }
+    }
+
+    private static void ValidateCaller(CapabilityCallerContext caller)
+    {
+        ArgumentNullException.ThrowIfNull(caller);
+        ValidatePackageId(caller.PackageId);
+        if (caller.UserId == Guid.Empty)
+        {
+            throw new CapabilityBrokerException(
+                "capability.user_identity_invalid",
+                "Capability user identity is invalid.");
         }
     }
 
