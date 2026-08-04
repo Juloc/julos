@@ -168,13 +168,6 @@ public sealed class RemoteDisplayEndpointTests
         Assert.AreEqual(payload.Length, result.Count);
         CollectionAssert.AreEqual(payload, received);
 
-        if (socket.State == WebSocketState.Open)
-        {
-            await socket.CloseAsync(
-                WebSocketCloseStatus.NormalClosure,
-                "test complete",
-                cancellation.Token).ConfigureAwait(false);
-        }
     }
 
     private static ServerHost CreateHost(
