@@ -9,6 +9,7 @@ using JulOS.Contracts.Authentication;
 using JulOS.Contracts.Remote;
 using JulOS.Contracts.Runtime;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
 using JulOS.Integration.Tests.Persistence;
 
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -236,13 +237,25 @@ public sealed class RemoteSessionServiceTests
         Assert.AreEqual(1, runtime.AllocationCount);
         var allocated = runtime.LastRequest
             ?? throw new AssertFailedException("Runtime allocation request was not captured.");
-        Assert.AreEqual($"remote-{created.SessionId:N}", allocated.InstanceId);
+        var runtimeId = $"remote-{created.SessionId:N}";
+        Assert.AreEqual(runtimeId, allocated.InstanceId);
         Assert.AreEqual("de.juloc.julos.remote-provider", allocated.PackageId);
         Assert.AreEqual("julos-remote", allocated.Networks.Single());
+        Assert.AreEqual(
+            "https://localhost/api/v1/internal/remote/provider-events",
+            allocated.Environment["JULOS_REMOTE_CALLBACK_ENDPOINT"]);
         Assert.IsFalse(allocated.Environment.Keys.Any(key =>
             key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
             || key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
             || key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)));
+        Assert.AreEqual(1, allocated.SecretEnvironment.Count);
+        var callbackToken = allocated.SecretEnvironment["JULOS_REMOTE_CALLBACK_TOKEN"];
+        var callbackAuthenticator = scope.ServiceProvider
+            .GetRequiredService<RemoteProviderCallbackAuthenticator>();
+        Assert.IsTrue(callbackAuthenticator.Authenticate(
+            created.SessionId,
+            runtimeId,
+            callbackToken));
     }
 
     [TestMethod]
