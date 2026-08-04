@@ -27,9 +27,8 @@ public sealed class ConfiguredRemoteRuntimePolicyTests
         Assert.AreEqual("de.juloc.julos.remote-provider", selection.Provider.ProviderPackageId);
         Assert.AreEqual("1.0.0", selection.Provider.PackageVersion);
         Assert.AreEqual(ProviderImage, selection.Provider.Image);
-        CollectionAssert.AreEqual(
-            new[] { "julos-remote" },
-            selection.NetworkProfile.RuntimeNetworks.ToArray());
+        Assert.AreEqual(1, selection.NetworkProfile.RuntimeNetworks.Count);
+        Assert.AreEqual("julos-remote", selection.NetworkProfile.RuntimeNetworks[0]);
     }
 
     [TestMethod]
