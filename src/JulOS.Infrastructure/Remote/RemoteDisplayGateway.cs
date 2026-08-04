@@ -232,7 +232,7 @@ public sealed class RemoteDisplayGateway
     private static string? TryNormalizePublicOrigin(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)
-            || !UriTryCreate(value, UriKind.Absolute, out var origin)
+            || !Uri.TryCreate(value, UriKind.Absolute, out var origin)
             || origin.Scheme is not ("http" or "https")
             || !string.IsNullOrEmpty(origin.UserInfo)
             || !string.IsNullOrEmpty(origin.Query)
