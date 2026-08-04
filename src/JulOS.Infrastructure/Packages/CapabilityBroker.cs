@@ -1,4 +1,4 @@
-﻿using JulOS.Application.Auditing;
+using JulOS.Application.Auditing;
 using JulOS.Domain.Observability;
 using JulOS.PackageSdk;
 
@@ -94,31 +94,44 @@ public sealed class CapabilityBroker : ICapabilityClient
             "capability.caller_required",
             "Capability invocation requires an explicit caller package identity.");
 
-    /// <summary>Invokes the highest-priority healthy compatible provider for an authorized package caller.</summary>
+    /// <summary>Invokes a capability for a package-only internal caller.</summary>
     /// <param name="callerPackageId">Package invoking the capability.</param>
     /// <param name="request">Versioned capability request with absolute deadline.</param>
     /// <param name="cancellationToken">Caller cancellation.</param>
     /// <returns>The provider response.</returns>
+    public Task<CapabilityResponse> InvokeAsync(
+        string callerPackageId,
+        CapabilityRequest request,
+        CancellationToken cancellationToken = default) =>
+        this.InvokeAsync(callerPackageId, callerUserId: null, request, cancellationToken);
+
+    /// <summary>Invokes the highest-priority healthy compatible provider for an authorized caller.</summary>
+    /// <param name="callerPackageId">Package invoking the capability.</param>
+    /// <param name="callerUserId">Authenticated user identity supplied by the control plane.</param>
+    /// <param name="request">Untrusted versioned capability request with absolute deadline.</param>
+    /// <param name="cancellationToken">Caller cancellation.</param>
+    /// <returns>The provider response.</returns>
     public async Task<CapabilityResponse> InvokeAsync(
         string callerPackageId,
+        Guid? callerUserId,
         CapabilityRequest request,
         CancellationToken cancellationToken = default)
     {
         ValidatePackageId(callerPackageId);
+        ValidateUserId(callerUserId);
         ValidateRequest(request);
+        if (request.Caller is not null)
+        {
+            throw new CapabilityBrokerException(
+                "capability.caller_context_untrusted",
+                "Capability caller metadata must be supplied by the control plane.");
+        }
         if (request.DeadlineUtc <= this.timeProvider.GetUtcNow())
         {
             throw new CapabilityBrokerException("capability.deadline_expired", "Capability request deadline has expired.");
         }
 
-        var caller = request.Caller ?? new CapabilityCallerContext(callerPackageId, UserId: null);
-        ValidateCaller(caller);
-        if (!string.Equals(caller.PackageId, callerPackageId, StringComparison.Ordinal))
-        {
-            throw new CapabilityBrokerException(
-                "capability.caller_identity_mismatch",
-                "Capability caller metadata does not match the authorized package caller.");
-        }
+        var caller = new CapabilityCallerContext(callerPackageId, callerUserId);
         var effectiveRequest = request with { Caller = caller };
 
         ICapabilityProvider provider;
@@ -191,11 +204,9 @@ public sealed class CapabilityBroker : ICapabilityClient
         }
     }
 
-    private static void ValidateCaller(CapabilityCallerContext caller)
+    private static void ValidateUserId(Guid? userId)
     {
-        ArgumentNullException.ThrowIfNull(caller);
-        ValidatePackageId(caller.PackageId);
-        if (caller.UserId == Guid.Empty)
+        if (userId == Guid.Empty)
         {
             throw new CapabilityBrokerException(
                 "capability.user_identity_invalid",
