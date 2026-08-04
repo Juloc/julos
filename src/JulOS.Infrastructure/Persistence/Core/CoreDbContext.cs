@@ -1,4 +1,4 @@
-namespace JulOS.Infrastructure.Persistence.Core;
+﻿namespace JulOS.Infrastructure.Persistence.Core;
 
 using JulOS.Application.Concurrency;
 using JulOS.Infrastructure.Authentication;

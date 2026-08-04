@@ -1,4 +1,4 @@
-using JulOS.Contracts.Remote;
+﻿using JulOS.Contracts.Remote;
 using JulOS.Infrastructure.Authentication;
 
 using Microsoft.EntityFrameworkCore;

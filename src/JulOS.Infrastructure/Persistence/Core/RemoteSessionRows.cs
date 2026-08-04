@@ -1,4 +1,4 @@
-namespace JulOS.Infrastructure.Persistence.Core;
+﻿namespace JulOS.Infrastructure.Persistence.Core;
 
 /// <summary>Relational storage shape for durable protocol-neutral Remote sessions.</summary>
 internal sealed class RemoteSessionRow
