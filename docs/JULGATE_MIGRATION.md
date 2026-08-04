@@ -1,4 +1,4 @@
-# Julgate migration to JulOS Remote
+﻿# Julgate migration to JulOS Remote
 
 ## 1. Goal and current status
 

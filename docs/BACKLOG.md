@@ -1,4 +1,4 @@
-# Backlog
+﻿# Backlog
 
 This file is the current high-level implementation state. Detailed future work belongs in `WORK_BREAKDOWN.md` and GitHub issues.
 
