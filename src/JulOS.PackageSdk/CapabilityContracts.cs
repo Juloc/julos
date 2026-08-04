@@ -1,8 +1,8 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace JulOS.PackageSdk;
 
-/// <summary>Authenticated caller metadata attached by the capability control plane.</summary>
+/// <summary>Authenticated caller metadata attached only by the capability control plane.</summary>
 /// <param name="PackageId">Authorized caller package identity.</param>
 /// <param name="UserId">Authenticated user identity when the invocation originated from a user request.</param>
 public sealed record CapabilityCallerContext(
@@ -16,7 +16,7 @@ public sealed record CapabilityCallerContext(
 /// <param name="CorrelationId">Cross-service correlation identity.</param>
 /// <param name="Payload">Versioned operation payload.</param>
 /// <param name="DeadlineUtc">Absolute invocation deadline.</param>
-/// <param name="Caller">Authenticated caller metadata supplied by the control plane.</param>
+/// <param name="Caller">Verified caller metadata visible to providers. Callers must leave this null; the broker rejects request-supplied values.</param>
 public sealed record CapabilityRequest(
     string CapabilityName,
     string ContractVersion,
