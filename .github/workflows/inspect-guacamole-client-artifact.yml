@@ -6,13 +6,18 @@ on:
       - agent/rem-005-package-display-client
     paths:
       - .github/workflows/inspect-guacamole-client-artifact.yml
+  pull_request:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - .github/workflows/inspect-guacamole-client-artifact.yml
 
 permissions:
   contents: read
 
 jobs:
   inspect:
-    if: github.repository == 'Juloc/julos'
+    if: github.repository == 'Juloc/julos' && (github.ref == 'refs/heads/agent/rem-005-package-display-client' || github.head_ref == 'agent/rem-005-package-display-client')
     runs-on: ubuntu-latest
     steps:
       - name: Download and verify Apache artifact
