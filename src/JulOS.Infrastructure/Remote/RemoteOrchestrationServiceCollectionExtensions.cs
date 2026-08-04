@@ -19,6 +19,7 @@ public static class RemoteOrchestrationServiceCollectionExtensions
         services.AddSingleton<IRemoteRuntimePolicy>(ConfiguredRemoteRuntimePolicy.Read(configuration));
         services.AddScoped<IRemoteSessionProvisioner, PostgresRemoteSessionProvisioner>();
         services.AddScoped<IRemoteSessionLifecycleService, PostgresRemoteSessionLifecycleService>();
+        services.AddScoped<IRemoteSessionConnectionService, PostgresRemoteSessionConnectionService>();
         var runtimeManager = RemoteRuntimeManagerClientOptions.Read(configuration);
         if (runtimeManager is null)
         {
