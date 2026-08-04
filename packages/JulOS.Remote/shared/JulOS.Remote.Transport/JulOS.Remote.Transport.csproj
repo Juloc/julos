@@ -3,6 +3,7 @@
   <PropertyGroup>
     <Description>Shared JulOS Remote transport primitives and Guacamole launch encoding.</Description>
     <IsPackable>true</IsPackable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>JulOS.Remote.Transport</PackageId>
     <PackageTags>julos;remote;guacamole;transport</PackageTags>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
