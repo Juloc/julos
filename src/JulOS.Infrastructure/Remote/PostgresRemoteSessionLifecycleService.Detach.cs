@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JulOS.Infrastructure.Remote;
 
+/// <summary>Adds explicit presentation-window detach handling.</summary>
 public sealed partial class PostgresRemoteSessionLifecycleService
 {
     /// <inheritdoc />
