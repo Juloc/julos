@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Text.Json;
 
 using JulOS.Infrastructure.Packages;
@@ -54,14 +54,14 @@ internal static class PackageCapabilityEndpoints
                 : request.Payload;
             var response = await broker.InvokeAsync(
                 packageId,
+                CurrentUserId(context.User),
                 new CapabilityRequest(
                     grant.CapabilityName,
                     grant.ContractVersion,
                     operation,
                     context.TraceIdentifier,
                     payload,
-                    timeProvider.GetUtcNow().AddSeconds(10),
-                    new CapabilityCallerContext(packageId, CurrentUserId(context.User))),
+                    timeProvider.GetUtcNow().AddSeconds(10)),
                 cancellationToken).ConfigureAwait(false);
             return response.Succeeded
                 ? Results.Json(response.Payload)
@@ -86,7 +86,7 @@ internal static class PackageCapabilityEndpoints
             var status = exception.Code switch
             {
                 "capability.permission_denied" => StatusCodes.Status403Forbidden,
-                "capability.caller_identity_mismatch" => StatusCodes.Status403Forbidden,
+                "capability.caller_context_untrusted" => StatusCodes.Status403Forbidden,
                 "capability.user_identity_invalid" => StatusCodes.Status401Unauthorized,
                 _ => StatusCodes.Status400BadRequest,
             };
