@@ -20,6 +20,15 @@ public sealed record DetachRemoteSessionCommand(
     string CallerPackageId,
     DetachRemoteSessionRequest Request);
 
+/// <summary>Authorizes a new presentation attempt for an active Remote session.</summary>
+/// <param name="OwnerUserId">Authenticated owning user.</param>
+/// <param name="CallerPackageId">Authorized caller package.</param>
+/// <param name="Request">Validated resume request.</param>
+public sealed record ResumeRemoteSessionCommand(
+    Guid OwnerUserId,
+    string CallerPackageId,
+    ResumeRemoteSessionRequest Request);
+
 /// <summary>Summary of one bounded Remote lifecycle reconciliation pass.</summary>
 /// <param name="Examined">Number of due sessions examined.</param>
 /// <param name="Expired">Number transitioned to expired.</param>
@@ -31,7 +40,7 @@ public sealed record RemoteLifecycleReconciliationResult(
     int Cleaned,
     int CleanupFailures);
 
-/// <summary>Owns explicit disconnect, detach, expiry and terminal runtime cleanup.</summary>
+/// <summary>Owns explicit disconnect, detach, resume, expiry and terminal runtime cleanup.</summary>
 public interface IRemoteSessionLifecycleService
 {
     /// <summary>Disconnects one active session and removes its runtime idempotently.</summary>
@@ -42,6 +51,11 @@ public interface IRemoteSessionLifecycleService
     /// <summary>Applies the caller-selected effect of detaching a presentation window.</summary>
     Task<RemoteSessionResponse> DetachAsync(
         DetachRemoteSessionCommand command,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Authorizes a fresh presentation attempt for an active session.</summary>
+    Task<RemoteSessionResponse> ResumeAsync(
+        ResumeRemoteSessionCommand command,
         CancellationToken cancellationToken = default);
 
     /// <summary>Expires due sessions and reconciles terminal runtime cleanup in a bounded pass.</summary>
