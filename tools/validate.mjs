@@ -12,6 +12,7 @@ import { readAndValidatePackageManifest } from './lib/package-manifest.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
 
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
+const remoteFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Remote', 'frontend');
 const semanticVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 const passed = (detail) => ({ status: 'passed', detail });
@@ -186,6 +187,26 @@ const stages = [
     name: 'desktop-build',
     title: 'Build the Desktop production assets',
     run: () => run('npm', ['run', 'build'], desktopDirectory),
+  },
+  {
+    name: 'remote-frontend-install',
+    title: 'Install Remote frontend build dependencies',
+    async run() {
+      if (await exists(join(remoteFrontendDirectory, 'node_modules'))) {
+        return skipped('node_modules is already present');
+      }
+      return run('npm', ['ci'], remoteFrontendDirectory);
+    },
+  },
+  {
+    name: 'remote-frontend-build',
+    title: 'Build the Remote package frontend',
+    run: () => run('npm', ['run', 'build'], remoteFrontendDirectory),
+  },
+  {
+    name: 'remote-frontend-test',
+    title: 'Run Remote package frontend tests',
+    run: () => run('npm', ['test'], remoteFrontendDirectory),
   },
   {
     name: 'markdown-links',

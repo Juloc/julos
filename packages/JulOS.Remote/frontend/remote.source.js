@@ -1,4 +1,4 @@
-const displayKind = 'graphical';
+﻿const displayKind = 'graphical';
 const displayContractVersion = '1.0.0';
 const terminalStates = new Set(['cancelled', 'disconnected', 'expired', 'failed']);
 
@@ -90,6 +90,7 @@ export async function register(context) {
       this.#clearPoll();
       this.#stopClient();
       this.#session = null;
+      this.#pollAttempt = 0;
       this.#setBusy(true);
       this.#setStatus(context.language === 'de' ? 'Verbindung wird erstellt …' : 'Creating session …');
       try {
