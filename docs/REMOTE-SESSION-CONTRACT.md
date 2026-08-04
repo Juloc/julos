@@ -94,7 +94,7 @@ Allowed transitions are explicit in `RemoteSessionContractValidator`. Terminal s
 - authenticated same-origin relative endpoint
 - descriptor expiry
 
-It contains no access token. Authentication is performed by the JulOS same-origin session and later transport-specific authorization.
+It contains no access token. The relative endpoint may carry non-secret package, revision and expiry selectors, but no bearer credential or provider address. Every browser connection is authenticated by the JulOS login cookie and authorized against the configured public Origin, authenticated user, caller package selector, active durable session, exact revision, exact stored descriptor and expiry before the hidden provider endpoint is resolved.
 
 ## Failures
 

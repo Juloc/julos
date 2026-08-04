@@ -21,6 +21,9 @@ x-server-image: &server-image
     Secrets__ActiveKeyId: primary
     Secrets__KeyRingPath: /run/julos-secret-keys
     Secrets__LeaseLifetimeSeconds: 300
+    Remote__Display__ProviderEndpointTemplate: ${JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE:-}
+    Remote__Display__PublicOrigin: ${JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN:-}
+    Remote__Display__GrantLifetimeSeconds: ${JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS:-60}
   volumes:
     - ${JULOS_SECRET_KEY_RING_PATH:?Set JULOS_SECRET_KEY_RING_PATH in deploy/compose/.env}:/run/julos-secret-keys:ro
 

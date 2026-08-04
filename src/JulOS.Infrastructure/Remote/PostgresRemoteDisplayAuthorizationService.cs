@@ -23,16 +23,24 @@ public sealed class PostgresRemoteDisplayAuthorizationService
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    /// <summary>Returns the hidden provider URI only when the current grant is exact and active.</summary>
+    /// <summary>Returns the hidden provider URI only when the current descriptor is exact and active.</summary>
     public async Task<Uri> AuthorizeAsync(
         Guid ownerUserId,
         Guid sessionId,
+        string callerPackageId,
         long revision,
         long expires,
-        string? token,
+        string requestedEndpoint,
         CancellationToken cancellationToken = default)
     {
-        if (ownerUserId == Guid.Empty || sessionId == Guid.Empty || revision < 1)
+        if (ownerUserId == Guid.Empty
+            || sessionId == Guid.Empty
+            || revision < 1
+            || string.IsNullOrWhiteSpace(callerPackageId)
+            || callerPackageId != callerPackageId.Trim()
+            || callerPackageId.Length > 128
+            || callerPackageId.Any(char.IsControl)
+            || string.IsNullOrWhiteSpace(requestedEndpoint))
         {
             throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Unauthorized);
         }
@@ -41,10 +49,12 @@ public sealed class PostgresRemoteDisplayAuthorizationService
             .AsNoTracking()
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == sessionId
-                    && candidate.OwnerUserId == ownerUserId,
+                    && candidate.OwnerUserId == ownerUserId
+                    && candidate.CallerPackageId == callerPackageId,
                 cancellationToken)
             .ConfigureAwait(false)
             ?? throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Unauthorized);
+
         if (!string.Equals(row.State, RemoteSessionStates.Connected, StringComparison.Ordinal)
             || row.RuntimeId is null
             || row.DisplayKind is null
@@ -54,25 +64,32 @@ public sealed class PostgresRemoteDisplayAuthorizationService
         {
             throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Unavailable);
         }
+
         if (row.Revision != revision
-            || !string.Equals(row.DisplayKind, "websocket", StringComparison.Ordinal)
-            || !string.Equals(row.DisplayContractVersion, "1.0.0", StringComparison.Ordinal)
+            || !string.Equals(row.DisplayKind, RemoteDisplayGateway.DisplayKind, StringComparison.Ordinal)
+            || !string.Equals(
+                row.DisplayContractVersion,
+                RemoteDisplayGateway.ContractVersion,
+                StringComparison.Ordinal)
+            || !string.Equals(row.DisplayEndpoint, requestedEndpoint, StringComparison.Ordinal)
             || row.DisplayExpiresAtUtc.Value.ToUnixTimeSeconds() != expires)
         {
             throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Stale);
         }
+
         if (row.DisplayExpiresAtUtc <= this.timeProvider.GetUtcNow())
         {
             throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Expired);
         }
-        if (!this.gateway.Authenticate(
+
+        if (!this.gateway.MatchesDescriptor(
                 row.Id,
                 row.OwnerUserId,
                 row.CallerPackageId,
                 row.RuntimeId,
                 row.Revision,
                 expires,
-                token))
+                requestedEndpoint))
         {
             throw new RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure.Unauthorized);
         }
@@ -84,16 +101,16 @@ public sealed class PostgresRemoteDisplayAuthorizationService
 /// <summary>Stable display authorization refusal categories.</summary>
 public enum RemoteDisplayAuthorizationFailure
 {
-    /// <summary>The user or grant token is invalid.</summary>
+    /// <summary>The user, package or descriptor is invalid.</summary>
     Unauthorized,
 
     /// <summary>The session has no active display transport.</summary>
     Unavailable,
 
-    /// <summary>The grant does not match the current session revision.</summary>
+    /// <summary>The descriptor does not match the current session revision.</summary>
     Stale,
 
-    /// <summary>The display grant has expired.</summary>
+    /// <summary>The display descriptor has expired.</summary>
     Expired,
 }
 
@@ -104,11 +121,11 @@ public sealed class RemoteDisplayAuthorizationException : Exception
     public RemoteDisplayAuthorizationException(RemoteDisplayAuthorizationFailure failure)
         : base(failure switch
         {
-            RemoteDisplayAuthorizationFailure.Unauthorized => "Remote display authorization failed.",
-            RemoteDisplayAuthorizationFailure.Unavailable => "The Remote display is unavailable.",
-            RemoteDisplayAuthorizationFailure.Stale => "The Remote display grant is stale.",
-            RemoteDisplayAuthorizationFailure.Expired => "The Remote display grant expired.",
-            _ => "Remote display authorization failed.",
+            RemoteDisplayAuthorizationFailure.Unauthorized => \"Remote display authorization failed.\",
+            RemoteDisplayAuthorizationFailure.Unavailable => \"The Remote display is unavailable.\",
+            RemoteDisplayAuthorizationFailure.Stale => \"The Remote display descriptor is stale.\",
+            RemoteDisplayAuthorizationFailure.Expired => \"The Remote display descriptor expired.\",
+            _ => \"Remote display authorization failed.\",
         })
     {
         this.Failure = failure;
