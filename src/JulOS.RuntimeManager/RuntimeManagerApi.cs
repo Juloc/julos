@@ -158,6 +158,7 @@ public static class RuntimeManagerEndpoints
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Limits);
         ArgumentNullException.ThrowIfNull(request.Environment);
+        ArgumentNullException.ThrowIfNull(request.SecretEnvironment);
         ArgumentNullException.ThrowIfNull(request.Networks);
         return new RuntimeCreateRequest(
             request.InstanceId,
@@ -170,7 +171,10 @@ public static class RuntimeManagerEndpoints
             request.Limits.PidsLimit,
             request.Networks,
             Volumes: [],
-            request.Environment);
+            request.Environment)
+        {
+            SecretEnvironment = request.SecretEnvironment,
+        };
     }
 
     private static PackageRuntimeResponse ToResponse(RuntimeResource resource) => new(

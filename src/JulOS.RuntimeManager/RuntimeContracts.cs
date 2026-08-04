@@ -29,7 +29,12 @@ public sealed record RuntimeCreateRequest(
     int PidsLimit,
     IReadOnlyList<string> Networks,
     IReadOnlyList<RuntimeVolumeRequest> Volumes,
-    IReadOnlyDictionary<string, string> Environment);
+    IReadOnlyDictionary<string, string> Environment)
+{
+    /// <summary>Gets short-lived runtime-only values transported through a temporary environment file.</summary>
+    public IReadOnlyDictionary<string, string> SecretEnvironment { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+}
 
 /// <summary>Observed state of one managed runtime.</summary>
 /// <param name="RuntimeId">Managed runtime identity.</param>

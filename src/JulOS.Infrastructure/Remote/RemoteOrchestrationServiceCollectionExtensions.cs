@@ -17,6 +17,9 @@ public static class RemoteOrchestrationServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddSingleton<IRemoteRuntimePolicy>(ConfiguredRemoteRuntimePolicy.Read(configuration));
+        services.AddSingleton(serviceProvider => RemoteProviderCallbackAuthenticator.Read(
+            configuration,
+            serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteSessionProvisioner, PostgresRemoteSessionProvisioner>();
         services.AddScoped<IRemoteSessionLifecycleService, PostgresRemoteSessionLifecycleService>();
         services.AddScoped<IRemoteSessionConnectionService, PostgresRemoteSessionConnectionService>();

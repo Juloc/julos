@@ -24,13 +24,21 @@ public sealed record CreatePackageRuntimeRequest(
     string Image,
     RuntimeResourceLimits Limits,
     IReadOnlyDictionary<string, string> Environment,
-    IReadOnlyList<string> Networks);
+    IReadOnlyList<string> Networks)
+{
+    /// <summary>
+    /// Gets short-lived runtime-only secret values. Runtime Manager transports these through a
+    /// temporary environment file and never includes their values in logs or process arguments.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> SecretEnvironment { get; init; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+}
 
 /// <summary>Describes one managed package runtime.</summary>
 /// <param name="RuntimeId">Runtime Manager identity.</param>
 /// <param name="PackageId">Owning package identity.</param>
 /// <param name="PackageVersion">Owning package version.</param>
-/// <param name="InstanceId">Package-scoped instance identity.</param>
+/// <param name="InstanceId">Package-scoped stable runtime instance identity.</param>
 /// <param name="Image">Immutable image reference.</param>
 /// <param name="State">Observed runtime state.</param>
 /// <param name="ObservedAtUtc">Time at which the state was observed.</param>

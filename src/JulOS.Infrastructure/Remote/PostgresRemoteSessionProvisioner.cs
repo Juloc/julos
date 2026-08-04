@@ -16,11 +16,13 @@ namespace JulOS.Infrastructure.Remote;
 /// <summary>Assigns allowlisted provider runtimes to durable Remote sessions.</summary>
 public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
 {
+    private const string CallbackTokenEnvironmentName = "JULOS_REMOTE_CALLBACK_TOKEN";
     private readonly CoreDbContext context;
     private readonly IRemoteSessionService sessions;
     private readonly ISecretReferenceService secrets;
     private readonly IRemoteRuntimePolicy runtimePolicy;
     private readonly IRemoteRuntimeManager runtimeManager;
+    private readonly RemoteProviderCallbackAuthenticator callbackAuthenticator;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Creates the persistent Remote runtime provisioner.</summary>
@@ -30,6 +32,7 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
         ISecretReferenceService secrets,
         IRemoteRuntimePolicy runtimePolicy,
         IRemoteRuntimeManager runtimeManager,
+        RemoteProviderCallbackAuthenticator callbackAuthenticator,
         TimeProvider timeProvider)
     {
         this.context = context ?? throw new ArgumentNullException(nameof(context));
@@ -37,6 +40,8 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
         this.secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
         this.runtimePolicy = runtimePolicy ?? throw new ArgumentNullException(nameof(runtimePolicy));
         this.runtimeManager = runtimeManager ?? throw new ArgumentNullException(nameof(runtimeManager));
+        this.callbackAuthenticator = callbackAuthenticator
+            ?? throw new ArgumentNullException(nameof(callbackAuthenticator));
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
@@ -102,8 +107,24 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
             return await this.MarkCredentialUnavailableAsync(row, command, cancellationToken).ConfigureAwait(false);
         }
 
-        var now = this.timeProvider.GetUtcNow();
         var runtimeId = row.RuntimeId ?? $"remote-{row.Id:N}";
+        string callbackToken;
+        try
+        {
+            callbackToken = this.callbackAuthenticator.Issue(row.Id, runtimeId, row.ExpiresAtUtc);
+        }
+        catch (RemoteProviderCallbackAuthenticationException)
+        {
+            return await this.MarkFailedAsync(
+                row,
+                RemoteSessionFailureCodes.RuntimeUnavailable,
+                "Remote provider callbacks are not configured.",
+                false,
+                command,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        var now = this.timeProvider.GetUtcNow();
         if (string.Equals(row.State, RemoteSessionStates.Requested, StringComparison.Ordinal))
         {
             RemoteSessionContractValidator.ValidateTransition(row.State, RemoteSessionStates.Provisioning);
@@ -136,8 +157,15 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
                 ["JULOS_REMOTE_DEVICE_SCALE_FACTOR"] = row.DeviceScaleFactor.ToString(CultureInfo.InvariantCulture),
                 ["JULOS_REMOTE_IDLE_TIMEOUT_SECONDS"] = row.IdleTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
                 ["JULOS_REMOTE_MAXIMUM_SESSION_SECONDS"] = row.MaximumSessionSeconds.ToString(CultureInfo.InvariantCulture),
+                ["JULOS_REMOTE_CALLBACK_ENDPOINT"] = this.callbackAuthenticator.Endpoint!.AbsoluteUri,
             },
-            selection.NetworkProfile.RuntimeNetworks);
+            selection.NetworkProfile.RuntimeNetworks)
+        {
+            SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [CallbackTokenEnvironmentName] = callbackToken,
+            },
+        };
 
         try
         {
