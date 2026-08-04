@@ -1,0 +1,55 @@
+name: Run REM-005 display transport completion
+
+on:
+  pull_request:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - .github/workflows/complete-rem-005-display-transport.yml
+      - .github/workflows/run-rem-005-display-transport.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-rem-005-display-transport
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-display-transport'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-005-display-transport
+          persist-credentials: true
+
+      - name: Execute the stored completion script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/complete-rem-005-display-transport.yml').read_text(encoding='utf-8')
+          marker = "          python3 - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          lines = workflow[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+          exec(compile(script, 'complete-rem-005-display-transport.py', 'exec'))
+          PY
+          node tools/normalize-encoding.mjs
+          git diff --check
+
+      - name: Commit completed transport slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src tests docs deploy
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(remote): complete token-free display transport'
+          git push origin HEAD:agent/rem-005-display-transport
