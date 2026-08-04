@@ -33,7 +33,7 @@ const outputPath = resolve(root, 'remote.js');
 const manifestPath = resolve(root, '..', 'manifest.json');
 const source = stripBom(await readFile(sourcePath, 'utf8'));
 const libraryText = new TextDecoder().decode(library);
-const output = `${libraryText}\n${source.trimStart()}\n`;
+const output = `${libraryText.trimEnd()}\n${source.trim()}\n`;
 await writeFile(outputPath, output, 'utf8');
 
 const manifestText = stripBom(await readFile(manifestPath, 'utf8'));
