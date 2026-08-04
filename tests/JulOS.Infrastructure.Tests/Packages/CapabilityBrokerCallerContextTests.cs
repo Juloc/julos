@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 using JulOS.Application.Auditing;
 using JulOS.Domain.Observability;
@@ -22,9 +22,11 @@ public sealed class CapabilityBrokerCallerContextTests
         var audit = new RecordingAuditService();
         var provider = new RecordingProvider();
         var broker = CreateBroker(audit, provider);
-        var request = CreateRequest(new CapabilityCallerContext(CallerPackageId, userId));
 
-        var response = await broker.InvokeAsync(CallerPackageId, request).ConfigureAwait(false);
+        var response = await broker.InvokeAsync(
+            CallerPackageId,
+            userId,
+            CreateRequest(caller: null)).ConfigureAwait(false);
 
         Assert.IsTrue(response.Succeeded);
         Assert.IsNotNull(provider.ReceivedRequest);
@@ -37,25 +39,26 @@ public sealed class CapabilityBrokerCallerContextTests
     }
 
     [TestMethod]
-    public async Task CallerPackageMismatchIsRejectedBeforeProviderInvocation()
+    public async Task RequestSuppliedCallerContextIsRejectedBeforeProviderInvocation()
     {
+        var trustedUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var audit = new RecordingAuditService();
         var provider = new RecordingProvider();
         var broker = CreateBroker(audit, provider);
         var request = CreateRequest(new CapabilityCallerContext(
-            "de.juloc.attacker",
+            CallerPackageId,
             Guid.Parse("22222222-2222-4222-8222-222222222222")));
 
         var failure = await Assert.ThrowsExactlyAsync<CapabilityBrokerException>(() =>
-            broker.InvokeAsync(CallerPackageId, request)).ConfigureAwait(false);
+            broker.InvokeAsync(CallerPackageId, trustedUserId, request)).ConfigureAwait(false);
 
-        Assert.AreEqual("capability.caller_identity_mismatch", failure.Code);
+        Assert.AreEqual("capability.caller_context_untrusted", failure.Code);
         Assert.IsNull(provider.ReceivedRequest);
         Assert.AreEqual(0, audit.Records.Count);
     }
 
     [TestMethod]
-    public async Task MissingCallerContextReceivesAuthorizedPackageOnlyFallback()
+    public async Task PackageOnlyOverloadCreatesNullUserCallerContext()
     {
         var audit = new RecordingAuditService();
         var provider = new RecordingProvider();
