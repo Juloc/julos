@@ -26,7 +26,9 @@ NuGet identity:
 JulOS.Remote.Transport
 ```
 
-The repository `VERSION` file is the package version source. Published versions are immutable. A changed package requires a new version; an existing package version is never overwritten.
+The root `VERSION` file is the sole package-version source. Published versions are immutable. A changed package requires a new version; the publication workflow never uses `--skip-duplicate` and therefore fails when a version already exists.
+
+The package metadata links every version to `https://github.com/Juloc/julos` and records the exact source commit supplied by the workflow.
 
 ## Initial shared surface
 
@@ -68,7 +70,7 @@ The Remote worker references the source project directly. The first slice consum
 
 ### Julgate
 
-Julgate consumes a published `JulOS.Remote.Transport` version. Its adapter remains responsible for:
+Julgate consumes one exact published `JulOS.Remote.Transport` version. Its adapter remains responsible for:
 
 - reading Julgate configuration
 - mapping `MatgateUser` and `ServerEndpoint`
@@ -78,6 +80,40 @@ Julgate consumes a published `JulOS.Remote.Transport` version. Its adapter remai
 
 The shared package replaces the duplicated payload, parameter, signing and encryption implementation.
 
+## Publication workflow
+
+`.github/workflows/publish-remote-transport.yml` is the only publication path.
+
+It runs after a relevant commit reaches `agent/complete-julos-work-breakdown`. Pull requests receive no package write permission.
+
+The workflow:
+
+1. checks out the exact source commit without persisting Git credentials;
+2. runs the complete repository validator with the same PostgreSQL service used by normal CI;
+3. validates the root version as a bounded NuGet-compatible immutable version;
+4. performs a Release pack with deterministic CI properties and the exact repository commit;
+5. requires exactly one `.nupkg` and one `.snupkg` with the expected versioned names;
+6. creates `SHA256SUMS` for both artifacts;
+7. creates GitHub artifact attestations for package, symbols and checksums;
+8. retains the complete evidence bundle as a workflow artifact for 90 days;
+9. authenticates to the owner-scoped GitHub NuGet feed using the job-scoped `GITHUB_TOKEN`;
+10. publishes only the `.nupkg` and refuses an existing version.
+
+Required workflow permissions are limited to:
+
+- `contents: read`
+- `packages: write`
+- `id-token: write`
+- `attestations: write`
+
+No PAT, package credential or plaintext token is committed to the repository.
+
+## Cross-repository read boundary
+
+After the first package version exists, the package must grant `Juloc/Julgate` read access under GitHub Packages Actions access. Julgate then authenticates during CI with its repository-scoped `GITHUB_TOKEN` and references an exact package version.
+
+The package source URL may be committed. Credentials may not. Local developers configure the same source in their user-level NuGet configuration with an authorized token; repository files never contain that token.
+
 ## Publication gate
 
 A package version may be published only when:
@@ -85,19 +121,22 @@ A package version may be published only when:
 - solution build and tests pass
 - behavior vectors decrypt and verify successfully
 - the worker integration test passes
-- `dotnet pack` succeeds deterministically
-- package contents contain no build output outside the expected assembly, symbols and metadata
-- package digest and provenance are recorded
-- the source commit is merged
+- Release `dotnet pack` succeeds deterministically
+- package contents contain no unexpected artifact
+- package and symbol digests are recorded
+- provenance attestations are created
+- the source commit is already on the integration branch
+- the requested version does not already exist
 
-Julgate is updated only after the package is available from the configured immutable source.
+Julgate is updated only after the exact package version is available from the configured immutable source.
 
 ## Removal gate
 
 REM-003 is complete only when:
 
 - JulOS Remote consumes the shared project
-- Julgate consumes the published package
+- the immutable package version is published with digest and provenance
+- Julgate consumes that exact package version
 - Julgate's original shared implementation is removed
 - both repositories validate
 - Julgate remains deployable
