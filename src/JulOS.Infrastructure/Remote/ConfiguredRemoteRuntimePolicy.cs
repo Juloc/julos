@@ -14,8 +14,8 @@ namespace JulOS.Infrastructure.Remote;
 /// <summary>Strict configuration-backed Remote provider, egress and target policy.</summary>
 public sealed partial class ConfiguredRemoteRuntimePolicy : IRemoteRuntimePolicy
 {
-    private readonly IReadOnlyDictionary<string, RemoteProviderRuntimeDefinition> providers;
-    private readonly IReadOnlyDictionary<Guid, RemoteNetworkProfileDefinition> profiles;
+    private readonly Dictionary<string, RemoteProviderRuntimeDefinition> providers;
+    private readonly Dictionary<Guid, RemoteNetworkProfileDefinition> profiles;
     private readonly RemoteNetworkProfileDefinition? defaultProfile;
 
     /// <summary>Creates a validated immutable policy from explicit definitions.</summary>
