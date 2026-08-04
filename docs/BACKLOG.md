@@ -35,7 +35,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
-| REM-003 | Shared transport implementation | In progress | Packable protocol catalog and Guacamole JSON-auth encoder are implemented with behavior tests and Remote worker consumption; publication and Julgate migration remain. |
+| REM-003 | Shared transport implementation | In progress | Single-source library and tests are merged; immutable GitHub Packages publication and Julgate adoption remain. |
 | Phase 6 | Remote and Browser | In progress | REM-001 and REM-002 are complete; REM-003 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -46,26 +46,31 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 Scope:
 
-- build and test `JulOS.Remote.Transport` from one JulOS source location
-- consume the shared protocol catalog from the Remote worker
-- preserve the existing Guacamole JSON-auth behavior through verifiable payload vectors
-- document the immutable package and consumer boundary
+- add the sole package-publication workflow
+- run the complete repository validator before publication
+- bind package metadata and version to the exact source commit
+- require exact versioned package and symbol artifacts
+- record SHA-256 digests and GitHub provenance attestations
+- publish with the workflow-scoped `GITHUB_TOKEN`
+- reject attempts to overwrite an existing version
 
 Acceptance:
 
-- solution build, tests and architecture gates pass
-- the shared library is packable from the repository version
-- no duplicated protocol catalog remains in the Remote worker
-- secret-bearing intermediate buffers are cleared by the encoder
-- the next slice publishes the immutable artifact before Julgate changes
+- pull requests have no package write permission
+- validation, Release pack, digest creation and attestation all pass
+- the evidence bundle is retained as a workflow artifact
+- publication is limited to the JulOS integration branch
+- no PAT or package credential is committed
+- `JulOS.Remote.Transport.0.1.0` is published once after the workflow merges
 
 ## Remaining REM-003 slices
 
-1. publish the validated package with digest and provenance;
-2. update Julgate to consume that exact package version;
-3. remove the original Julgate payload/signing/encryption implementation;
-4. validate and deploy-test Julgate;
-5. mark REM-003 done only when both repositories use one implementation.
+1. verify the published `0.1.0` package, digest and provenance;
+2. grant the Julgate repository Actions read access to the package;
+3. update Julgate to consume exactly `JulOS.Remote.Transport` `0.1.0`;
+4. remove Julgate's original payload/signing/encryption implementation;
+5. validate and deploy-test Julgate;
+6. mark REM-003 done only when both repositories use one implementation.
 
 ## Specification status
 
