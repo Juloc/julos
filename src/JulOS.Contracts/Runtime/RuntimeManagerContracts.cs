@@ -12,11 +12,11 @@ public sealed record RuntimeResourceLimits(
 /// <summary>Requests creation of one package-owned runtime.</summary>
 /// <param name="PackageId">Stable package identity.</param>
 /// <param name="PackageVersion">Installed package version.</param>
-/// <param name="InstanceId">Package-scoped runtime instance identity.</param>
+/// <param name="InstanceId">Package-scoped stable runtime instance identity.</param>
 /// <param name="Image">Immutable container image reference.</param>
 /// <param name="Limits">Enforced resource limits.</param>
 /// <param name="Environment">Non-secret allowlisted environment values.</param>
-/// <param name="NetworkAccess">Whether the approved runtime network is required.</param>
+/// <param name="Networks">Exact Runtime Manager allowlisted networks.</param>
 public sealed record CreatePackageRuntimeRequest(
     string PackageId,
     string PackageVersion,
@@ -24,7 +24,7 @@ public sealed record CreatePackageRuntimeRequest(
     string Image,
     RuntimeResourceLimits Limits,
     IReadOnlyDictionary<string, string> Environment,
-    bool NetworkAccess);
+    IReadOnlyList<string> Networks);
 
 /// <summary>Describes one managed package runtime.</summary>
 /// <param name="RuntimeId">Runtime Manager identity.</param>
@@ -42,6 +42,13 @@ public sealed record PackageRuntimeResponse(
     string Image,
     string State,
     DateTimeOffset ObservedAtUtc);
+
+/// <summary>Caller-safe Runtime Manager error.</summary>
+/// <param name="Code">Stable machine-readable code.</param>
+/// <param name="Message">Caller-safe explanation.</param>
+public sealed record RuntimeManagerErrorResponse(
+    string Code,
+    string Message);
 
 /// <summary>Bounded log output from one package runtime.</summary>
 /// <param name="RuntimeId">Runtime identity.</param>

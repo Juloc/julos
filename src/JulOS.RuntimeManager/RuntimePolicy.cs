@@ -25,6 +25,11 @@ public sealed class RuntimePolicy
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
         TimeSpan.FromMilliseconds(100));
 
+    private static readonly Regex PackageVersionPattern = new(
+        "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        TimeSpan.FromMilliseconds(100));
+
     private readonly HashSet<string> allowedNetworks;
 
     /// <summary>Creates a policy with the exact Docker networks packages may use.</summary>
@@ -61,6 +66,19 @@ public sealed class RuntimePolicy
             throw Failure("runtime.package.invalid", "The package identifier is invalid.");
         }
 
+        if (!PackageVersionPattern.IsMatch(request.PackageVersion))
+        {
+            throw Failure("runtime.package_version.invalid", "The package version is invalid.");
+        }
+
+        if (!RuntimeIdentifierPattern.IsMatch(request.InstanceId)
+            || !string.Equals(request.RuntimeId, request.InstanceId, StringComparison.Ordinal))
+        {
+            throw Failure(
+                "runtime.instance.invalid",
+                "The runtime and package instance identities must be equal and valid.");
+        }
+
         if (!ImageDigestPattern.IsMatch(request.Image))
         {
             throw Failure(
@@ -78,6 +96,11 @@ public sealed class RuntimePolicy
             throw Failure(
                 "runtime.memory.invalid",
                 "Memory limit must be between 16 and 262144 MiB.");
+        }
+
+        if (request.PidsLimit is < 1 or > 4096)
+        {
+            throw Failure("runtime.pids.invalid", "Process limit must be between 1 and 4096.");
         }
 
         foreach (var network in request.Networks)

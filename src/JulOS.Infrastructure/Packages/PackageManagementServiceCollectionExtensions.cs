@@ -1,5 +1,6 @@
 ﻿using JulOS.Application.Packages;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
 using JulOS.PackageSdk;
 
 using Microsoft.Extensions.Configuration;
@@ -67,6 +68,7 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<CoreDbContext>(),
             packageRoot));
         services.AddScoped<HostMetricsCapabilityProvider>();
+        services.AddScoped<RemoteSessionCapabilityProvider>();
         services.AddScoped<CapabilityBroker>(provider =>
         {
             var broker = new CapabilityBroker(
@@ -74,6 +76,8 @@ public static class PackageManagementServiceCollectionExtensions
                 provider.GetRequiredService<TimeProvider>());
             var hostMetrics = provider.GetRequiredService<HostMetricsCapabilityProvider>();
             broker.Register(hostMetrics.Descriptor.ProviderPackageId, hostMetrics);
+            var remote = provider.GetRequiredService<RemoteSessionCapabilityProvider>();
+            broker.Register(remote.Descriptor.ProviderPackageId, remote);
             return broker;
         });
         services.AddScoped<ICapabilityClient>(

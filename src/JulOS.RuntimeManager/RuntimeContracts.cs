@@ -9,18 +9,24 @@ public sealed record RuntimeVolumeRequest(string Name, string Target, bool ReadO
 /// <summary>Creates one isolated package runtime.</summary>
 /// <param name="RuntimeId">Stable managed runtime identity.</param>
 /// <param name="PackageId">Owning package identity.</param>
+/// <param name="PackageVersion">Owning package version.</param>
+/// <param name="InstanceId">Package-scoped stable instance identity.</param>
 /// <param name="Image">Immutable digest-pinned image reference.</param>
 /// <param name="CpuLimit">Maximum CPU allocation.</param>
 /// <param name="MemoryLimitMb">Maximum memory in MiB.</param>
+/// <param name="PidsLimit">Maximum process count.</param>
 /// <param name="Networks">Allowlisted networks.</param>
 /// <param name="Volumes">Package-owned named-volume mounts.</param>
 /// <param name="Environment">Validated non-secret environment values.</param>
 public sealed record RuntimeCreateRequest(
     string RuntimeId,
     string PackageId,
+    string PackageVersion,
+    string InstanceId,
     string Image,
     decimal CpuLimit,
     int MemoryLimitMb,
+    int PidsLimit,
     IReadOnlyList<string> Networks,
     IReadOnlyList<RuntimeVolumeRequest> Volumes,
     IReadOnlyDictionary<string, string> Environment);
@@ -28,20 +34,19 @@ public sealed record RuntimeCreateRequest(
 /// <summary>Observed state of one managed runtime.</summary>
 /// <param name="RuntimeId">Managed runtime identity.</param>
 /// <param name="PackageId">Owning package identity.</param>
+/// <param name="PackageVersion">Owning package version.</param>
+/// <param name="InstanceId">Package-scoped stable instance identity.</param>
 /// <param name="ContainerId">Docker container identity.</param>
 /// <param name="State">Observed Docker state.</param>
 /// <param name="Image">Immutable image reference.</param>
 public sealed record RuntimeResource(
     string RuntimeId,
     string PackageId,
+    string PackageVersion,
+    string InstanceId,
     string ContainerId,
     string State,
     string Image);
-
-/// <summary>Caller-safe Runtime Manager error response.</summary>
-/// <param name="Code">Stable machine-readable error code.</param>
-/// <param name="Message">Caller-safe explanation.</param>
-public sealed record RuntimeError(string Code, string Message);
 
 /// <summary>Stable Runtime Manager policy or Docker-operation failure.</summary>
 public sealed class RuntimeManagerException : Exception

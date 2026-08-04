@@ -6,6 +6,7 @@ using JulOS.Infrastructure.Agents;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
 using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
 using JulOS.Server.Agents;
@@ -48,6 +49,7 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
+builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
 builder.Services.AddJulOsAgentControl();
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();

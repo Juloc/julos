@@ -10,6 +10,8 @@ namespace JulOS.RuntimeManager;
 public sealed class DockerCliRuntimeBackend : IRuntimeBackend
 {
     private const string ManagedLabel = "com.juloc.julos.managed=true";
+    private const string PackageVersionLabelName = "com.juloc.julos.package-version";
+    private const string InstanceLabelName = "com.juloc.julos.instance";
     private const int MaximumOutputLength = 65536;
     private readonly RuntimePolicy policy;
     private readonly string dockerExecutable;
@@ -51,10 +53,16 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             RuntimePolicy.OwnershipLabel(request.PackageId),
             "--label",
             RuntimePolicy.RuntimeLabel(request.RuntimeId),
+            "--label",
+            $"{PackageVersionLabelName}={request.PackageVersion}",
+            "--label",
+            $"{InstanceLabelName}={request.InstanceId}",
             "--cpus",
             request.CpuLimit.ToString(CultureInfo.InvariantCulture),
             "--memory",
             $"{request.MemoryLimitMb.ToString(CultureInfo.InvariantCulture)}m",
+            "--pids-limit",
+            request.PidsLimit.ToString(CultureInfo.InvariantCulture),
             "--security-opt",
             "no-new-privileges=true",
             "--cap-drop",
@@ -91,6 +99,8 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         return new RuntimeResource(
             request.RuntimeId,
             request.PackageId,
+            request.PackageVersion,
+            request.InstanceId,
             containerId,
             "created",
             request.Image);
@@ -110,7 +120,9 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
                 "--filter",
                 $"label={RuntimePolicy.RuntimeLabel(runtimeId)}",
                 "--format",
-                "{{.ID}}\t{{.State}}\t{{.Image}}\t{{.Label \"com.juloc.julos.package\"}}",
+                "{{.ID}}\t{{.State}}\t{{.Image}}\t{{.Label \"com.juloc.julos.package\"}}"
+                + $"\t{{{{.Label \"{PackageVersionLabelName}\"}}}}"
+                + $"\t{{{{.Label \"{InstanceLabelName}\"}}}}",
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -128,12 +140,22 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         }
 
         var columns = lines[0].Split('\t');
-        if (columns.Length != 4 || string.IsNullOrWhiteSpace(columns[3]))
+        if (columns.Length != 6
+            || string.IsNullOrWhiteSpace(columns[3])
+            || string.IsNullOrWhiteSpace(columns[4])
+            || string.IsNullOrWhiteSpace(columns[5]))
         {
             throw Failure("runtime.inspect.invalid", "Docker returned invalid managed runtime metadata.");
         }
 
-        return new RuntimeResource(runtimeId, columns[3], columns[0], columns[1], columns[2]);
+        return new RuntimeResource(
+            runtimeId,
+            columns[3],
+            columns[4],
+            columns[5],
+            columns[0],
+            columns[1],
+            columns[2]);
     }
 
     /// <inheritdoc />
