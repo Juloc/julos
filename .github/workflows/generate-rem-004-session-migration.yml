@@ -40,6 +40,7 @@ jobs:
           set -uo pipefail
           log="$RUNNER_TEMP/rem004-generator.log"
           migration_dir="src/JulOS.Infrastructure/Persistence/Core/Migrations"
+          server_project="src/JulOS.Server/JulOS.Server.csproj"
           snapshot="$migration_dir/CoreDbContextModelSnapshot.cs"
           before_snapshot="$(sha256sum "$snapshot" | cut -d' ' -f1)"
 
@@ -47,16 +48,18 @@ jobs:
           (
             set -e
             dotnet tool restore
+            dotnet add "$server_project" package Microsoft.EntityFrameworkCore.Design --no-restore
             dotnet restore JulOS.slnx
             dotnet build JulOS.slnx --configuration Release --no-restore
             dotnet ef migrations add AddDurableRemoteSessions \
               --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
-              --startup-project src/JulOS.Server/JulOS.Server.csproj \
+              --startup-project "$server_project" \
               --context CoreDbContext \
               --output-dir Persistence/Core/Migrations \
               --configuration Release \
               --no-build \
               --verbose
+            git checkout -- "$server_project"
             node tools/normalize-encoding.mjs
             git diff --check
 
@@ -64,10 +67,13 @@ jobs:
             test "${#generated[@]}" -eq 2
             after_snapshot="$(sha256sum "$snapshot" | cut -d' ' -f1)"
             test "$after_snapshot" != "$before_snapshot"
+            test -z "$(git status --short | grep -v "^.. $migration_dir/" || true)"
             git status --short -- "$migration_dir"
           ) 2>&1 | tee "$log"
           status=${PIPESTATUS[0]}
           set -e
+
+          git checkout -- "$server_project" || true
 
           if [[ "$status" -ne 0 ]]; then
             echo '--- migration generator failed ---'
