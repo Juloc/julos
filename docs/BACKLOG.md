@@ -34,7 +34,8 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | AGT-006 | Agent diagnostics and update foundation | Done | Exact protocol negotiation, shared capability inventory, bounded reconnect diagnostics and a manual-only digest-verified update preparation contract are implemented, documented and fully validated. |
 | Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
-| Phase 6 | Remote and Browser | In progress | REM-001 is implemented. Existing package shells are not complete session implementations. |
+| REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
+| Phase 6 | Remote and Browser | In progress | REM-001 and REM-002 are complete. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
 | Phase 9 | Discovery and operational hardening | Planned | Depends on stable Agent and package runtime. |
@@ -42,23 +43,23 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### REM-002 — Inventory Julgate and define extraction boundaries
+### REM-003 — Extract shared transport implementation
 
 Scope:
 
-- inventory Julgate authentication, authorization, connection storage, Guacamole launch, display and session behavior
-- map each reusable responsibility to the REM-001 contract, Remote package, Runtime Manager or an explicit rejection
-- keep Julgate, Guacamole and protocol-library ownership outside Core
-- define secret resolution, network-profile selection, runtime ownership and display authorization boundaries
-- record migration exclusions before transport implementation starts
+- add behavior tests around the reusable Julgate transport components
+- extract one implementation consumed by both Julgate and JulOS Remote
+- preserve Julgate deployment during the transition
+- keep concrete transport dependencies outside JulOS Core and Contracts
+- eliminate the old implementation location after both consumers use the shared component
 
 Acceptance:
 
-- every Julgate Remote responsibility has one documented destination or explicit rejection
+- no copied source tree or permanent compatibility wrapper exists
+- Julgate remains deployable and its transport behavior remains covered
+- JulOS Remote consumes the same shared implementation
 - Core remains independent from Julgate, Guacamole and concrete protocol types
-- no credential material crosses the REM-001 contract
-- runtime and display ownership are explicit and testable
-- repository documentation and GitHub issues match the approved extraction map
+- full validation in every affected repository is green
 
 ## Specification status
 
@@ -75,7 +76,7 @@ These do not block current implementation:
 - final package signing key custody procedure
 - final public package-registry host
 - public third-party package support after 1.0
-- exact Remote transport selected after Julgate inventory
+- exact Remote transport selected after shared extraction and parity evidence
 
 ## Backlog maintenance rule
 
