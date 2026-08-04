@@ -29,11 +29,9 @@ public sealed record FailRemoteSessionCommand(
 /// <summary>Records trusted provider activity for an active Remote session.</summary>
 /// <param name="SessionId">Stable session identity.</param>
 /// <param name="RuntimeId">Exact provider runtime identity assigned during provisioning.</param>
-/// <param name="ObservedAtUtc">Provider observation timestamp.</param>
 public sealed record RecordRemoteSessionActivityCommand(
     Guid SessionId,
-    string RuntimeId,
-    DateTimeOffset ObservedAtUtc);
+    string RuntimeId);
 
 /// <summary>Mutates provider-owned connection state without exposing persistence to an adapter.</summary>
 public interface IRemoteSessionConnectionService
