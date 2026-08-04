@@ -103,6 +103,7 @@ app.MapJulOsSafeMode();
 app.MapJulOsAudit();
 app.MapJulOsAgents();
 app.MapJulOsRealtimeEvents();
+app.MapJulOsRemoteProviderEvents();
 
 app.MapGet(
     "/api/v1/system/version",
