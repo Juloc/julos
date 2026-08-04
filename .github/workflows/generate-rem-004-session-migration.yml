@@ -7,6 +7,9 @@ on:
       - agent/rem-004-durable-session-service
     paths:
       - .github/workflows/generate-rem-004-session-migration.yml
+  pull_request:
+    paths:
+      - .github/workflows/generate-rem-004-session-migration.yml
 
 permissions:
   contents: write
@@ -17,7 +20,7 @@ concurrency:
 
 jobs:
   generate:
-    if: github.repository == 'Juloc/julos'
+    if: github.repository == 'Juloc/julos' && (github.event_name == 'push' || github.head_ref == 'agent/rem-004-durable-session-service')
     runs-on: ubuntu-latest
     steps:
       - name: Check out branch
