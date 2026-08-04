@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Security.Claims;
+using System.Text.Json;
 
 using JulOS.Infrastructure.Packages;
 using JulOS.PackageSdk;
@@ -59,7 +60,8 @@ internal static class PackageCapabilityEndpoints
                     operation,
                     context.TraceIdentifier,
                     payload,
-                    timeProvider.GetUtcNow().AddSeconds(10)),
+                    timeProvider.GetUtcNow().AddSeconds(10),
+                    new CapabilityCallerContext(packageId, CurrentUserId(context.User))),
                 cancellationToken).ConfigureAwait(false);
             return response.Succeeded
                 ? Results.Json(response.Payload)
@@ -81,12 +83,13 @@ internal static class PackageCapabilityEndpoints
         }
         catch (CapabilityBrokerException exception)
         {
-            var status = string.Equals(
-                exception.Code,
-                "capability.permission_denied",
-                StringComparison.Ordinal)
-                ? StatusCodes.Status403Forbidden
-                : StatusCodes.Status400BadRequest;
+            var status = exception.Code switch
+            {
+                "capability.permission_denied" => StatusCodes.Status403Forbidden,
+                "capability.caller_identity_mismatch" => StatusCodes.Status403Forbidden,
+                "capability.user_identity_invalid" => StatusCodes.Status401Unauthorized,
+                _ => StatusCodes.Status400BadRequest,
+            };
             return Results.Json(
                 new { code = exception.Code, detail = exception.Message },
                 statusCode: status);
@@ -128,5 +131,16 @@ internal static class PackageCapabilityEndpoints
                 detail = detail ?? "The capability provider failed.",
             },
             statusCode: status);
+    }
+
+    private static Guid CurrentUserId(ClaimsPrincipal principal)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        var identifier = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(identifier, out var userId) && userId != Guid.Empty
+            ? userId
+            : throw new CapabilityBrokerException(
+                "capability.user_identity_invalid",
+                "The authenticated capability caller identity is invalid.");
     }
 }
