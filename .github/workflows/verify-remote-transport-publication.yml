@@ -121,20 +121,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          feed="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
           dotnet nuget add source \
             --username "${{ github.repository_owner }}" \
             --password "$GITHUB_TOKEN" \
             --store-password-in-clear-text \
             --valid-authentication-types basic \
             --name github \
-            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+            "$feed"
 
           probe="$RUNNER_TEMP/package-probe"
           dotnet new classlib --name PackageProbe --framework net10.0 --output "$probe"
           dotnet add "$probe/PackageProbe.csproj" package JulOS.Remote.Transport \
             --version "$PACKAGE_VERSION" \
-            --source github
-          dotnet restore "$probe/PackageProbe.csproj" --locked-mode=false
+            --source "$feed"
+          dotnet restore "$probe/PackageProbe.csproj" --source "$feed"
           grep --fixed-strings \
             "<PackageReference Include=\"JulOS.Remote.Transport\" Version=\"${PACKAGE_VERSION}\"" \
             "$probe/PackageProbe.csproj"
