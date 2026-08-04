@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 namespace JulOS.Infrastructure.Remote;
 
 /// <summary>Enforces Remote session deadlines and removes terminal provider runtimes.</summary>
-public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecycleService
+public sealed partial class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecycleService
 {
     private const string CoreRemotePackageId = "julos.core.remote";
     private const string CleanupProblemType = "remote.runtime_cleanup_failed";

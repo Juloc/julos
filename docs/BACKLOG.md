@@ -36,7 +36,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
 | REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
-| REM-004 | Remote worker and session orchestration | In progress | Ownership, exact-idempotent sessions, allowlisted runtime allocation, lifecycle enforcement, authenticated provider events and server-timed activity are implemented; display grants, reconnect and detach policy remain. |
+| REM-004 | Remote worker and session orchestration | In progress | Ownership, exact-idempotent sessions, allowlisted runtime allocation, lifecycle enforcement, authenticated provider events, activity and explicit detach policy are implemented; functional display grants and reconnect remain. |
 | Phase 6 | Remote and Browser | In progress | REM-001 through REM-003 are complete; REM-004 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -64,7 +64,7 @@ Completed:
 - the broker rejects request-supplied caller context and creates the provider-visible package/user context itself;
 - capability audit records retain the authenticated user identity;
 - durable PostgreSQL sessions enforce user/package ownership, exact create idempotency, bounded listing, optimistic revisions and cancellation idempotency;
-- the `remote.session/1` capability provider maps create, read, list, cancel and disconnect to caller-safe responses;
+- the `remote.session/1` capability provider maps create, read, list, cancel, disconnect and detach to caller-safe responses;
 - configured protocol providers require semantic versions, digest-pinned images and bounded CPU, memory and process limits;
 - configured network profiles authorize exact runtime networks, target host patterns and target ports before allocation;
 - secret-reference metadata must be present, package-owned by the caller and restricted to a Remote purpose before allocation;
@@ -84,15 +84,17 @@ Completed:
 - callback credentials are supplied only to the provider runtime through a separate bounded secret-environment channel;
 - Runtime Manager writes secret environment values to a user-only temporary file, passes only its path to Docker and removes it on close;
 - normal runtime environment values remain non-secret and continue to reject secret-like names;
-- provider ingress, callback authentication, secret-environment policy and allocation wiring are covered by unit and integration tests;
-- unit, architecture and PostgreSQL integration tests cover policy rejection, exact allocation, retry idempotency, foreign-secret refusal, disconnect, expiry, provider events and cleanup retries.
+- window detach requires the caller to select `keep-active` or `disconnect` explicitly;
+- `keep-active` revokes the current presentation descriptor without changing provider activity or removing the runtime;
+- `disconnect` reuses the existing disconnect and runtime-cleanup path instead of adding another cleanup implementation;
+- provider ingress, callback authentication, secret-environment policy, allocation and both detach behaviors are covered by unit and integration tests;
+- unit, architecture and PostgreSQL integration tests cover policy rejection, exact allocation, retry idempotency, foreign-secret refusal, disconnect, detach, expiry, provider events and cleanup retries.
 
 Remaining scope:
 
-- issue bounded same-origin display descriptors only after an authenticated successful provider handshake;
+- issue bounded same-origin display descriptors only through a functional Remote display transport;
 - enforce reconnect authorization and reject stale or terminal display grants;
-- publish operation progress where a caller needs more than lifecycle events;
-- connect window detach behavior to the explicit session lifecycle policy.
+- publish operation progress where a caller needs more than lifecycle events.
 
 Acceptance:
 

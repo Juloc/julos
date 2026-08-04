@@ -81,6 +81,93 @@ public sealed class RemoteSessionLifecycleTests
     }
 
     [TestMethod]
+    public async Task KeepActiveDetachRevokesDisplayWithoutRemovingRuntime()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 16, 30, 0, TimeSpan.Zero));
+        var runtime = new RecordingRuntimeManager();
+        var networkProfileId = Guid.Parse("88888888-8888-4888-8888-888888888888");
+        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var provisioned = await CreateProvisionedSessionAsync(
+            scope.ServiceProvider,
+            administrator.UserId,
+            networkProfileId,
+            clock,
+            "remote-detach-keep-active").ConfigureAwait(false);
+        var runtimeId = $"remote-{provisioned.SessionId:N}";
+        var connections = scope.ServiceProvider.GetRequiredService<IRemoteSessionConnectionService>();
+        var connected = await connections.ConnectAsync(new ConnectRemoteSessionCommand(
+            provisioned.SessionId,
+            runtimeId,
+            provisioned.Revision)).ConfigureAwait(false);
+
+        var context = scope.ServiceProvider.GetRequiredService<CoreDbContext>();
+        var row = await context.RemoteSessions
+            .SingleAsync(candidate => candidate.Id == connected.SessionId)
+            .ConfigureAwait(false);
+        row.DisplayKind = "graphical";
+        row.DisplayContractVersion = "1.0.0";
+        row.DisplayEndpoint = $"/api/v1/remote/sessions/{row.Id:D}/display";
+        row.DisplayExpiresAtUtc = clock.GetUtcNow().AddMinutes(1);
+        await context.SaveChangesAsync().ConfigureAwait(false);
+        var lastActivity = row.LastActivityAtUtc;
+
+        var lifecycle = scope.ServiceProvider.GetRequiredService<IRemoteSessionLifecycleService>();
+        var detached = await lifecycle.DetachAsync(new DetachRemoteSessionCommand(
+            administrator.UserId,
+            CallerPackageId,
+            new DetachRemoteSessionRequest(
+                connected.SessionId,
+                connected.Revision,
+                RemoteWindowDetachBehaviors.KeepActive))).ConfigureAwait(false);
+
+        Assert.AreEqual(RemoteSessionStates.Connected, detached.State);
+        Assert.AreEqual(connected.Revision + 1, detached.Revision);
+        Assert.IsNull(detached.Display);
+        Assert.AreEqual(0, runtime.RemovalCount);
+        Assert.AreEqual(runtimeId, row.RuntimeId);
+        Assert.AreEqual(lastActivity, row.LastActivityAtUtc);
+    }
+
+    [TestMethod]
+    public async Task DisconnectDetachUsesExistingRuntimeCleanup()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 16, 45, 0, TimeSpan.Zero));
+        var runtime = new RecordingRuntimeManager();
+        var networkProfileId = Guid.Parse("99999999-9999-4999-8999-999999999999");
+        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var provisioned = await CreateProvisionedSessionAsync(
+            scope.ServiceProvider,
+            administrator.UserId,
+            networkProfileId,
+            clock,
+            "remote-detach-disconnect").ConfigureAwait(false);
+        var lifecycle = scope.ServiceProvider.GetRequiredService<IRemoteSessionLifecycleService>();
+
+        var detached = await lifecycle.DetachAsync(new DetachRemoteSessionCommand(
+            administrator.UserId,
+            CallerPackageId,
+            new DetachRemoteSessionRequest(
+                provisioned.SessionId,
+                provisioned.Revision,
+                RemoteWindowDetachBehaviors.Disconnect))).ConfigureAwait(false);
+
+        Assert.AreEqual(RemoteSessionStates.Disconnected, detached.State);
+        Assert.IsNotNull(detached.EndedAtUtc);
+        Assert.IsNull(detached.Display);
+        Assert.AreEqual(1, runtime.RemovalCount);
+    }
+
+    [TestMethod]
     public async Task ReconciliationExpiresIdleSession()
     {
         await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
