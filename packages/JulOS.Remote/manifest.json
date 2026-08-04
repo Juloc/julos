@@ -56,7 +56,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/remote.js",
-    "Sha256": "50f16cae2073a7ea689faf0dcf40792d5c6d29bafd3654b6835d9834ec1d77a5",
+    "Sha256": "9cc6908514e987021b7f7ce7d39c6050ae3ef1e67fc707059c97975b73a8fe57",
     "ExportedElements": [
       "julos-remote-app",
       "julos-remote-widget"
