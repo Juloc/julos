@@ -1,4 +1,4 @@
-﻿using JulOS.Contracts.Remote;
+using JulOS.Contracts.Remote;
 
 namespace JulOS.Application.Remote;
 
@@ -91,7 +91,7 @@ public sealed class RemoteSessionServiceException : Exception
     public RemoteSessionServiceException(
         RemoteSessionServiceFailureReason reason,
         Exception? innerException = null)
-        : base(Message(reason), innerException)
+        : base(BuildMessage(reason), innerException)
     {
         this.Reason = reason;
     }
@@ -99,7 +99,7 @@ public sealed class RemoteSessionServiceException : Exception
     /// <summary>Gets the stable failure reason.</summary>
     public RemoteSessionServiceFailureReason Reason { get; }
 
-    private static string Message(RemoteSessionServiceFailureReason reason) => reason switch
+    private static string BuildMessage(RemoteSessionServiceFailureReason reason) => reason switch
     {
         RemoteSessionServiceFailureReason.InvalidCaller => "Remote session caller identity is invalid.",
         RemoteSessionServiceFailureReason.NotFound => "Remote session was not found.",
