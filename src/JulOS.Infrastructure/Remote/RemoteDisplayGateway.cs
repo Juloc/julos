@@ -281,7 +281,7 @@ public sealed class RemoteDisplayGateway : IDisposable
     private static byte[] Base64UrlDecode(string value)
     {
         var padded = value.Replace('-', '+').Replace('_', '/');
-        padded += padded.Length % 4 switch
+        padded += (padded.Length % 4) switch
         {
             0 => string.Empty,
             2 => "==",
