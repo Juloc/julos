@@ -237,7 +237,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
                 "Remote provider failure code is invalid.");
         }
 
-        detail = detail?.Trim() ?? string.Empty;
+        detail = detail.Trim();
         if (detail.Length is < 1 or > 1024 || detail.Any(char.IsControl))
         {
             throw new RemoteSessionContractException(
@@ -251,7 +251,9 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         RemoteSessionRow row,
         string runtimeId,
         RemoteSessionFailureResponse failure) =>
-        (row.RuntimeId is null || string.Equals(row.RuntimeId, runtimeId, StringComparison.Ordinal))
+        (string.Equals(row.RuntimeId, runtimeId, StringComparison.Ordinal)
+            || row.RuntimeId is null
+                && string.Equals(runtimeId, $"remote-{row.Id:N}", StringComparison.Ordinal))
         && string.Equals(row.FailureCode, failure.Code, StringComparison.Ordinal)
         && string.Equals(row.FailureDetail, failure.Detail, StringComparison.Ordinal)
         && row.FailureRetryable == failure.Retryable;
