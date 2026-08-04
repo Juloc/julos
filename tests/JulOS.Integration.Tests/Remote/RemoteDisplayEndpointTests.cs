@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
@@ -377,7 +378,7 @@ public sealed class RemoteDisplayEndpointTests
             var address = new Uri(addresses.Single());
             return new EchoProvider(
                 application,
-                $"ws://127.0.0.1:{address.Port}/runtime/{runtimeId}");
+                $"ws://127.0.0.1:{address.Port}/runtime/{{runtimeId}}");
         }
 
         public async ValueTask DisposeAsync()
