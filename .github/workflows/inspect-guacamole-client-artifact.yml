@@ -29,12 +29,13 @@ jobs:
             "$base/guacamole-common-js-1.6.0.zip" \
             --output guacamole-common-js-1.6.0.zip
           curl --fail --silent --show-error --location \
-            "$base/guacamole-common-js-1.6.0.zip.sha256" \
-            --output guacamole-common-js-1.6.0.zip.sha256
-          expected="$(tr -d '[:space:]' < guacamole-common-js-1.6.0.zip.sha256)"
-          actual="$(sha256sum guacamole-common-js-1.6.0.zip | cut -d' ' -f1)"
-          test "$actual" = "$expected"
-          printf 'SHA256=%s\n' "$actual"
+            "$base/guacamole-common-js-1.6.0.zip.sha1" \
+            --output guacamole-common-js-1.6.0.zip.sha1
+          expected_sha1="$(tr -d '[:space:]' < guacamole-common-js-1.6.0.zip.sha1)"
+          actual_sha1="$(sha1sum guacamole-common-js-1.6.0.zip | cut -d' ' -f1)"
+          test "$actual_sha1" = "$expected_sha1"
+          printf 'SHA1=%s\n' "$actual_sha1"
+          printf 'SHA256=%s\n' "$(sha256sum guacamole-common-js-1.6.0.zip | cut -d' ' -f1)"
           unzip -l guacamole-common-js-1.6.0.zip
           unzip -q guacamole-common-js-1.6.0.zip -d extracted
           find extracted -maxdepth 3 -type f -printf '%p %s bytes\n' | sort
