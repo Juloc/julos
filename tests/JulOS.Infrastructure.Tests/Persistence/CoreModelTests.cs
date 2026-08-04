@@ -26,6 +26,7 @@ public sealed class CoreModelTests
             typeof(DesktopWindowRow),
             typeof(WidgetPlacementRow),
             typeof(SessionReferenceRow),
+            typeof(RemoteSessionRow),
             typeof(AgentRow),
             typeof(AgentCapabilityRow),
             typeof(ProblemRow),

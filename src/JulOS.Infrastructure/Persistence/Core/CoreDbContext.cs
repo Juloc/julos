@@ -38,6 +38,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<DesktopWindowRow> DesktopWindows => this.Set<DesktopWindowRow>();
     internal DbSet<WidgetPlacementRow> WidgetPlacements => this.Set<WidgetPlacementRow>();
     internal DbSet<SessionReferenceRow> Sessions => this.Set<SessionReferenceRow>();
+    internal DbSet<RemoteSessionRow> RemoteSessions => this.Set<RemoteSessionRow>();
     internal DbSet<AgentRow> Agents => this.Set<AgentRow>();
     internal DbSet<AgentCapabilityRow> AgentCapabilities => this.Set<AgentCapabilityRow>();
     internal DbSet<AgentEnrollmentTokenRow> AgentEnrollmentTokens => this.Set<AgentEnrollmentTokenRow>();
@@ -90,6 +91,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         base.OnModelCreating(builder);
         CoreModelConfiguration.Configure(builder);
         AgentPersistenceModelConfiguration.Configure(builder);
+        RemoteSessionModelConfiguration.Configure(builder);
     }
 
     private void PrepareIdentityRevisions()
