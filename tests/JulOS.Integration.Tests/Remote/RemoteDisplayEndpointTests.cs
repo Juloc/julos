@@ -144,7 +144,7 @@ public sealed class RemoteDisplayEndpointTests
         var webSocketClient = host.Server.CreateWebSocketClient();
         webSocketClient.ConfigureRequest = request =>
         {
-            request.Headers["Cookie\] = authentication.Cookie;
+            request.Headers["Cookie"] = authentication.Cookie;
             request.Headers["Origin"] = PublicOrigin;
         };
 
