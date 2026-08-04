@@ -31,26 +31,26 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore tools and solution
-        run: |
-          dotnet tool restore
-          dotnet restore JulOS.slnx
-          dotnet build JulOS.slnx --configuration Release --no-restore
-
-      - name: Generate committed EF migration
-        run: |
-          dotnet ef migrations add AddRemoteSessions \
-            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
-            --startup-project src/JulOS.Server/JulOS.Server.csproj \
-            --context CoreDbContext \
-            --output-dir Persistence/Core/Migrations \
-            --configuration Release \
-            --no-build
-
-      - name: Extend migration acceptance test
+      - name: Generate and commit migration
         shell: bash
         run: |
-          python3 - <<'PY'
+          set -uo pipefail
+          log="$RUNNER_TEMP/rem004-generator.log"
+          status=0
+          {
+            set -e
+            dotnet tool restore
+            dotnet restore JulOS.slnx
+            dotnet build JulOS.slnx --configuration Release --no-restore
+            dotnet ef migrations add AddRemoteSessions \
+              --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
+              --startup-project src/JulOS.Server/JulOS.Server.csproj \
+              --context CoreDbContext \
+              --output-dir Persistence/Core/Migrations \
+              --configuration Release \
+              --no-build
+
+            python3 - <<'PY'
           from pathlib import Path
 
           path = Path('tests/JulOS.Integration.Tests/Persistence/CoreMigrationTests.cs')
@@ -62,17 +62,23 @@ jobs:
           path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
           PY
 
-      - name: Normalize generated files
-        run: node tools/normalize-encoding.mjs
+            node tools/normalize-encoding.mjs
+            git diff --check
+          } >"$log" 2>&1 || status=$?
 
-      - name: Commit generated migration
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff --check
-          git add src/JulOS.Infrastructure/Persistence/Core/Migrations \
-            tests/JulOS.Integration.Tests/Persistence/CoreMigrationTests.cs
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          if [[ "$status" -ne 0 ]]; then
+            tail -n 400 "$log" > REM004-GENERATOR-FAILURE.log
+            git add -f REM004-GENERATOR-FAILURE.log
+            git commit -m 'ci(remote): capture session migration generator failure'
+            git push origin HEAD:agent/rem-004-durable-session-service
+            exit "$status"
+          fi
+
+          rm -f REM004-GENERATOR-FAILURE.log
+          git add src/JulOS.Infrastructure/Persistence/Core/Migrations \
+            tests/JulOS.Integration.Tests/Persistence/CoreMigrationTests.cs
           git commit -m 'feat(remote): add durable session migration'
           git push origin HEAD:agent/rem-004-durable-session-service
