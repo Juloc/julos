@@ -43,7 +43,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         }
 
         var arguments = CreateArguments(request);
-        string? secretEnvironmentFile = null;
+        FileStream? secretEnvironmentFile = null;
         try
         {
             if (request.SecretEnvironment.Count > 0)
@@ -52,7 +52,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
                     request.SecretEnvironment,
                     cancellationToken).ConfigureAwait(false);
                 arguments.Add("--env-file");
-                arguments.Add(secretEnvironmentFile);
+                arguments.Add(secretEnvironmentFile.Name);
             }
 
             arguments.Add(request.Image);
@@ -73,7 +73,10 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         }
         finally
         {
-            DeleteSecretEnvironmentFile(secretEnvironmentFile);
+            if (secretEnvironmentFile is not null)
+            {
+                await secretEnvironmentFile.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 
@@ -263,21 +266,30 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
         return output;
     }
 
-    private static async Task<string> WriteSecretEnvironmentAsync(
+    private static async Task<FileStream> WriteSecretEnvironmentAsync(
         IReadOnlyDictionary<string, string> environment,
         CancellationToken cancellationToken)
     {
         var path = Path.Combine(Path.GetTempPath(), $"julos-runtime-{Guid.NewGuid():N}.env");
+        var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.ReadWrite,
+            FileShare.Read | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.WriteThrough | FileOptions.DeleteOnClose);
         try
         {
-            await using (var stream = new FileStream(
-                path,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
+            if (!OperatingSystem.IsWindows())
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+
+            await using (var writer = new StreamWriter(
+                stream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 bufferSize: 4096,
-                FileOptions.Asynchronous | FileOptions.WriteThrough))
-            await using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+                leaveOpen: true))
             {
                 writer.NewLine = "\n";
                 foreach (var pair in environment.OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -286,37 +298,13 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
                         .ConfigureAwait(false);
                 }
             }
-
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            }
-            return path;
+            stream.Position = 0;
+            return stream;
         }
         catch
         {
-            DeleteSecretEnvironmentFile(path);
+            await stream.DisposeAsync().ConfigureAwait(false);
             throw;
-        }
-    }
-
-    private static void DeleteSecretEnvironmentFile(string? path)
-    {
-        if (path is null)
-        {
-            return;
-        }
-        try
-        {
-            File.Delete(path);
-        }
-        catch (IOException)
-        {
-            // The temporary file contains only an expiring runtime credential and is never reused.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Cleanup is best effort; directory permissions still restrict the temporary file.
         }
     }
 
