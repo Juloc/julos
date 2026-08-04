@@ -178,7 +178,7 @@ public sealed class RuntimePolicy
                 || !LooksLikeSecretName(pair.Key)
                 || string.IsNullOrEmpty(pair.Value)
                 || pair.Value.Length > MaximumSecretEnvironmentValueLength
-                || pair.Value.ContainsAny('\0', '\r', '\n'))
+                || pair.Value.IndexOfAny(['\0', '\r', '\n']) >= 0)
             {
                 throw Failure(
                     "runtime.secret_environment.invalid",
