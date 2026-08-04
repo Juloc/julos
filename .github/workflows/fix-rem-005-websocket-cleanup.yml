@@ -1,6 +1,11 @@
 name: Fix REM-005 WebSocket cleanup
 
 on:
+  push:
+    branches:
+      - agent/rem-005-display-transport
+    paths:
+      - .github/workflows/fix-rem-005-websocket-cleanup.yml
   pull_request:
     branches:
       - agent/complete-julos-work-breakdown
@@ -10,9 +15,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fix-rem-005-websocket-cleanup
+  cancel-in-progress: false
+
 jobs:
   fix:
-    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-display-transport'
+    if: github.repository == 'Juloc/julos' && (github.ref == 'refs/heads/agent/rem-005-display-transport' || github.head_ref == 'agent/rem-005-display-transport')
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR branch
