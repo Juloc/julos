@@ -37,6 +37,7 @@ public sealed class CoreMigrationTests
         CollectionAssert.Contains(tableNames, "package_installations");
         CollectionAssert.Contains(tableNames, "desktop_layouts");
         CollectionAssert.Contains(tableNames, "session_references");
+        CollectionAssert.Contains(tableNames, "remote_sessions");
         CollectionAssert.Contains(tableNames, "audit_events");
         CollectionAssert.Contains(tableNames, "secret_references");
 
