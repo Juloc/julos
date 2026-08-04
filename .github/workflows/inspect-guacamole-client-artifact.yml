@@ -1,0 +1,36 @@
+name: Inspect Apache Guacamole client artifact
+
+on:
+  push:
+    branches:
+      - agent/rem-005-package-display-client
+    paths:
+      - .github/workflows/inspect-guacamole-client-artifact.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and verify Apache artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://repo.maven.apache.org/maven2/org/apache/guacamole/guacamole-common-js/1.6.0'
+          curl --fail --silent --show-error --location \
+            "$base/guacamole-common-js-1.6.0.zip" \
+            --output guacamole-common-js-1.6.0.zip
+          curl --fail --silent --show-error --location \
+            "$base/guacamole-common-js-1.6.0.zip.sha256" \
+            --output guacamole-common-js-1.6.0.zip.sha256
+          expected="$(tr -d '[:space:]' < guacamole-common-js-1.6.0.zip.sha256)"
+          actual="$(sha256sum guacamole-common-js-1.6.0.zip | cut -d' ' -f1)"
+          test "$actual" = "$expected"
+          printf 'SHA256=%s\n' "$actual"
+          unzip -l guacamole-common-js-1.6.0.zip
+          unzip -q guacamole-common-js-1.6.0.zip -d extracted
+          find extracted -maxdepth 3 -type f -printf '%p %s bytes\n' | sort
+          find extracted -type f \( -name 'all.js' -o -name 'all.min.js' \) -print -exec sha256sum {} \;
