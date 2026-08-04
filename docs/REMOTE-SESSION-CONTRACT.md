@@ -1,4 +1,4 @@
-﻿# Protocol-neutral Remote session contract
+# Protocol-neutral Remote session contract
 
 REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider or display transport is selected. Core, Desktop and package code must use these contracts instead of importing Julgate, Guacamole or protocol-library implementation types.
 
@@ -9,6 +9,10 @@ REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider o
 - operations: `create`, `read`, `list`, `cancel`
 
 The capability broker remains responsible for package identity, grants, deadlines and auditing. REM-001 only defines the payloads and validation rules.
+
+REM-004 adds authenticated caller context at the broker boundary. The control plane attaches the authorized package identity and the authenticated user UUID outside the operation payload. The broker rejects package-identity substitution, passes the verified context to the selected provider and records the user identity in capability audit events. Existing internal capability calls may omit a user identity, but a user-owned provider such as Remote must reject create, read, list or cancel operations that do not carry one.
+
+Package or user identity must never be accepted from provider-specific JSON payload fields. Providers receive only the control-plane-produced `CapabilityCallerContext`.
 
 ## Protocol ownership
 
@@ -49,6 +53,8 @@ A later session service must persist both `operationKey` and `requestIdentity`:
 - the same operation key plus the same identity returns the existing session
 - the same operation key plus a different identity fails with an idempotency conflict
 - the operation key must never cause a second provider runtime to be allocated
+
+Idempotency is scoped to the authenticated user and authorized caller package. One user or package cannot recover another caller's session by reusing its operation key.
 
 ## Time and size bounds
 
@@ -108,4 +114,4 @@ REM-001 does not:
 - persist Remote profiles
 - create the Remote user interface
 
-Those items begin only after these contracts and tests are green.
+REM-004 begins with authenticated caller propagation, then adds durable session ownership, exact idempotency, Runtime Manager orchestration, lifecycle events, cancellation and cleanup. Later transport and UI items remain separate.
