@@ -20,8 +20,8 @@ public sealed partial class RemoteSessionContractValidator
     private const int MaximumSessionSeconds = 604800;
     private const int MaximumRequestLifetimeSeconds = 600;
     private static readonly JsonSerializerOptions IdentityJsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> AllowedTransitions =
-        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+    private static readonly Dictionary<string, IReadOnlySet<string>> AllowedTransitions =
+        new(StringComparer.Ordinal)
         {
             [RemoteSessionStates.Requested] = Set(
                 RemoteSessionStates.Provisioning,
