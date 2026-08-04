@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Net;
+﻿using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -241,17 +240,18 @@ public sealed partial class RemoteSessionContractValidator
         ArgumentNullException.ThrowIfNull(target);
         var host = target.Host.Trim().ToLowerInvariant();
         ValidateBoundedText(host, 253, RemoteSessionFailureCodes.TargetInvalid, "Remote target host is invalid.");
+        var isIpAddress = IPAddress.TryParse(host, out _);
         if (host.Contains("//", StringComparison.Ordinal)
-            || host.Contains('/', StringComparison.Ordinal)
-            || host.Contains('\\', StringComparison.Ordinal)
-            || host.Contains('@', StringComparison.Ordinal)
-            || host.Contains('?', StringComparison.Ordinal)
-            || host.Contains('#', StringComparison.Ordinal)
-            || host.Contains(':', StringComparison.Ordinal) && !IPAddress.TryParse(host, out _))
+            || host.Contains('/')
+            || host.Contains('\\')
+            || host.Contains('@')
+            || host.Contains('?')
+            || host.Contains('#')
+            || host.Contains(':') && !isIpAddress)
         {
             throw Failure(RemoteSessionFailureCodes.TargetInvalid, "Remote target host is invalid.");
         }
-        if (!IPAddress.TryParse(host, out _)
+        if (!isIpAddress
             && Uri.CheckHostName(host) != UriHostNameType.Dns)
         {
             throw Failure(RemoteSessionFailureCodes.TargetInvalid, "Remote target host is invalid.");
