@@ -96,7 +96,7 @@ public sealed class RuntimePolicyTests
             {
                 SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
-                    ["JULOS_MODE"] = "not-a-secret",
+                    ["JULOS_CALLBACK_PROOF"] = "not-a-secret",
                 },
             }));
         var multiline = Assert.ThrowsExactly<RuntimeManagerException>(() => policy.Validate(
