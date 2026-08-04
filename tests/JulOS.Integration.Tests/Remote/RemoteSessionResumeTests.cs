@@ -9,6 +9,7 @@ using JulOS.Contracts.Authentication;
 using JulOS.Contracts.Remote;
 using JulOS.Contracts.Runtime;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
 using JulOS.Integration.Tests.Persistence;
 
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -33,7 +34,7 @@ public sealed class RemoteSessionResumeTests
     };
 
     [TestMethod]
-    public async Task ActiveResumeClearsDisplayAndKeepsRuntimeAndActivity()
+    public async Task ActiveResumeIssuesFreshTokenFreeDisplayAndKeepsRuntimeAndActivity()
     {
         await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
         var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 21, 0, 0, TimeSpan.Zero));
@@ -77,7 +78,21 @@ public sealed class RemoteSessionResumeTests
 
         Assert.AreEqual(RemoteSessionStates.Connected, resumed.State);
         Assert.AreEqual(connected.Revision + 1, resumed.Revision);
-        Assert.IsNull(resumed.Display);
+        Assert.IsNotNull(resumed.Display);
+        Assert.AreEqual(RemoteDisplayGateway.DisplayKind, resumed.Display.Kind);
+        Assert.AreEqual(RemoteDisplayGateway.ContractVersion, resumed.Display.ContractVersion);
+        Assert.AreEqual(clock.GetUtcNow().AddSeconds(60), resumed.Display.ExpiresAtUtc);
+        Assert.IsTrue(resumed.Display.Endpoint.Contains(
+            $"package={CallerPackageId}",
+            StringComparison.Ordinal));
+        Assert.IsTrue(resumed.Display.Endpoint.Contains(
+            $"revision={resumed.Revision}",
+            StringComparison.Ordinal));
+        Assert.IsFalse(resumed.Display.Endpoint.Contains(
+            "token",
+            StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(resumed.Display.Endpoint, row.DisplayEndpoint);
+        Assert.AreEqual(resumed.Display.ExpiresAtUtc, row.DisplayExpiresAtUtc);
         Assert.AreEqual(0, runtime.RemovalCount);
         Assert.AreEqual(runtimeId, row.RuntimeId);
         Assert.AreEqual(lastActivity, row.LastActivityAtUtc);
@@ -206,6 +221,9 @@ public sealed class RemoteSessionResumeTests
             ["Remote:Providers:0:MemoryMegabytes"] = "256",
             ["Remote:Providers:0:CpuLimit"] = "1",
             ["Remote:Providers:0:PidsLimit"] = "128",
+            ["Remote:Display:ProviderEndpointTemplate"] = "ws://127.0.0.1:9/runtime/{runtimeId}",
+            ["Remote:Display:PublicOrigin"] = "https://localhost",
+            ["Remote:Display:GrantLifetimeSeconds"] = "60",
             ["Remote:NetworkProfiles:0:NetworkProfileId"] = networkProfileId.ToString("D"),
             ["Remote:NetworkProfiles:0:Default"] = "true",
             ["Remote:NetworkProfiles:0:RuntimeNetworks:0"] = "julos-remote",

@@ -20,9 +20,13 @@ public static class RemoteOrchestrationServiceCollectionExtensions
         services.AddSingleton(serviceProvider => RemoteProviderCallbackAuthenticator.Read(
             configuration,
             serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(serviceProvider => RemoteDisplayGateway.Read(
+            configuration,
+            serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteSessionProvisioner, PostgresRemoteSessionProvisioner>();
         services.AddScoped<IRemoteSessionLifecycleService, PostgresRemoteSessionLifecycleService>();
         services.AddScoped<IRemoteSessionConnectionService, PostgresRemoteSessionConnectionService>();
+        services.AddScoped<PostgresRemoteDisplayAuthorizationService>();
         var runtimeManager = RemoteRuntimeManagerClientOptions.Read(configuration);
         if (runtimeManager is null)
         {

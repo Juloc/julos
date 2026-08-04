@@ -25,6 +25,7 @@ public sealed partial class PostgresRemoteSessionLifecycleService : IRemoteSessi
     private readonly CoreDbContext context;
     private readonly IRemoteRuntimeManager runtimeManager;
     private readonly IRealtimeEventPublisher events;
+    private readonly RemoteDisplayGateway displayGateway;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Creates the PostgreSQL-backed lifecycle service.</summary>
@@ -32,11 +33,13 @@ public sealed partial class PostgresRemoteSessionLifecycleService : IRemoteSessi
         CoreDbContext context,
         IRemoteRuntimeManager runtimeManager,
         IRealtimeEventPublisher events,
+        RemoteDisplayGateway displayGateway,
         TimeProvider timeProvider)
     {
         this.context = context ?? throw new ArgumentNullException(nameof(context));
         this.runtimeManager = runtimeManager ?? throw new ArgumentNullException(nameof(runtimeManager));
         this.events = events ?? throw new ArgumentNullException(nameof(events));
+        this.displayGateway = displayGateway ?? throw new ArgumentNullException(nameof(displayGateway));
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 

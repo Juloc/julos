@@ -79,6 +79,7 @@ app.UseJulOsAgentProtocol();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseRateLimiter();
+app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
@@ -104,6 +105,7 @@ app.MapJulOsAudit();
 app.MapJulOsAgents();
 app.MapJulOsRealtimeEvents();
 app.MapJulOsRemoteProviderEvents();
+app.MapJulOsRemoteDisplay();
 
 app.MapGet(
     "/api/v1/system/version",
