@@ -1,4 +1,4 @@
-﻿# Backlog
+# Backlog
 
 This file is the current high-level implementation state. Detailed future work belongs in `WORK_BREAKDOWN.md` and GitHub issues.
 
@@ -36,7 +36,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
 | REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
-| REM-004 | Remote worker and session orchestration | In progress | Authenticated package and user caller context now reaches capability providers and audit without trusting payload identity; durable session ownership, runtime allocation, lifecycle and cleanup remain. |
+| REM-004 | Remote worker and session orchestration | In progress | The broker now creates authenticated package/user context from separate trusted inputs and rejects request-supplied identity; durable session ownership, runtime allocation, lifecycle and cleanup remain. |
 | Phase 6 | Remote and Browser | In progress | REM-001 through REM-003 are complete; REM-004 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -59,13 +59,13 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 Completed foundation:
 
-- capability requests carry optional control-plane-produced caller metadata;
-- the authenticated HTTP endpoint attaches the authorized package identity and authenticated user UUID;
-- the broker rejects package-identity substitution before provider invocation;
-- providers receive the verified caller context outside operation payloads;
+- capability requests expose optional provider-visible caller metadata but untrusted callers must leave it empty;
+- the authenticated HTTP endpoint passes the authorized package identity and authenticated user UUID as separate trusted broker inputs;
+- the broker rejects any request-supplied caller context before provider invocation;
+- the broker creates the provider-visible package/user context itself;
 - capability audit records retain the authenticated user identity;
-- existing internal capability calls remain compatible through a package-only fallback;
-- unit tests cover provider propagation, audit propagation and mismatch rejection.
+- existing internal capability calls remain compatible through a package-only overload;
+- unit tests cover provider propagation, audit propagation and caller-context injection rejection.
 
 Remaining scope:
 
