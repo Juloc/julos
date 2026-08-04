@@ -1,0 +1,136 @@
+name: Run REM-005 Guacamole runtime fixes
+
+on:
+  pull_request:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - .github/workflows/run-rem-005-guacamole-runtime.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: run-rem-005-guacamole-runtime
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-package-display-client'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-005-package-display-client
+          persist-credentials: true
+
+      - name: Apply runtime contract fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_one(relative, old, new):
+              path = Path(relative)
+              text = path.read_text(encoding='utf-8-sig')
+              if text.count(old) != 1:
+                  raise RuntimeError(f'Expected one anchor in {relative}: {old[:120]!r}')
+              path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+
+          replace_one(
+              'packages/JulOS.Remote/frontend/remote.source.js',
+              "      stage.addEventListener('pointerdown', () => stage.focus(), { passive: true });\n",
+              "      stage.onpointerdown = () => stage.focus();\n")
+          replace_one(
+              'packages/JulOS.Remote/frontend/remote.source.js',
+              "      const stage = this.shadowRoot?.getElementById('stage');\n      stage?.replaceChildren();\n",
+              "      const stage = this.shadowRoot?.getElementById('stage');\n      if (stage !== null && stage !== undefined) {\n        stage.onpointerdown = null;\n        stage.replaceChildren();\n      }\n")
+
+          replace_one(
+              'src/JulOS.Server/Remote/RemoteDisplayEndpoints.cs',
+              '''        using var provider = new ClientWebSocket();
+        try
+''',
+              '''        var requestedProtocols = context.WebSockets.WebSocketRequestedProtocols;
+        var usesGuacamoleProtocol = requestedProtocols.Contains("guacamole", StringComparer.Ordinal);
+        if (requestedProtocols.Count > 0 && !usesGuacamoleProtocol)
+        {
+            return Failure(
+                StatusCodes.Status400BadRequest,
+                "remote.display_subprotocol_invalid",
+                "Remote display supports only the guacamole WebSocket subprotocol.");
+        }
+
+        using var provider = new ClientWebSocket();
+        provider.Options.AddSubProtocol("guacamole");
+        try
+''')
+          replace_one(
+              'src/JulOS.Server/Remote/RemoteDisplayEndpoints.cs',
+              '''        using var browser = await context.WebSockets
+            .AcceptWebSocketAsync()
+            .ConfigureAwait(false);
+''',
+              '''        using var browser = await context.WebSockets
+            .AcceptWebSocketAsync(usesGuacamoleProtocol ? "guacamole" : null)
+            .ConfigureAwait(false);
+''')
+
+          replace_one(
+              'tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs',
+              '''        var webSocketClient = host.Server.CreateWebSocketClient();
+        webSocketClient.ConfigureRequest = request =>
+''',
+              '''        var webSocketClient = host.Server.CreateWebSocketClient();
+        webSocketClient.SubProtocols.Add("guacamole");
+        webSocketClient.ConfigureRequest = request =>
+''')
+          replace_one(
+              'tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs',
+              '''        var payload = Encoding.UTF8.GetBytes("remote-display-roundtrip");
+''',
+              '''        Assert.AreEqual("guacamole", socket.SubProtocol);
+
+        var payload = Encoding.UTF8.GetBytes("remote-display-roundtrip");
+''')
+          replace_one(
+              'tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs',
+              '''                    using var socket = await context.WebSockets
+                        .AcceptWebSocketAsync()
+                        .ConfigureAwait(false);
+''',
+              '''                    if (!context.WebSockets.WebSocketRequestedProtocols.Contains(
+                            "guacamole",
+                            StringComparer.Ordinal))
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        return;
+                    }
+
+                    using var socket = await context.WebSockets
+                        .AcceptWebSocketAsync("guacamole")
+                        .ConfigureAwait(false);
+''')
+          PY
+
+          cd packages/JulOS.Remote/frontend
+          npm ci
+          npm run build
+          npm test
+          node --check remote.js
+          cd ../../..
+
+          node tools/normalize-encoding.mjs
+          git diff --check
+
+      - name: Commit runtime fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add packages/JulOS.Remote src/JulOS.Server/Remote/RemoteDisplayEndpoints.cs tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(remote): honor Guacamole WebSocket runtime contract'
+          git push origin HEAD:agent/rem-005-package-display-client
