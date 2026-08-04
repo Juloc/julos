@@ -36,8 +36,12 @@ const libraryText = new TextDecoder().decode(library);
 const output = `${libraryText}\n${source.trimStart()}\n`;
 await writeFile(outputPath, output, 'utf8');
 
-const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-manifest.frontend.sha256 = digest(new TextEncoder().encode(output));
+const manifestText = stripBom(await readFile(manifestPath, 'utf8'));
+const manifest = JSON.parse(manifestText);
+if (manifest.Frontend === null || typeof manifest.Frontend !== 'object') {
+  throw new Error('Remote package manifest has no Frontend section.');
+}
+manifest.Frontend.Sha256 = digest(new TextEncoder().encode(output));
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
 function verifyDigest(label, bytes, expected) {
