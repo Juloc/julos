@@ -110,7 +110,8 @@ public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecy
         var earliestIdle = now.AddSeconds(-60);
         var rows = await this.context.RemoteSessions
             .Where(row =>
-                row.RuntimeId != null && (row.State == RemoteSessionStates.Disconnected
+                row.RuntimeId != null && (row.State == RemoteSessionStates.Disconnecting
+                    || row.State == RemoteSessionStates.Disconnected
                     || row.State == RemoteSessionStates.Cancelled
                     || row.State == RemoteSessionStates.Expired
                     || row.State == RemoteSessionStates.Failed)
@@ -144,13 +145,19 @@ public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecy
             {
                 continue;
             }
-            if (await this.TryCleanupRuntimeAsync(row, cancellationToken).ConfigureAwait(false))
-            {
-                cleaned++;
-            }
-            else
+            if (!await this.TryCleanupRuntimeAsync(row, cancellationToken).ConfigureAwait(false))
             {
                 failures++;
+                continue;
+            }
+
+            cleaned++;
+            if (string.Equals(row.State, RemoteSessionStates.Disconnecting, StringComparison.Ordinal))
+            {
+                Transition(row, RemoteSessionStates.Disconnected, now);
+                row.EndedAtUtc = now;
+                await this.SaveAsync(cancellationToken).ConfigureAwait(false);
+                await this.PublishChangedAsync(row, cancellationToken).ConfigureAwait(false);
             }
         }
 
