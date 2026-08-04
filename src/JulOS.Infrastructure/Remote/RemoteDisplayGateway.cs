@@ -283,7 +283,7 @@ public sealed class RemoteDisplayGateway
         if (string.IsNullOrWhiteSpace(runtimeId)
             || runtimeId != runtimeId.Trim()
             || runtimeId.Length > 64
-            || runtimeId.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-'))
+            || runtimeId.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-')))
         {
             throw new RemoteDisplayGatewayException(
                 "remote.display_runtime_invalid",
