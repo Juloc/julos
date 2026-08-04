@@ -1,0 +1,75 @@
+name: Generate REM-004 session migration
+
+on:
+  push:
+    branches:
+      - agent/rem-004-durable-session-service
+    paths:
+      - .github/workflows/generate-rem-004-session-migration.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-rem-004-session-migration
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-004-durable-session-service
+          persist-credentials: true
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools and solution
+        run: |
+          dotnet tool restore
+          dotnet restore JulOS.slnx
+          dotnet build JulOS.slnx --configuration Release --no-restore
+
+      - name: Generate committed EF migration
+        run: |
+          dotnet ef migrations add AddRemoteSessions \
+            --project src/JulOS.Infrastructure/JulOS.Infrastructure.csproj \
+            --startup-project src/JulOS.Server/JulOS.Server.csproj \
+            --context CoreDbContext \
+            --output-dir Persistence/Core/Migrations \
+            --configuration Release \
+            --no-build
+
+      - name: Update migration acceptance test
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/JulOS.Integration.Tests/Persistence/CoreMigrationTests.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          old = '        CollectionAssert.Contains(tableNames, "session_references");\n'
+          new = old + '        CollectionAssert.Contains(tableNames, "remote_sessions");\n'
+          if text.count(old) != 1:
+              raise RuntimeError('Expected one session table assertion anchor.')
+          path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+          PY
+
+      - name: Normalize repository encoding
+        run: node tools/normalize-encoding.mjs
+
+      - name: Commit generated model and normalized slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git add src tests
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(remote): add durable session migration'
+          git push origin HEAD:agent/rem-004-durable-session-service
