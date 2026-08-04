@@ -1,6 +1,6 @@
 ﻿# Protocol-neutral Remote session contract
 
-REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider or display transport is selected. Core, Desktop and package code must use these contracts instead of importing Julgate, Guacamole, RDP, VNC or SSH implementation types.
+REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider or display transport is selected. Core, Desktop and package code must use these contracts instead of importing Julgate, Guacamole or protocol-library implementation types.
 
 ## Capability
 
@@ -10,22 +10,24 @@ REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider o
 
 The capability broker remains responsible for package identity, grants, deadlines and auditing. REM-001 only defines the payloads and validation rules.
 
-## Supported protocols
+## Protocol ownership
 
-The contract recognizes the stable identifiers:
+Core accepts a bounded lowercase protocol identity matching `^[a-z][a-z0-9.-]{0,31}$`. It does not know which concrete protocols exist.
+
+The Remote package owns the JulOS 1.0 concrete identities and their UI default ports:
 
 - `rdp`, conventional port `3389`
 - `vnc`, conventional port `5900`
 - `ssh`, conventional port `22`
 
-The target contract always contains an explicit port. Conventional ports are helpers for UI defaults, not hidden server behavior.
+The target contract always contains an explicit port. Conventional ports are package UI defaults, not hidden Core behavior. A later provider-selection service rejects a syntactically valid identity when no installed provider supports it.
 
 ## Create request
 
 A create request contains:
 
 - bounded caller-owned operation key
-- protocol identity
+- package-defined protocol identity
 - DNS name or IP address without URI scheme, path, query, fragment or user information
 - explicit TCP port
 - secret-reference UUID
@@ -50,6 +52,7 @@ A later session service must persist both `operationKey` and `requestIdentity`:
 
 ## Time and size bounds
 
+- protocol identity: 1 through 32 lowercase identifier characters
 - request timestamp: at most 10 minutes old and at most 1 minute in the future
 - acceptance deadline: after the request, no more than 10 minutes after it and still in the future
 - viewport width: 320 through 7680 CSS pixels
@@ -89,7 +92,7 @@ It contains no access token. Authentication is performed by the JulOS same-origi
 
 ## Failures
 
-The contract provides stable caller-safe codes for unsupported protocol, invalid target, unavailable credentials or network profile, expired request, unavailable runtime, trust confirmation, authentication failure, connection loss and invalid state transition.
+The contract provides stable caller-safe codes for malformed or unavailable protocol identity, invalid target, unavailable credentials or network profile, expired request, unavailable runtime, trust confirmation, authentication failure, connection loss and invalid state transition.
 
 Provider exception text, raw command output and protocol-library objects must not cross this boundary.
 
@@ -100,7 +103,7 @@ REM-001 does not:
 - inventory or extract Julgate behavior
 - resolve secret material
 - create Runtime Manager containers
-- implement RDP, VNC or SSH
+- implement RDP, VNC or SSH transports
 - proxy display or terminal data
 - persist Remote profiles
 - create the Remote user interface
