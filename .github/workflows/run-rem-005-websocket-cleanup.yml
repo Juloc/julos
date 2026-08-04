@@ -1,0 +1,57 @@
+name: Run REM-005 WebSocket cleanup
+
+on:
+  pull_request:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - .github/workflows/run-rem-005-websocket-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-display-transport'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-005-display-transport
+          persist-credentials: true
+
+      - name: Remove redundant close race
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs')
+          lines = path.read_text(encoding='utf-8-sig').splitlines()
+          start_line = '        if (socket.State == WebSocketState.Open)'
+          end_line = '        }'
+          starts = [index for index, line in enumerate(lines) if line == start_line]
+          if len(starts) != 1:
+              raise RuntimeError('Expected one explicit WebSocket cleanup block.')
+          start = starts[0]
+          end = next(
+              index
+              for index in range(start + 1, len(lines))
+              if lines[index] == end_line)
+          del lines[start:end + 1]
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
+          PY
+          node tools/normalize-encoding.mjs
+          git diff --check
+
+      - name: Commit corrected test cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(remote): avoid websocket close race in integration test'
+          git push origin HEAD:agent/rem-005-display-transport
