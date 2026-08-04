@@ -1,6 +1,13 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace JulOS.PackageSdk;
+
+/// <summary>Authenticated caller metadata attached by the capability control plane.</summary>
+/// <param name="PackageId">Authorized caller package identity.</param>
+/// <param name="UserId">Authenticated user identity when the invocation originated from a user request.</param>
+public sealed record CapabilityCallerContext(
+    string PackageId,
+    Guid? UserId);
 
 /// <summary>One bounded invocation of a package capability.</summary>
 /// <param name="CapabilityName">Capability identity.</param>
@@ -9,13 +16,15 @@ namespace JulOS.PackageSdk;
 /// <param name="CorrelationId">Cross-service correlation identity.</param>
 /// <param name="Payload">Versioned operation payload.</param>
 /// <param name="DeadlineUtc">Absolute invocation deadline.</param>
+/// <param name="Caller">Authenticated caller metadata supplied by the control plane.</param>
 public sealed record CapabilityRequest(
     string CapabilityName,
     string ContractVersion,
     string Operation,
     string CorrelationId,
     JsonElement Payload,
-    DateTimeOffset DeadlineUtc);
+    DateTimeOffset DeadlineUtc,
+    CapabilityCallerContext? Caller = null);
 
 /// <summary>Result of one capability invocation.</summary>
 /// <param name="Succeeded">Whether the provider completed the operation.</param>
