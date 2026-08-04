@@ -240,7 +240,7 @@ internal sealed class HttpRemoteRuntimeManager : IRemoteRuntimeManager, IDisposa
     }
 
     private static Uri EnsureTrailingSlash(Uri endpoint) =>
-        endpoint.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
+        endpoint.AbsoluteUri.EndsWith('/')
             ? endpoint
             : new Uri(endpoint.AbsoluteUri + '/', UriKind.Absolute);
 }
