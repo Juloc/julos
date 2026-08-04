@@ -1,4 +1,4 @@
-# Protocol-neutral Remote session contract
+﻿# Protocol-neutral Remote session contract
 
 REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider or display transport is selected. Core, Desktop and package code must use these contracts instead of importing Julgate, Guacamole or protocol-library implementation types.
 
