@@ -16,7 +16,7 @@ public sealed record RemoteProviderRuntimeDefinition(
     string Image,
     RuntimeResourceLimits Limits);
 
-/// <summary>Approved target and Docker-network boundary for Remote runtime egress.</summary>
+/// <summary>Approved target and runtime-network boundary for Remote runtime egress.</summary>
 /// <param name="NetworkProfileId">Stable profile identity.</param>
 /// <param name="Default">Whether this profile is selected when a request omits an identity.</param>
 /// <param name="RuntimeNetworks">Exact Runtime Manager network allowlist entries.</param>
