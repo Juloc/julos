@@ -96,6 +96,13 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
                             caller.PackageId,
                             Deserialize<DetachRemoteSessionRequest>(request.Payload)),
                         cancellationToken).ConfigureAwait(false)),
+                RemoteSessionLifecycleCapabilityContract.ResumeOperation => Success(
+                    await this.lifecycle.ResumeAsync(
+                        new ResumeRemoteSessionCommand(
+                            ownerUserId,
+                            caller.PackageId,
+                            Deserialize<ResumeRemoteSessionRequest>(request.Payload)),
+                        cancellationToken).ConfigureAwait(false)),
                 _ => Failure(
                     "remote.operation_unsupported",
                     "The requested Remote session operation is not supported."),
