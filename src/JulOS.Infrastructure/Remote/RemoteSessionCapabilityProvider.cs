@@ -15,14 +15,17 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IRemoteSessionService sessions;
     private readonly IRemoteSessionProvisioner provisioner;
+    private readonly IRemoteSessionLifecycleService lifecycle;
 
     /// <summary>Creates the Remote session capability provider.</summary>
     public RemoteSessionCapabilityProvider(
         IRemoteSessionService sessions,
-        IRemoteSessionProvisioner provisioner)
+        IRemoteSessionProvisioner provisioner,
+        IRemoteSessionLifecycleService lifecycle)
     {
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         this.provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
+        this.lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
     }
 
     /// <inheritdoc />
@@ -79,6 +82,13 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
                         caller.PackageId,
                         Deserialize<CancelRemoteSessionRequest>(request.Payload)),
                     cancellationToken).ConfigureAwait(false)),
+                RemoteSessionLifecycleCapabilityContract.DisconnectOperation => Success(
+                    await this.lifecycle.DisconnectAsync(
+                        new DisconnectRemoteSessionCommand(
+                            ownerUserId,
+                            caller.PackageId,
+                            Deserialize<DisconnectRemoteSessionRequest>(request.Payload)),
+                        cancellationToken).ConfigureAwait(false)),
                 _ => Failure(
                     "remote.operation_unsupported",
                     "The requested Remote session operation is not supported."),

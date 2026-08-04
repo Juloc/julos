@@ -19,6 +19,7 @@ using JulOS.Server.Layouts;
 using JulOS.Server.Operations;
 using JulOS.Server.Packages;
 using JulOS.Server.Profile;
+using JulOS.Server.Remote;
 using JulOS.Server.SafeMode;
 using JulOS.Server.Secrets;
 
@@ -50,6 +51,7 @@ var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnect
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
+builder.Services.AddHostedService<RemoteSessionLifecycleWorker>();
 builder.Services.AddJulOsAgentControl();
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();
