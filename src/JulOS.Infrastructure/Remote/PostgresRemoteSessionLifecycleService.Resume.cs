@@ -29,21 +29,37 @@ public sealed partial class PostgresRemoteSessionLifecycleService
         {
             throw new RemoteSessionServiceException(RemoteSessionServiceFailureReason.ConcurrencyConflict);
         }
-        if (row.State is not (RemoteSessionStates.Connecting or RemoteSessionStates.Connected))
-        {
-            throw new RemoteSessionServiceException(RemoteSessionServiceFailureReason.InvalidTransition);
-        }
-        if (row.RuntimeId is null)
+        if (!string.Equals(row.State, RemoteSessionStates.Connected, StringComparison.Ordinal)
+            || row.RuntimeId is null)
         {
             throw new RemoteSessionServiceException(RemoteSessionServiceFailureReason.InvalidTransition);
         }
 
-        row.DisplayKind = null;
-        row.DisplayContractVersion = null;
-        row.DisplayEndpoint = null;
-        row.DisplayExpiresAtUtc = null;
+        var nextRevision = checked(row.Revision + 1);
+        RemoteDisplayTransportResponse display;
+        try
+        {
+            display = this.displayGateway.Issue(
+                row.Id,
+                row.OwnerUserId,
+                row.CallerPackageId,
+                row.RuntimeId,
+                nextRevision,
+                row.ExpiresAtUtc);
+        }
+        catch (RemoteDisplayGatewayException exception)
+        {
+            throw new RemoteSessionServiceException(
+                RemoteSessionServiceFailureReason.InvalidTransition,
+                exception);
+        }
+
+        row.DisplayKind = display.Kind;
+        row.DisplayContractVersion = display.ContractVersion;
+        row.DisplayEndpoint = display.Endpoint;
+        row.DisplayExpiresAtUtc = display.ExpiresAtUtc;
         row.UpdatedAtUtc = this.timeProvider.GetUtcNow();
-        row.Revision = checked(row.Revision + 1);
+        row.Revision = nextRevision;
         await this.SaveAsync(cancellationToken).ConfigureAwait(false);
         await this.PublishChangedAsync(row, cancellationToken).ConfigureAwait(false);
         return ToResponse(row);
