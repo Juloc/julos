@@ -35,31 +35,37 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
-| Phase 6 | Remote and Browser | In progress | REM-001 and REM-002 are complete. Existing package shells are not complete session implementations. |
+| REM-003 | Shared transport implementation | In progress | Packable protocol catalog and Guacamole JSON-auth encoder are implemented with behavior tests and Remote worker consumption; publication and Julgate migration remain. |
+| Phase 6 | Remote and Browser | In progress | REM-001 and REM-002 are complete; REM-003 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
 | Phase 9 | Discovery and operational hardening | Planned | Depends on stable Agent and package runtime. |
 | Phase 10 | Release and Julgate migration | Planned | Requires all 1.0 release gates. |
 
-## Next issue
-
-### REM-003 — Extract shared transport implementation
+## Current REM-003 slice
 
 Scope:
 
-- add behavior tests around the reusable Julgate transport components
-- extract one implementation consumed by both Julgate and JulOS Remote
-- preserve Julgate deployment during the transition
-- keep concrete transport dependencies outside JulOS Core and Contracts
-- eliminate the old implementation location after both consumers use the shared component
+- build and test `JulOS.Remote.Transport` from one JulOS source location
+- consume the shared protocol catalog from the Remote worker
+- preserve the existing Guacamole JSON-auth behavior through verifiable payload vectors
+- document the immutable package and consumer boundary
 
 Acceptance:
 
-- no copied source tree or permanent compatibility wrapper exists
-- Julgate remains deployable and its transport behavior remains covered
-- JulOS Remote consumes the same shared implementation
-- Core remains independent from Julgate, Guacamole and concrete protocol types
-- full validation in every affected repository is green
+- solution build, tests and architecture gates pass
+- the shared library is packable from the repository version
+- no duplicated protocol catalog remains in the Remote worker
+- secret-bearing intermediate buffers are cleared by the encoder
+- the next slice publishes the immutable artifact before Julgate changes
+
+## Remaining REM-003 slices
+
+1. publish the validated package with digest and provenance;
+2. update Julgate to consume that exact package version;
+3. remove the original Julgate payload/signing/encryption implementation;
+4. validate and deploy-test Julgate;
+5. mark REM-003 done only when both repositories use one implementation.
 
 ## Specification status
 
@@ -76,7 +82,7 @@ These do not block current implementation:
 - final package signing key custody procedure
 - final public package-registry host
 - public third-party package support after 1.0
-- exact Remote transport selected after shared extraction and parity evidence
+- exact Remote runtime composition after shared extraction and parity evidence
 
 ## Backlog maintenance rule
 

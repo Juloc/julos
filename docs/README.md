@@ -17,11 +17,12 @@ This directory is the authoritative specification for JulOS. Code, issues and co
 11. [`QUALITY_AND_TESTING.md`](QUALITY_AND_TESTING.md) — test strategy, performance budgets and definition of done
 12. [`JULGATE_MIGRATION.md`](JULGATE_MIGRATION.md) — controlled migration into JulOS Remote
 13. [`JULGATE-REMOTE-EXTRACTION.md`](JULGATE-REMOTE-EXTRACTION.md) — verified Julgate responsibility inventory and extraction boundaries
-14. [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) — milestone sequence
-15. [`WORK_BREAKDOWN.md`](WORK_BREAKDOWN.md) — junior-ready issue plan
-16. [`BACKLOG.md`](BACKLOG.md) — current implementation status
-17. [`DECISIONS.md`](DECISIONS.md) — accepted architecture decisions
-18. [`GLOSSARY.md`](GLOSSARY.md) — canonical terminology
+14. [`REMOTE-TRANSPORT-PACKAGE.md`](REMOTE-TRANSPORT-PACKAGE.md) — shared source, artifact, security and consumer boundary
+15. [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) — milestone sequence
+16. [`WORK_BREAKDOWN.md`](WORK_BREAKDOWN.md) — junior-ready issue plan
+17. [`BACKLOG.md`](BACKLOG.md) — current implementation status
+18. [`DECISIONS.md`](DECISIONS.md) — accepted architecture decisions
+19. [`GLOSSARY.md`](GLOSSARY.md) — canonical terminology
 
 Supporting documents:
 
@@ -47,6 +48,7 @@ A conflict must be resolved by updating all affected documents in the same commi
 - Extension model: `PACKAGES.md`
 - Persistent state and transport: `DATA_AND_API_CONTRACTS.md`
 - Security, deployment and recovery: `SECURITY_AND_OPERATIONS.md`
+- Remote contracts and shared transport: `REMOTE-SESSION-CONTRACT.md`, `REMOTE-TRANSPORT-PACKAGE.md`
 - Julgate extraction and migration: `JULGATE_MIGRATION.md`, `JULGATE-REMOTE-EXTRACTION.md`
 - Validation: `QUALITY_AND_TESTING.md`
 - Delivery order: `IMPLEMENTATION_PLAN.md`, `WORK_BREAKDOWN.md`, `BACKLOG.md`

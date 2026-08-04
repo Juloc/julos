@@ -1,4 +1,5 @@
 ﻿using JulOS.PackageSdk;
+using JulOS.Remote.Transport;
 
 namespace JulOS.Remote.Worker;
 
@@ -115,7 +116,10 @@ public sealed class RemoteWorker : IJulOsPackageWorker
             this.running ? "healthy" : "stopped",
             this.timeProvider.GetUtcNow(),
             this.running ? null : "Remote worker is stopped.",
-            new Dictionary<string, decimal?>(StringComparer.Ordinal)));
+            new Dictionary<string, decimal?>(StringComparer.Ordinal)
+            {
+                ["supportedProtocolCount"] = RemoteTransportProtocols.All.Count,
+            }));
     }
 
     private static void ValidateRange(

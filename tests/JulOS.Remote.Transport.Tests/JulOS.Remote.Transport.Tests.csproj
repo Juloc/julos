@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Behavior tests for the shared JulOS Remote transport package.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\packages\JulOS.Remote\shared\JulOS.Remote.Transport\JulOS.Remote.Transport.csproj" />
+    <ProjectReference Include="..\..\packages\JulOS.Remote\worker\JulOS.Remote.Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+</Project>

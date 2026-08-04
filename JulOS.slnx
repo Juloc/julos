@@ -13,6 +13,7 @@
     <Project Path="packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj" />
     <Project Path="packages/JulOS.HostMetrics/worker/JulOS.HostMetrics.Worker.csproj" />
     <Project Path="packages/JulOS.ReferencePackage/worker/JulOS.ReferencePackage.Worker.csproj" />
+    <Project Path="packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj" />
     <Project Path="packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -21,5 +22,6 @@
     <Project Path="tests/JulOS.Domain.Tests/JulOS.Domain.Tests.csproj" />
     <Project Path="tests/JulOS.Infrastructure.Tests/JulOS.Infrastructure.Tests.csproj" />
     <Project Path="tests/JulOS.Integration.Tests/JulOS.Integration.Tests.csproj" />
+    <Project Path="tests/JulOS.Remote.Transport.Tests/JulOS.Remote.Transport.Tests.csproj" />
   </Folder>
 </Solution>

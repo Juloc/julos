@@ -29,6 +29,10 @@ public sealed class ProjectReferenceTests
             PlatformProjects.RuntimeManager,
         ],
         [PlatformProjects.IntegrationTests] = [PlatformProjects.Server],
+        ["tests/JulOS.Remote.Transport.Tests/JulOS.Remote.Transport.Tests.csproj"] = [
+            "packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj",
+            "packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj",
+        ],
     };
 
     [TestMethod]
