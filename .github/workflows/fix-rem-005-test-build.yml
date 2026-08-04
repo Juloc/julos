@@ -1,0 +1,56 @@
+name: Fix REM-005 test build
+
+on:
+  pull_request:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - .github/workflows/fix-rem-005-test-build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-display-transport'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rem-005-display-transport
+          persist-credentials: true
+
+      - name: Correct display integration test build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          using_anchor = 'using Microsoft.AspNetCore.Hosting.Server.Features;\n'
+          using_new = using_anchor + 'using Microsoft.AspNetCore.Http;\n'
+          if text.count(using_anchor) != 1 or 'using Microsoft.AspNetCore.Http;\n' in text:
+              raise RuntimeError('Unexpected ASP.NET Core using state.')
+          text = text.replace(using_anchor, using_new)
+
+          old_template = '$"ws://127.0.0.1:{address.Port}/runtime/{runtimeId}"'
+          new_template = '$"ws://127.0.0.1:{address.Port}/runtime/{{runtimeId}}"'
+          if text.count(old_template) != 1:
+              raise RuntimeError('Expected one unescaped runtime template placeholder.')
+          path.write_text(text.replace(old_template, new_template), encoding='utf-8', newline='\n')
+          PY
+          node tools/normalize-encoding.mjs
+          git diff --check
+
+      - name: Commit corrected test
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add tests/JulOS.Integration.Tests/Remote/RemoteDisplayEndpointTests.cs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(remote): correct display integration test build'
+          git push origin HEAD:agent/rem-005-display-transport
