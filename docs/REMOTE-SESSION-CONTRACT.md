@@ -1,4 +1,4 @@
-﻿# Protocol-neutral Remote session contract
+# Protocol-neutral Remote session contract
 
 REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider or display transport is selected. Core, Desktop and package code must use these contracts instead of importing Julgate, Guacamole or protocol-library implementation types.
 
@@ -10,9 +10,9 @@ REM-001 defines the JulOS 1.0 boundary for Remote sessions before any provider o
 
 The capability broker remains responsible for package identity, grants, deadlines and auditing. REM-001 only defines the payloads and validation rules.
 
-REM-004 adds authenticated caller context at the broker boundary. The control plane attaches the authorized package identity and the authenticated user UUID outside the operation payload. The broker rejects package-identity substitution, passes the verified context to the selected provider and records the user identity in capability audit events. Existing internal capability calls may omit a user identity, but a user-owned provider such as Remote must reject create, read, list or cancel operations that do not carry one.
+REM-004 adds authenticated caller context at the broker boundary. The control plane passes the authorized package identity and authenticated user UUID as separate trusted inputs. The broker rejects any caller metadata already present in the untrusted request, creates the provider-visible context itself and records the user identity in capability audit events. Existing internal capability calls may omit a user identity, but a user-owned provider such as Remote must reject create, read, list or cancel operations that do not carry one.
 
-Package or user identity must never be accepted from provider-specific JSON payload fields. Providers receive only the control-plane-produced `CapabilityCallerContext`.
+Package or user identity must never be accepted from provider-specific JSON payload fields or a request-supplied `CapabilityCallerContext`. Providers receive only the broker-produced caller context.
 
 ## Protocol ownership
 
