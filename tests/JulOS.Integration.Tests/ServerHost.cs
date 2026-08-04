@@ -26,34 +26,45 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
     private readonly string connectionString;
     private readonly bool includeConcurrencyConflictEndpoint;
     private readonly IReadOnlyDictionary<string, string?> settings;
+    private readonly Action<IServiceCollection>? configureServices;
 
     internal ServerHost(bool includeConcurrencyConflictEndpoint = false)
-        : this(UnreachableDatabase, includeConcurrencyConflictEndpoint, settings: null)
+        : this(UnreachableDatabase, includeConcurrencyConflictEndpoint, settings: null, configureServices: null)
     {
     }
 
     internal ServerHost(IReadOnlyDictionary<string, string?> settings)
-        : this(UnreachableDatabase, includeConcurrencyConflictEndpoint: false, settings)
+        : this(UnreachableDatabase, includeConcurrencyConflictEndpoint: false, settings, configureServices: null)
     {
     }
 
     internal ServerHost(
         string connectionString,
         IReadOnlyDictionary<string, string?>? settings = null)
-        : this(connectionString, includeConcurrencyConflictEndpoint: false, settings)
+        : this(connectionString, includeConcurrencyConflictEndpoint: false, settings, configureServices: null)
+    {
+    }
+
+    internal ServerHost(
+        string connectionString,
+        IReadOnlyDictionary<string, string?> settings,
+        Action<IServiceCollection> configureServices)
+        : this(connectionString, includeConcurrencyConflictEndpoint: false, settings, configureServices)
     {
     }
 
     private ServerHost(
         string connectionString,
         bool includeConcurrencyConflictEndpoint,
-        IReadOnlyDictionary<string, string?>? settings)
+        IReadOnlyDictionary<string, string?>? settings,
+        Action<IServiceCollection>? configureServices)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         this.connectionString = connectionString;
         this.includeConcurrencyConflictEndpoint = includeConcurrencyConflictEndpoint;
         this.settings = settings ?? new Dictionary<string, string?>();
+        this.configureServices = configureServices;
     }
 
     protected override void ConfigureClient(HttpClient client)
@@ -78,6 +89,11 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         foreach (var setting in this.settings)
         {
             builder.UseSetting(setting.Key, setting.Value);
+        }
+
+        if (this.configureServices is not null)
+        {
+            builder.ConfigureServices(this.configureServices);
         }
 
         if (this.includeConcurrencyConflictEndpoint)

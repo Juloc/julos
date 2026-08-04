@@ -1,6 +1,8 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
+using JulOS.Contracts.Runtime;
+
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -72,7 +74,9 @@ public sealed class RuntimeManagerAuthenticationMiddleware
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(
-                    new RuntimeError("runtime.authentication.required", "Runtime Manager authentication failed."),
+                    new RuntimeManagerErrorResponse(
+                        "runtime.authentication.required",
+                        "Runtime Manager authentication failed."),
                     context.RequestAborted).ConfigureAwait(false);
                 return;
             }
@@ -100,8 +104,13 @@ public static class RuntimeManagerEndpoints
         var group = endpoints.MapGroup("/v1/runtimes");
         group.MapPost(
             "/",
-            (RuntimeCreateRequest request, IRuntimeBackend backend, CancellationToken cancellationToken) =>
-                ExecuteAsync(() => backend.CreateAsync(request, cancellationToken)));
+            (CreatePackageRuntimeRequest request, IRuntimeBackend backend, CancellationToken cancellationToken) =>
+                ExecuteAsync(async () =>
+                {
+                    var resource = await backend.CreateAsync(ToInternal(request), cancellationToken)
+                        .ConfigureAwait(false);
+                    return ToResponse(resource);
+                }));
         group.MapGet(
             "/{runtimeId}",
             async (string runtimeId, IRuntimeBackend backend, CancellationToken cancellationToken) =>
@@ -109,7 +118,7 @@ public static class RuntimeManagerEndpoints
                 try
                 {
                     var runtime = await backend.ReadAsync(runtimeId, cancellationToken).ConfigureAwait(false);
-                    return runtime is null ? Results.NotFound() : Results.Ok(runtime);
+                    return runtime is null ? Results.NotFound() : Results.Ok(ToResponse(runtime));
                 }
                 catch (RuntimeManagerException exception)
                 {
@@ -119,11 +128,13 @@ public static class RuntimeManagerEndpoints
         group.MapPost(
             "/{runtimeId}/start",
             (string runtimeId, IRuntimeBackend backend, CancellationToken cancellationToken) =>
-                ExecuteAsync(() => backend.StartAsync(runtimeId, cancellationToken)));
+                ExecuteAsync(async () => ToResponse(
+                    await backend.StartAsync(runtimeId, cancellationToken).ConfigureAwait(false))));
         group.MapPost(
             "/{runtimeId}/stop",
             (string runtimeId, IRuntimeBackend backend, CancellationToken cancellationToken) =>
-                ExecuteAsync(() => backend.StopAsync(runtimeId, cancellationToken)));
+                ExecuteAsync(async () => ToResponse(
+                    await backend.StopAsync(runtimeId, cancellationToken).ConfigureAwait(false))));
         group.MapDelete(
             "/{runtimeId}",
             async (string runtimeId, IRuntimeBackend backend, CancellationToken cancellationToken) =>
@@ -142,7 +153,36 @@ public static class RuntimeManagerEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> ExecuteAsync(Func<Task<RuntimeResource>> operation)
+    private static RuntimeCreateRequest ToInternal(CreatePackageRuntimeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Limits);
+        ArgumentNullException.ThrowIfNull(request.Environment);
+        ArgumentNullException.ThrowIfNull(request.Networks);
+        return new RuntimeCreateRequest(
+            request.InstanceId,
+            request.PackageId,
+            request.PackageVersion,
+            request.InstanceId,
+            request.Image,
+            request.Limits.CpuLimit,
+            request.Limits.MemoryMegabytes,
+            request.Limits.PidsLimit,
+            request.Networks,
+            Volumes: [],
+            request.Environment);
+    }
+
+    private static PackageRuntimeResponse ToResponse(RuntimeResource resource) => new(
+        resource.RuntimeId,
+        resource.PackageId,
+        resource.PackageVersion,
+        resource.InstanceId,
+        resource.Image,
+        resource.State,
+        TimeProvider.System.GetUtcNow());
+
+    private static async Task<IResult> ExecuteAsync(Func<Task<PackageRuntimeResponse>> operation)
     {
         try
         {
@@ -165,6 +205,8 @@ public static class RuntimeManagerEndpoints
                 StatusCodes.Status502BadGateway,
             _ => StatusCodes.Status400BadRequest,
         };
-        return Results.Json(new RuntimeError(exception.Code, exception.Message), statusCode: status);
+        return Results.Json(
+            new RuntimeManagerErrorResponse(exception.Code, exception.Message),
+            statusCode: status);
     }
 }

@@ -72,13 +72,26 @@ public sealed class RuntimePolicyTests
         Assert.AreEqual("runtime.environment.invalid", failure.Code);
     }
 
+    [TestMethod]
+    public void InvalidProcessLimitIsRejected()
+    {
+        var policy = new RuntimePolicy(["julos-runtime"]);
+        var failure = Assert.ThrowsExactly<RuntimeManagerException>(() => policy.Validate(
+            ValidRequest() with { PidsLimit = 0 }));
+
+        Assert.AreEqual("runtime.pids.invalid", failure.Code);
+    }
+
     private static RuntimeCreateRequest ValidRequest() =>
         new(
             "test-runtime",
             "de.juloc.test",
+            "1.0.0",
+            "test-runtime",
             Image,
             1m,
             256,
+            128,
             ["julos-runtime"],
             [new RuntimeVolumeRequest("julos-de-juloc-test-data", "/data", false)],
             new Dictionary<string, string>(StringComparer.Ordinal)

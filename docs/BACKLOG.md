@@ -36,7 +36,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
 | REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
-| REM-004 | Remote worker and session orchestration | In progress | The broker now creates authenticated package/user context from separate trusted inputs and rejects request-supplied identity; durable session ownership, runtime allocation, lifecycle and cleanup remain. |
+| REM-004 | Remote worker and session orchestration | In progress | Authenticated ownership, durable exact-idempotent sessions and allowlisted provider-runtime allocation are implemented; events, expiry, disconnect, terminal cleanup and deduplicated problems remain. |
 | Phase 6 | Remote and Browser | In progress | REM-001 through REM-003 are complete; REM-004 is in progress. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
@@ -57,31 +57,35 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Current REM-004 slice
 
-Completed foundation:
+Completed:
 
 - capability requests expose optional provider-visible caller metadata but untrusted callers must leave it empty;
 - the authenticated HTTP endpoint passes the authorized package identity and authenticated user UUID as separate trusted broker inputs;
-- the broker rejects any request-supplied caller context before provider invocation;
-- the broker creates the provider-visible package/user context itself;
+- the broker rejects request-supplied caller context and creates the provider-visible package/user context itself;
 - capability audit records retain the authenticated user identity;
-- existing internal capability calls remain compatible through a package-only overload;
-- unit tests cover provider propagation, audit propagation and caller-context injection rejection.
+- durable PostgreSQL sessions enforce user/package ownership, exact create idempotency, bounded listing, optimistic revisions and cancellation idempotency;
+- the `remote.session/1` capability provider maps create, read, list and cancel to caller-safe responses;
+- configured protocol providers require semantic versions, digest-pinned images and bounded CPU, memory and process limits;
+- configured network profiles authorize exact runtime networks, target host patterns and target ports before allocation;
+- secret-reference metadata must be present, package-owned by the caller and restricted to a Remote purpose before allocation;
+- Runtime Manager calls use an authenticated narrow HTTP contract and verify package, version, instance and image identity on every create/recovery path;
+- deterministic runtime identities make provisioning retries exact and prevent duplicate allocations;
+- runtime failures expose no secret material, attempt idempotent cleanup and persist caller-safe terminal failures;
+- unit, architecture and PostgreSQL integration tests cover policy rejection, exact allocation, retry idempotency and foreign-secret refusal.
 
 Remaining scope:
 
-- implement the user-owned Remote session service and exact idempotency;
-- authorize provider, target, secret reference and network profile access;
-- allocate only allowlisted provider runtimes through Runtime Manager;
-- persist REM-001 lifecycle state and revisions;
 - publish operation and lifecycle events;
 - enforce inactivity and maximum-duration policy;
-- implement explicit cancel, disconnect and cleanup behavior;
-- map provider/runtime failures to caller-safe failures and operator-visible problems.
+- implement explicit disconnect and terminal runtime cleanup behavior;
+- invalidate display access on every terminal transition;
+- create one deduplicated operator-visible problem for runtime failures;
+- integrate provider connection results and cleanup reconciliation with the Remote worker.
 
 Acceptance:
 
 - no provider launch material reaches package JavaScript;
-- repeated create requests preserve exact idempotency within user and package ownership scope;
+- repeated create and provisioning requests preserve exact idempotency within user and package ownership scope;
 - expired or cancelled sessions cannot reconnect through stale display grants;
 - closing or detaching a window follows explicit policy and does not silently kill a session;
 - runtime failure leaves no orphan runtime and creates a deduplicated problem;
