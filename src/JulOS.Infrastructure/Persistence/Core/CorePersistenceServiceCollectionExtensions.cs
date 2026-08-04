@@ -1,14 +1,16 @@
-﻿using JulOS.Application.Auditing;
+using JulOS.Application.Auditing;
 using JulOS.Application.Authorization;
 using JulOS.Application.Layouts;
-using JulOS.Application.Profile;
 using JulOS.Application.Operations;
+using JulOS.Application.Profile;
+using JulOS.Application.Remote;
 using JulOS.Infrastructure.Auditing;
 using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Layouts;
-using JulOS.Infrastructure.Profile;
 using JulOS.Infrastructure.Operations;
+using JulOS.Infrastructure.Profile;
+using JulOS.Infrastructure.Remote;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +36,8 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IDesktopLayoutService, PostgresDesktopLayoutService>();
         services.AddScoped<IProfileService, EfProfileService>();
         services.AddScoped<IOperationService, PostgresOperationService>();
+        services.AddScoped<RemoteSessionContractValidator>();
+        services.AddScoped<IRemoteSessionService, PostgresRemoteSessionService>();
 
         return services;
     }
