@@ -1,0 +1,49 @@
+name: One-shot REM-004 detach tests
+
+on:
+  push:
+    branches:
+      - agent/rem-004-detach-policy
+    paths:
+      - .github/workflows/one-shot-rem004-detach-tests.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/rem-004-detach-policy
+          fetch-depth: 0
+      - name: Add focused detach tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          partial = Path("src/JulOS.Infrastructure/Remote/PostgresRemoteSessionLifecycleService.Detach.cs")
+          text = partial.read_text(encoding="utf-8-sig")
+          old = "public sealed partial class PostgresRemoteSessionLifecycleService\n"
+          new = "/// <summary>Adds explicit presentation-window detach handling.</summary>\npublic sealed partial class PostgresRemoteSessionLifecycleService\n"
+          if old not in text:
+              raise SystemExit("Detach partial declaration not found")
+          partial.write_text(text.replace(old, new, 1), encoding="utf-8-sig")
+
+          tests = Path("tests/JulOS.Integration.Tests/Remote/RemoteSessionLifecycleTests.cs")
+          text = tests.read_text(encoding="utf-8-sig")
+          anchor = """    [TestMethod]\n    public async Task ReconciliationExpiresIdleSession()\n"""
+          additions = """    [TestMethod]\n    public async Task KeepActiveDetachRevokesDisplayWithoutRemovingRuntime()\n    {\n        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);\n        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 16, 30, 0, TimeSpan.Zero));\n        var runtime = new RecordingRuntimeManager();\n        var networkProfileId = Guid.Parse(\"88888888-8888-4888-8888-888888888888\");\n        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);\n        using var client = host.CreateClient(ClientOptions);\n        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);\n\n        await using var scope = host.Services.CreateAsyncScope();\n        var provisioned = await CreateProvisionedSessionAsync(\n            scope.ServiceProvider,\n            administrator.UserId,\n            networkProfileId,\n            clock,\n            \"remote-detach-keep-active\").ConfigureAwait(false);\n        var runtimeId = $\"remote-{provisioned.SessionId:N}\";\n        var connections = scope.ServiceProvider.GetRequiredService<IRemoteSessionConnectionService>();\n        var connected = await connections.ConnectAsync(new ConnectRemoteSessionCommand(\n            provisioned.SessionId,\n            runtimeId,\n            provisioned.Revision)).ConfigureAwait(false);\n\n        var context = scope.ServiceProvider.GetRequiredService<CoreDbContext>();\n        var row = await context.RemoteSessions\n            .SingleAsync(candidate => candidate.Id == connected.SessionId)\n            .ConfigureAwait(false);\n        row.DisplayKind = \"graphical\";\n        row.DisplayContractVersion = \"1.0.0\";\n        row.DisplayEndpoint = $\"/api/v1/remote/sessions/{row.Id:D}/display\";\n        row.DisplayExpiresAtUtc = clock.GetUtcNow().AddMinutes(1);\n        await context.SaveChangesAsync().ConfigureAwait(false);\n        var lastActivity = row.LastActivityAtUtc;\n\n        var lifecycle = scope.ServiceProvider.GetRequiredService<IRemoteSessionLifecycleService>();\n        var detached = await lifecycle.DetachAsync(new DetachRemoteSessionCommand(\n            administrator.UserId,\n            CallerPackageId,\n            new DetachRemoteSessionRequest(\n                connected.SessionId,\n                connected.Revision,\n                RemoteWindowDetachBehaviors.KeepActive))).ConfigureAwait(false);\n\n        Assert.AreEqual(RemoteSessionStates.Connected, detached.State);\n        Assert.AreEqual(connected.Revision + 1, detached.Revision);\n        Assert.IsNull(detached.Display);\n        Assert.AreEqual(0, runtime.RemovalCount);\n        Assert.AreEqual(runtimeId, row.RuntimeId);\n        Assert.AreEqual(lastActivity, row.LastActivityAtUtc);\n    }\n\n    [TestMethod]\n    public async Task DisconnectDetachUsesExistingRuntimeCleanup()\n    {\n        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);\n        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 16, 45, 0, TimeSpan.Zero));\n        var runtime = new RecordingRuntimeManager();\n        var networkProfileId = Guid.Parse(\"99999999-9999-4999-8999-999999999999\");\n        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);\n        using var client = host.CreateClient(ClientOptions);\n        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);\n\n        await using var scope = host.Services.CreateAsyncScope();\n        var provisioned = await CreateProvisionedSessionAsync(\n            scope.ServiceProvider,\n            administrator.UserId,\n            networkProfileId,\n            clock,\n            \"remote-detach-disconnect\").ConfigureAwait(false);\n        var lifecycle = scope.ServiceProvider.GetRequiredService<IRemoteSessionLifecycleService>();\n\n        var detached = await lifecycle.DetachAsync(new DetachRemoteSessionCommand(\n            administrator.UserId,\n            CallerPackageId,\n            new DetachRemoteSessionRequest(\n                provisioned.SessionId,\n                provisioned.Revision,\n                RemoteWindowDetachBehaviors.Disconnect))).ConfigureAwait(false);\n\n        Assert.AreEqual(RemoteSessionStates.Disconnected, detached.State);\n        Assert.IsNotNull(detached.EndedAtUtc);\n        Assert.IsNull(detached.Display);\n        Assert.AreEqual(1, runtime.RemovalCount);\n    }\n\n""" + anchor
+          if anchor not in text:
+              raise SystemExit("Lifecycle test insertion point not found")
+          tests.write_text(text.replace(anchor, additions, 1), encoding="utf-8-sig")
+
+          Path(".github/workflows/one-shot-rem004-detach-tests.yml").unlink()
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(remote): cover explicit detach behaviors"
+          git push origin HEAD:agent/rem-004-detach-policy
