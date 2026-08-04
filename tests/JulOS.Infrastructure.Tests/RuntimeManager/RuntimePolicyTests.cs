@@ -73,6 +73,46 @@ public sealed class RuntimePolicyTests
     }
 
     [TestMethod]
+    public void BoundedSecretEnvironmentIsAcceptedSeparately()
+    {
+        var policy = new RuntimePolicy(["julos-runtime"]);
+        var request = ValidRequest() with
+        {
+            SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["JULOS_REMOTE_CALLBACK_TOKEN"] = "scoped-expiring-provider-token",
+            },
+        };
+
+        policy.Validate(request);
+    }
+
+    [TestMethod]
+    public void NonSecretOrMultilineSecretEnvironmentIsRejected()
+    {
+        var policy = new RuntimePolicy(["julos-runtime"]);
+        var nonSecretName = Assert.ThrowsExactly<RuntimeManagerException>(() => policy.Validate(
+            ValidRequest() with
+            {
+                SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["JULOS_MODE"] = "not-a-secret",
+                },
+            }));
+        var multiline = Assert.ThrowsExactly<RuntimeManagerException>(() => policy.Validate(
+            ValidRequest() with
+            {
+                SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["JULOS_REMOTE_CALLBACK_TOKEN"] = "line-one\nline-two",
+                },
+            }));
+
+        Assert.AreEqual("runtime.secret_environment.invalid", nonSecretName.Code);
+        Assert.AreEqual("runtime.secret_environment.invalid", multiline.Code);
+    }
+
+    [TestMethod]
     public void InvalidProcessLimitIsRejected()
     {
         var policy = new RuntimePolicy(["julos-runtime"]);
