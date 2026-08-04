@@ -1,0 +1,49 @@
+name: One-shot REM-004 detach wiring
+
+on:
+  push:
+    branches:
+      - agent/rem-004-detach-policy
+    paths:
+      - .github/workflows/one-shot-rem004-detach.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/rem-004-detach-policy
+          fetch-depth: 0
+      - name: Wire detach operation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          lifecycle = Path("src/JulOS.Infrastructure/Remote/PostgresRemoteSessionLifecycleService.cs")
+          text = lifecycle.read_text(encoding="utf-8-sig")
+          old = "public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecycleService"
+          new = "public sealed partial class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecycleService"
+          if old not in text:
+              raise SystemExit("Lifecycle class declaration not found")
+          lifecycle.write_text(text.replace(old, new, 1), encoding="utf-8-sig")
+
+          provider = Path("src/JulOS.Infrastructure/Remote/RemoteSessionCapabilityProvider.cs")
+          text = provider.read_text(encoding="utf-8-sig")
+          anchor = """                RemoteSessionLifecycleCapabilityContract.DisconnectOperation => Success(\n                    await this.lifecycle.DisconnectAsync(\n                        new DisconnectRemoteSessionCommand(\n                            ownerUserId,\n                            caller.PackageId,\n                            Deserialize<DisconnectRemoteSessionRequest>(request.Payload)),\n                        cancellationToken).ConfigureAwait(false)),\n"""
+          addition = anchor + """                RemoteSessionLifecycleCapabilityContract.DetachOperation => Success(\n                    await this.lifecycle.DetachAsync(\n                        new DetachRemoteSessionCommand(\n                            ownerUserId,\n                            caller.PackageId,\n                            Deserialize<DetachRemoteSessionRequest>(request.Payload)),\n                        cancellationToken).ConfigureAwait(false)),\n"""
+          if anchor not in text:
+              raise SystemExit("Capability provider disconnect case not found")
+          provider.write_text(text.replace(anchor, addition, 1), encoding="utf-8-sig")
+
+          Path(".github/workflows/one-shot-rem004-detach.yml").unlink()
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(remote): expose explicit detach operation"
+          git push origin HEAD:agent/rem-004-detach-policy
