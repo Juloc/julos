@@ -20,6 +20,8 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
     // and makes an accidental database access fail immediately.
     private const string UnreachableDatabase =
         "Host=127.0.0.1;Port=9;Database=julos_tests;Username=julos;Password=test-only;Timeout=1;Command Timeout=1";
+    private const string ProviderCallbackSigningKey =
+        "test-only-provider-callback-signing-key-42";
 
     private static readonly Lazy<string> SecretKeyRingPath = new(CreateSecretKeyRing);
 
@@ -84,6 +86,10 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         builder.UseSetting("Secrets:ActiveKeyId", "primary");
         builder.UseSetting("Secrets:KeyRingPath", SecretKeyRingPath.Value);
         builder.UseSetting("Secrets:LeaseLifetimeSeconds", "300");
+        builder.UseSetting(
+            "Remote:ProviderCallback:Endpoint",
+            "https://localhost/api/v1/internal/remote/provider-events");
+        builder.UseSetting("Remote:ProviderCallback:SigningKey", ProviderCallbackSigningKey);
         builder.UseEnvironment("Production");
 
         foreach (var setting in this.settings)
