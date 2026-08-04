@@ -304,7 +304,7 @@ public sealed class RemoteSessionServiceTests
         Assert.AreEqual(0, runtime.AllocationCount);
     }
 
-    private static IReadOnlyDictionary<string, string?> RuntimeSettings(Guid networkProfileId) =>
+    private static Dictionary<string, string?> RuntimeSettings(Guid networkProfileId) =>
         new Dictionary<string, string?>
         {
             ["Remote:Providers:0:Protocol"] = "rdp",
