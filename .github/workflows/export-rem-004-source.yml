@@ -29,11 +29,11 @@ jobs:
             --exclude='**/obj' \
             --exclude='**/node_modules' \
             --exclude='**/dist' \
-            -czf rem004-source.tar.gz .
+            -czf "$RUNNER_TEMP/rem004-source.tar.gz" .
       - name: Upload source archive
         uses: actions/upload-artifact@v7
         with:
           name: rem004-source-${{ github.run_id }}
-          path: rem004-source.tar.gz
+          path: ${{ runner.temp }}/rem004-source.tar.gz
           if-no-files-found: error
           retention-days: 1
