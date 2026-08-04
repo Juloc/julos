@@ -88,7 +88,6 @@ public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecy
         var now = this.timeProvider.GetUtcNow();
         Transition(row, RemoteSessionStates.Disconnected, now);
         row.EndedAtUtc = now;
-        row.CancellationReason = request.Reason;
         await this.SaveAsync(cancellationToken).ConfigureAwait(false);
         await this.PublishChangedAsync(row, cancellationToken).ConfigureAwait(false);
         return ToResponse(row);
@@ -120,7 +119,6 @@ public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecy
                     && row.State != RemoteSessionStates.Expired
                     && row.State != RemoteSessionStates.Failed
                     && (row.ExpiresAtUtc <= now
-                        || row.RequestDeadlineUtc <= now
                         || row.LastActivityAtUtc <= earliestIdle))
             .OrderBy(row => row.UpdatedAtUtc)
             .ThenBy(row => row.Id)
@@ -216,21 +214,9 @@ public sealed class PostgresRemoteSessionLifecycleService : IRemoteSessionLifecy
         }
     }
 
-    private static bool IsDue(RemoteSessionRow row, DateTimeOffset now)
-    {
-        if (row.ExpiresAtUtc <= now)
-        {
-            return true;
-        }
-        if (row.LastActivityAtUtc.AddSeconds(row.IdleTimeoutSeconds) <= now)
-        {
-            return true;
-        }
-        return row.State is RemoteSessionStates.Requested
-            or RemoteSessionStates.Provisioning
-            or RemoteSessionStates.Connecting
-            && row.RequestDeadlineUtc <= now;
-    }
+    private static bool IsDue(RemoteSessionRow row, DateTimeOffset now) =>
+        row.ExpiresAtUtc <= now
+        || row.LastActivityAtUtc.AddSeconds(row.IdleTimeoutSeconds) <= now;
 
     private static void Transition(RemoteSessionRow row, string state, DateTimeOffset now)
     {
