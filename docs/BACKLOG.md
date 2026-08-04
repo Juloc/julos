@@ -33,7 +33,8 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | AGT-005 | Host metrics package and widgets | In progress | Persisted-metric provider, signed-manifest authorization, authenticated frontend bridge and live/stale/offline/error view logic are implemented; installed-package end-to-end validation remains. |
 | AGT-006 | Agent diagnostics and update foundation | Done | Exact protocol negotiation, shared capability inventory, bounded reconnect diagnostics and a manual-only digest-verified update preparation contract are implemented, documented and fully validated. |
 | Phase 5 | Agent and host observability | In progress | Agent enrollment, transport, command authorization, Host Metrics provider and compatibility diagnostics are implemented; deployed-host and installed-package validation remain in issues #14 and #7. |
-| Phase 6 | Remote and Browser | Planned | Depends on capability broker and Runtime Manager. Existing package shells are not complete session implementations. |
+| REM-001 | Protocol-neutral Remote session contracts | Done | Core owns generic contracts, validation, lifecycle and exact idempotency; concrete protocol identities remain in the Remote package. |
+| Phase 6 | Remote and Browser | In progress | REM-001 is implemented. Existing package shells are not complete session implementations. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
 | Phase 9 | Discovery and operational hardening | Planned | Depends on stable Agent and package runtime. |
@@ -41,24 +42,23 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 
 ## Next issue
 
-### REM-001 — Define protocol-neutral Remote session contracts
+### REM-002 — Inventory Julgate and define extraction boundaries
 
 Scope:
 
-- define versioned profile, session request, session state and display transport contracts
-- keep RDP, VNC and SSH protocol details outside Core
-- define explicit target, credential reference, network profile and viewport fields
-- define bounded lifecycle states, failure codes, deadlines and cancellation
-- provide a capability contract that later Remote workers can implement through Runtime Manager
+- inventory Julgate authentication, authorization, connection storage, Guacamole launch, display and session behavior
+- map each reusable responsibility to the REM-001 contract, Remote package, Runtime Manager or an explicit rejection
+- keep Julgate, Guacamole and protocol-library ownership outside Core
+- define secret resolution, network-profile selection, runtime ownership and display authorization boundaries
+- record migration exclusions before transport implementation starts
 
 Acceptance:
 
-- Core and Desktop can represent a Remote session without referencing Julgate, Guacamole or one protocol library
-- credentials are referenced through secret handles and never embedded in session contracts
-- unsupported protocol, invalid target and expired request states fail closed
-- session identifiers and operation keys are idempotent and bounded
-- contracts and validation tests are complete before transport implementation starts
-- full repository validation remains green
+- every Julgate Remote responsibility has one documented destination or explicit rejection
+- Core remains independent from Julgate, Guacamole and concrete protocol types
+- no credential material crosses the REM-001 contract
+- runtime and display ownership are explicit and testable
+- repository documentation and GitHub issues match the approved extraction map
 
 ## Specification status
 
