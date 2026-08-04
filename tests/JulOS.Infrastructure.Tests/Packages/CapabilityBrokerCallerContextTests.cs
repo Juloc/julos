@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 using JulOS.Application.Auditing;
 using JulOS.Domain.Observability;
