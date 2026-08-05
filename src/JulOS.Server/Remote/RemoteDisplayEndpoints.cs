@@ -81,7 +81,18 @@ internal static class RemoteDisplayEndpoints
                 "Remote display requires a WebSocket request.");
         }
 
+        var requestedProtocols = context.WebSockets.WebSocketRequestedProtocols;
+        if (requestedProtocols.Count != 1)
+        {
+            return Failure(
+                StatusCodes.Status400BadRequest,
+                "remote.display_subprotocol_required",
+                "Remote display requires exactly one WebSocket subprotocol.");
+        }
+
+        var subprotocol = requestedProtocols[0];
         using var provider = new ClientWebSocket();
+        provider.Options.AddSubProtocol(subprotocol);
         try
         {
             await provider.ConnectAsync(providerEndpoint, cancellationToken).ConfigureAwait(false);
@@ -101,8 +112,16 @@ internal static class RemoteDisplayEndpoints
                 "The Remote display provider is unavailable.");
         }
 
+        if (!string.Equals(provider.SubProtocol, subprotocol, StringComparison.Ordinal))
+        {
+            return Failure(
+                StatusCodes.Status502BadGateway,
+                "remote.display_provider_subprotocol_invalid",
+                "The Remote display provider did not negotiate the requested WebSocket subprotocol.");
+        }
+
         using var browser = await context.WebSockets
-            .AcceptWebSocketAsync()
+            .AcceptWebSocketAsync(subprotocol)
             .ConfigureAwait(false);
         await ProxyAsync(browser, provider, cancellationToken).ConfigureAwait(false);
         return Results.Empty;

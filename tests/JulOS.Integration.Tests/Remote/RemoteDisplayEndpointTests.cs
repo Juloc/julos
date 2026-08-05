@@ -29,6 +29,7 @@ public sealed class RemoteDisplayEndpointTests
 {
     private const string AdministratorPassword = "Valid-Initial-Password-42!";
     private const string CallerPackageId = "de.juloc.julos.remote";
+    private const string GuacamoleSubprotocol = "guacamole";
     private const string PublicOrigin = "https://localhost";
     private const string RuntimeId = "remote-55555555555545558555555555555555";
 
@@ -128,7 +129,7 @@ public sealed class RemoteDisplayEndpointTests
     }
 
     [TestMethod]
-    public async Task WebSocketProxiesBinaryFramesToTheHiddenProvider()
+    public async Task WebSocketNegotiatesGuacamoleAndProxiesBinaryFramesToTheHiddenProvider()
     {
         await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
         await using var provider = await EchoProvider.StartAsync().ConfigureAwait(false);
@@ -143,6 +144,7 @@ public sealed class RemoteDisplayEndpointTests
             clock).ConfigureAwait(false);
 
         var webSocketClient = host.Server.CreateWebSocketClient();
+        webSocketClient.SubProtocols.Add(GuacamoleSubprotocol);
         webSocketClient.ConfigureRequest = request =>
         {
             request.Headers["Cookie"] = authentication.Cookie;
@@ -153,6 +155,8 @@ public sealed class RemoteDisplayEndpointTests
         using var socket = await webSocketClient.ConnectAsync(
             new Uri($"ws://localhost{session.Descriptor.Endpoint}"),
             cancellation.Token).ConfigureAwait(false);
+
+        Assert.AreEqual(GuacamoleSubprotocol, socket.SubProtocol);
 
         var payload = Encoding.UTF8.GetBytes("remote-display-roundtrip");
         await socket.SendAsync(
@@ -167,7 +171,6 @@ public sealed class RemoteDisplayEndpointTests
         Assert.AreEqual(WebSocketMessageType.Binary, result.MessageType);
         Assert.AreEqual(payload.Length, result.Count);
         CollectionAssert.AreEqual(payload, received);
-
     }
 
     private static ServerHost CreateHost(
@@ -347,8 +350,19 @@ public sealed class RemoteDisplayEndpointTests
                         return;
                     }
 
+                    var requestedProtocols = context.WebSockets.WebSocketRequestedProtocols;
+                    if (requestedProtocols.Count != 1
+                        || !string.Equals(
+                            requestedProtocols[0],
+                            GuacamoleSubprotocol,
+                            StringComparison.Ordinal))
+                    {
+                        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                        return;
+                    }
+
                     using var socket = await context.WebSockets
-                        .AcceptWebSocketAsync()
+                        .AcceptWebSocketAsync(GuacamoleSubprotocol)
                         .ConfigureAwait(false);
                     var buffer = new byte[1024];
                     var result = await socket

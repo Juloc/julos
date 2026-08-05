@@ -10,7 +10,7 @@
     "Image": null,
     "EntryPoint": "worker/JulOS.Remote.Worker.dll",
     "MemoryLimitMegabytes": 256,
-    "CpuLimit": 1.0,
+    "CpuLimit": 1,
     "StartupTimeoutSeconds": 30,
     "NetworkAccess": false
   },
@@ -56,7 +56,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/remote.js",
-    "Sha256": "f23b54d8747726e94b36d15b737761520ce3586ab59e73399ef088c85174a961",
+    "Sha256": "9cc6908514e987021b7f7ce7d39c6050ae3ef1e67fc707059c97975b73a8fe57",
     "ExportedElements": [
       "julos-remote-app",
       "julos-remote-widget"
