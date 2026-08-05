@@ -147,7 +147,8 @@ test('resize delivery collapses repeated observations and disposal cancels pendi
   assert.deepEqual(delays, [150, 150, 150]);
   assert.equal(runs, 0);
 
-  const callback = [...pending.values()][0];
+  const [firedId, callback] = [...pending.entries()][0];
+  pending.delete(firedId);
   callback();
   assert.equal(runs, 1);
 
