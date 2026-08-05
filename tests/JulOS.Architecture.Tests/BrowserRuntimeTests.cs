@@ -17,7 +17,7 @@ public sealed partial class BrowserRuntimeTests
         var dockerfile = File.ReadAllText(Path.Combine(runtimeDirectory, "Dockerfile"));
         var launcher = File.ReadAllText(Path.Combine(runtimeDirectory, "browser-runtime.sh"));
         using var definition = JsonDocument.Parse(
-            File.ReadAllBytes(Path.Combine(runtimeDirectory, "runtime-definition.json")));
+            File.ReadAllText(Path.Combine(runtimeDirectory, "runtime-definition.json")));
         var root = definition.RootElement;
         var limits = root.GetProperty("Limits");
 
@@ -34,6 +34,7 @@ public sealed partial class BrowserRuntimeTests
         StringAssert.Contains(launcher, "rm -rf \"$runtime_directory\"");
 
         Assert.AreEqual("de.juloc.julos.browser", root.GetProperty("PackageId").GetString());
+        Assert.AreEqual("configured-isolated", root.GetProperty("NetworkPolicy").GetString());
         Assert.AreEqual("vnc", root.GetProperty("DisplayProtocol").GetString());
         Assert.AreEqual(5900, root.GetProperty("DisplayPort").GetInt32());
         Assert.AreEqual(1024, limits.GetProperty("MemoryMegabytes").GetInt32());
