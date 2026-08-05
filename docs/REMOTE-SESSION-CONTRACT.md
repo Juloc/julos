@@ -96,6 +96,8 @@ Allowed transitions are explicit in `RemoteSessionContractValidator`. Terminal s
 
 It contains no access token. The relative endpoint may carry non-secret package, revision and expiry selectors, but no bearer credential or provider address. Every browser connection is authenticated by the JulOS login cookie and authorized against the configured public Origin, authenticated user, caller package selector, active durable session, exact revision, exact stored descriptor and expiry before the hidden provider endpoint is resolved.
 
+The Remote package owns display interaction behavior. `Ctrl+Alt+Shift+Escape` releases keyboard capture, resets pressed remote keys and returns focus to the local shell; a deliberate pointer press on the display captures it again. Re-capture changes focus only and never manufactures a connection-state transition; connection status remains driven by transport events. Resize observations are collapsed through one 150 ms scheduler, while the initial display size is sent immediately. Teardown cancels pending resize delivery and removes all input handlers.
+
 ## Failures
 
 The contract provides stable caller-safe codes for malformed or unavailable protocol identity, invalid target, unavailable credentials or network profile, expired request, unavailable runtime, trust confirmation, authentication failure, connection loss and invalid state transition.
