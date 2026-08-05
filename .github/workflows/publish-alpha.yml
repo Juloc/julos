@@ -1,0 +1,299 @@
+name: Publish alpha
+
+on:
+  pull_request:
+    paths:
+      - VERSION
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - src/**
+      - packages/**
+      - deploy/alpha/**
+      - docs/releases/**
+      - tools/**
+      - .github/workflows/publish-alpha.yml
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - VERSION
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - src/**
+      - packages/**
+      - deploy/alpha/**
+      - docs/releases/**
+      - tools/**
+      - .github/workflows/publish-alpha.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-alpha-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Validate alpha source
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate prerelease version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]; then
+            echo "VERSION must be an alpha prerelease, got: $version" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "Tag v$version already exists; alpha releases are immutable." >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up .NET
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Cache NuGet packages
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Run complete repository validation
+        if: github.event_name != 'pull_request'
+        run: sh tools/validate.sh
+
+      - name: Verify validation left the tree unchanged
+        if: github.event_name != 'pull_request'
+        run: |
+          git status --short
+          git diff --stat
+          git diff --exit-code
+
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+
+  smoke:
+    name: Build and smoke-test alpha stack
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build exact server image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
+          docker build \
+            --file src/JulOS.Server/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ needs.validate.outputs.version }}" \
+            --tag "$image" \
+            .
+
+      - name: Start and verify alpha Compose stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
+          smoke_directory="$GITHUB_WORKSPACE/.alpha-smoke"
+          env_file="$smoke_directory/.env"
+          mkdir -p "$smoke_directory/secret-keys"
+          openssl rand -base64 32 > "$smoke_directory/secret-keys/primary.key"
+
+          container_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
+          container_uid="${container_user%%:*}"
+          container_gid="${container_user#*:}"
+          if [ "$container_gid" = "$container_user" ]; then
+            container_gid="$container_uid"
+          fi
+          if [[ ! "$container_uid" =~ ^[0-9]+$ || ! "$container_gid" =~ ^[0-9]+$ ]]; then
+            echo "The server image must declare a numeric non-root runtime user, got: $container_user" >&2
+            exit 1
+          fi
+          if [ "$container_uid" = 0 ]; then
+            echo "The server image must not run as root." >&2
+            exit 1
+          fi
+          sudo chown -R "$container_uid:$container_gid" "$smoke_directory/secret-keys"
+          sudo chmod 700 "$smoke_directory/secret-keys"
+          sudo chmod 600 "$smoke_directory/secret-keys/primary.key"
+
+          postgres_password="$(openssl rand -hex 24)"
+          cat > "$env_file" <<EOF
+          JULOS_VERSION=${{ needs.validate.outputs.version }}
+          JULOS_SERVER_IMAGE=$image
+          JULOS_POSTGRES_PASSWORD=$postgres_password
+          JULOS_SECRET_KEY_RING_PATH=$smoke_directory/secret-keys
+          JULOS_BIND_ADDRESS=127.0.0.1
+          JULOS_SERVER_PORT=18080
+          JULOS_POSTGRES_DB=julos
+          JULOS_POSTGRES_USER=julos
+          EOF
+
+          cleanup() {
+            docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml logs --no-color || true
+            docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml down --volumes --remove-orphans || true
+          }
+          trap cleanup EXIT
+
+          docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml config --quiet
+          docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml up --detach --wait --wait-timeout 180
+          curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          mkdir -p release-files
+          cp deploy/alpha/compose.yaml release-files/julos-alpha-compose.yaml
+          cp deploy/alpha/.env.example release-files/julos-alpha.env.example
+          cp "docs/releases/$version.md" release-files/RELEASE_NOTES.md
+          (
+            cd release-files
+            sha256sum julos-alpha-compose.yaml julos-alpha.env.example RELEASE_NOTES.md > SHA256SUMS
+          )
+
+      - name: Upload release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: julos-${{ needs.validate.outputs.version }}
+          path: release-files/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish image and prerelease
+    if: github.event_name == 'push' && github.repository == 'Juloc/julos'
+    needs:
+      - validate
+      - smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse an existing immutable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Server image version already exists: $image" >&2
+            exit 1
+          fi
+
+      - name: Build and publish server image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/JulOS.Server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-server
+          cache-to: type=gha,mode=max,scope=julos-server
+          provenance: false
+          sbom: true
+
+      - name: Attest server image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/juloc/julos-server
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Download release files
+        uses: actions/download-artifact@v8
+        with:
+          name: julos-${{ needs.validate.outputs.version }}
+          path: release-files
+
+      - name: Create immutable GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          gh release create "v$version" \
+            --target "$GITHUB_SHA" \
+            --title "JulOS $version" \
+            --notes-file "docs/releases/$version.md" \
+            --prerelease \
+            release-files/julos-alpha-compose.yaml \
+            release-files/julos-alpha.env.example \
+            release-files/RELEASE_NOTES.md \
+            release-files/SHA256SUMS
