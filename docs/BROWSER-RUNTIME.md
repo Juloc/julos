@@ -9,11 +9,14 @@ BRW-001 provides one isolated Chromium runtime image for the JulOS Browser packa
 The image is built from:
 
 - a Debian Bookworm slim base pinned by OCI digest;
+- Debian and Debian Security package indexes pinned to explicit snapshot timestamps;
 - Chromium pinned to one exact Debian package version;
 - Xvfb for the deterministic virtual display;
 - Openbox as the minimal window manager;
 - x11vnc as the internal display endpoint;
 - Tini as PID 1 for signal and child-process handling.
+
+The snapshot timestamps and Chromium version are build arguments with immutable defaults in the Dockerfile. This prevents a previously valid build from failing when Debian rotates packages out of its current mirrors. Updating Chromium therefore requires one deliberate commit that updates the package version and, when needed, the matching snapshot timestamps.
 
 The image runs as UID and GID `10001`. It adds no default account password, VNC password, API key or other credential.
 
