@@ -2,6 +2,8 @@ ARG DEBIAN_IMAGE=debian:bookworm-20260713-slim@sha256:7b140f374b289a7c2befc338f4
 FROM ${DEBIAN_IMAGE}
 
 ARG JULOS_VERSION=0.0.0
+ARG DEBIAN_SNAPSHOT=20260720T000000Z
+ARG DEBIAN_SECURITY_SNAPSHOT=20260720T000000Z
 ARG CHROMIUM_VERSION=150.0.7871.124-1~deb12u1
 
 LABEL org.opencontainers.image.title="JulOS Browser Runtime" \
@@ -18,7 +20,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     JULOS_SCREEN_GEOMETRY=1280x800x24 \
     JULOS_SCREEN_DPI=96
 
-RUN apt-get update \
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+    && printf '%s\n' \
+        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}/ bookworm main" \
+        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SECURITY_SNAPSHOT}/ bookworm-security main" \
+        > /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         chromium="${CHROMIUM_VERSION}" \
