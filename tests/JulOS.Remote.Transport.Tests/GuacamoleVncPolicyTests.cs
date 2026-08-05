@@ -195,7 +195,7 @@ public sealed class GuacamoleVncPolicyTests
                 },
                 key);
             payload = DecryptAndVerify(token.EncryptedData, key);
-            return JsonDocument.Parse(payload);
+            return JsonDocument.Parse(payload.ToArray());
         }
         finally
         {
