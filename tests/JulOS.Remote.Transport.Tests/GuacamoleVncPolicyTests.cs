@@ -72,7 +72,7 @@ public sealed class GuacamoleVncPolicyTests
         }
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(GuacamoleVncResizePolicies.Dynamic, "false")]
     [DataRow(GuacamoleVncResizePolicies.Fixed, "true")]
     public void ResizePolicyMapsExactDisplayResizeValue(string policy, string expected)
@@ -83,7 +83,7 @@ public sealed class GuacamoleVncPolicyTests
             GetParameters(document).GetProperty("disable-display-resize").GetString());
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(GuacamoleVncClipboardPolicies.Bidirectional, "false", "false")]
     [DataRow(GuacamoleVncClipboardPolicies.BrowserToRemote, "true", "false")]
     [DataRow(GuacamoleVncClipboardPolicies.RemoteToBrowser, "false", "true")]
