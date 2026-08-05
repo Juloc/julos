@@ -18,6 +18,7 @@ internal static class JulOsDataProtection
 /// <summary>Reads the active JulOS encryption key for Data Protection.</summary>
 public sealed class JulOsDataProtectionKeyProvider
 {
+    private const int KeySize = 32;
     private readonly SecretReferenceOptions options;
 
     /// <summary>Creates the provider from the validated JulOS secret configuration.</summary>
@@ -37,15 +38,19 @@ public sealed class JulOsDataProtectionKeyProvider
 
         var keyPath = Path.Combine(options.KeyRingPath, $"{keyId}.key");
         var encodedKey = File.ReadAllText(keyPath).Trim();
-        var key = encodedKey.StartsWith("hex:", StringComparison.OrdinalIgnoreCase)
-            ? Convert.FromHexString(encodedKey[4..])
-            : Convert.FromBase64String(encodedKey);
+        var key = new byte[KeySize];
 
-        if (key.Length != 32)
+        var decoded = encodedKey.StartsWith("hex:", StringComparison.OrdinalIgnoreCase)
+            ? Convert.TryFromHexString(encodedKey.AsSpan(4), key, out var bytesWritten)
+                && bytesWritten == KeySize
+            : Convert.TryFromBase64String(encodedKey, key, out bytesWritten)
+                && bytesWritten == KeySize;
+
+        if (!decoded)
         {
             CryptographicOperations.ZeroMemory(key);
             throw new InvalidOperationException(
-                $"The encryption key '{keyId}' must contain exactly 32 bytes.");
+                $"The encryption key '{keyId}' must contain exactly {KeySize} bytes.");
         }
 
         return key;
