@@ -12,6 +12,9 @@ public sealed class GuacamoleJsonLaunchEncoder
     private const int SignatureBytes = 32;
     private const int MaximumCertificateFingerprints = 16;
     private const int MaximumPasswordBytes = 4096;
+    private const int MaximumPrivateKeyBytes = 65536;
+    private const int MaximumPassphraseBytes = 4096;
+    private const int MaximumHostKeyLength = 8192;
     private const int MaximumVncAutoRetry = 10;
     private const string DefaultKeyboardLayout = "de-de-qwertz";
     private const int DefaultTerminalFontSize = 12;
@@ -124,10 +127,17 @@ public sealed class GuacamoleJsonLaunchEncoder
         }
         else if (string.Equals(request.Protocol, RemoteTransportProtocols.Ssh, StringComparison.Ordinal))
         {
-            writer.WriteString("font-name", "monospace");
-            writer.WriteString(
-                "font-size",
-                NormalizeTerminalFontSize(request.TerminalFontSize).ToString(CultureInfo.InvariantCulture));
+            if (request.SshOptions is null)
+            {
+                writer.WriteString("font-name", "monospace");
+                writer.WriteString(
+                    "font-size",
+                    NormalizeTerminalFontSize(request.TerminalFontSize).ToString(CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                WriteSshParameters(writer, request.SshOptions);
+            }
         }
     }
 
@@ -221,6 +231,42 @@ public sealed class GuacamoleJsonLaunchEncoder
                 "quality-level",
                 qualityLevel.ToString(CultureInfo.InvariantCulture));
         }
+    }
+
+    private static void WriteSshParameters(
+        Utf8JsonWriter writer,
+        GuacamoleSshOptions options)
+    {
+        if (string.Equals(
+                options.AuthenticationMode,
+                GuacamoleSshAuthenticationModes.PublicKey,
+                StringComparison.Ordinal))
+        {
+            writer.WriteString("private-key"u8, options.PrivateKeyUtf8.Span);
+            if (!options.PassphraseUtf8.IsEmpty)
+            {
+                writer.WriteString("passphrase"u8, options.PassphraseUtf8.Span);
+            }
+        }
+
+        if (string.Equals(
+                options.HostKeyPolicy,
+                GuacamoleSshHostKeyPolicies.Strict,
+                StringComparison.Ordinal))
+        {
+            writer.WriteString("host-key", options.HostKey);
+        }
+
+        writer.WriteString("font-name", options.TerminalFontName);
+        writer.WriteString(
+            "font-size",
+            options.TerminalFontSize.ToString(CultureInfo.InvariantCulture));
+        writer.WriteString(
+            "timeout",
+            options.TimeoutSeconds.ToString(CultureInfo.InvariantCulture));
+        writer.WriteString(
+            "server-alive-interval",
+            options.ServerAliveIntervalSeconds.ToString(CultureInfo.InvariantCulture));
     }
 
     private static void WriteCertificatePolicy(
@@ -342,24 +388,11 @@ public sealed class GuacamoleJsonLaunchEncoder
         {
             throw new ArgumentException("The launch expiry is invalid.", nameof(request));
         }
-        if (request.PasswordUtf8.Length > MaximumPasswordBytes)
-        {
-            throw new ArgumentException("The target password is too large.", nameof(request));
-        }
-        if (!request.PasswordUtf8.IsEmpty)
-        {
-            try
-            {
-                _ = StrictUtf8.GetCharCount(request.PasswordUtf8.Span);
-            }
-            catch (DecoderFallbackException exception)
-            {
-                throw new ArgumentException(
-                    "The target password must contain valid UTF-8.",
-                    nameof(request),
-                    exception);
-            }
-        }
+        ValidateUtf8Secret(
+            request.PasswordUtf8,
+            MaximumPasswordBytes,
+            "The target password is invalid.",
+            nameof(request));
         if (request.EnableDrive
             && (string.IsNullOrWhiteSpace(request.DriveName)
                 || string.IsNullOrWhiteSpace(request.DrivePath)))
@@ -371,22 +404,14 @@ public sealed class GuacamoleJsonLaunchEncoder
 
         if (string.Equals(request.Protocol, RemoteTransportProtocols.Rdp, StringComparison.Ordinal))
         {
-            if (request.VncOptions is not null)
-            {
-                throw new ArgumentException(
-                    "VNC options cannot be supplied for another Remote protocol.",
-                    nameof(request));
-            }
+            RejectVncOptions(request);
+            RejectSshOptions(request);
             ValidateRdpOptions(request, ResolveRdpOptions(request));
         }
         else if (string.Equals(request.Protocol, RemoteTransportProtocols.Vnc, StringComparison.Ordinal))
         {
-            if (request.RdpOptions is not null)
-            {
-                throw new ArgumentException(
-                    "RDP options cannot be supplied for another Remote protocol.",
-                    nameof(request));
-            }
+            RejectRdpOptions(request);
+            RejectSshOptions(request);
             if (request.VncOptions is not null)
             {
                 ValidateVncOptions(request.VncOptions, nameof(request));
@@ -394,18 +419,42 @@ public sealed class GuacamoleJsonLaunchEncoder
         }
         else
         {
-            if (request.RdpOptions is not null)
+            RejectRdpOptions(request);
+            RejectVncOptions(request);
+            if (request.SshOptions is not null)
             {
-                throw new ArgumentException(
-                    "RDP options cannot be supplied for another Remote protocol.",
-                    nameof(request));
+                ValidateSshOptions(request, request.SshOptions);
             }
-            if (request.VncOptions is not null)
-            {
-                throw new ArgumentException(
-                    "VNC options cannot be supplied for another Remote protocol.",
-                    nameof(request));
-            }
+        }
+    }
+
+    private static void RejectRdpOptions(GuacamoleLaunchRequest request)
+    {
+        if (request.RdpOptions is not null)
+        {
+            throw new ArgumentException(
+                "RDP options cannot be supplied for another Remote protocol.",
+                nameof(request));
+        }
+    }
+
+    private static void RejectVncOptions(GuacamoleLaunchRequest request)
+    {
+        if (request.VncOptions is not null)
+        {
+            throw new ArgumentException(
+                "VNC options cannot be supplied for another Remote protocol.",
+                nameof(request));
+        }
+    }
+
+    private static void RejectSshOptions(GuacamoleLaunchRequest request)
+    {
+        if (request.SshOptions is not null)
+        {
+            throw new ArgumentException(
+                "SSH options cannot be supplied for another Remote protocol.",
+                nameof(request));
         }
     }
 
@@ -517,6 +566,156 @@ public sealed class GuacamoleJsonLaunchEncoder
             parameterName);
     }
 
+    private static void ValidateSshOptions(
+        GuacamoleLaunchRequest request,
+        GuacamoleSshOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!GuacamoleSshAuthenticationModes.IsSupported(options.AuthenticationMode))
+        {
+            throw new ArgumentException("The SSH authentication mode is unsupported.", nameof(request));
+        }
+        if (!GuacamoleSshHostKeyPolicies.IsSupported(options.HostKeyPolicy))
+        {
+            throw new ArgumentException("The SSH host-key policy is unsupported.", nameof(request));
+        }
+        if (string.IsNullOrWhiteSpace(request.UserName))
+        {
+            throw new ArgumentException("Explicit SSH policy requires a username.", nameof(request));
+        }
+
+        ValidateText(options.TerminalFontName, 128, nameof(request));
+        if (options.TerminalFontSize is < 8 or > 24)
+        {
+            throw new ArgumentException("The SSH terminal font size is invalid.", nameof(request));
+        }
+        if (options.TimeoutSeconds is < 1 or > 120)
+        {
+            throw new ArgumentException("The SSH connection timeout is invalid.", nameof(request));
+        }
+        if (options.ServerAliveIntervalSeconds != 0
+            && options.ServerAliveIntervalSeconds is < 2 or > 300)
+        {
+            throw new ArgumentException("The SSH server-alive interval is invalid.", nameof(request));
+        }
+
+        var strictHostKey = string.Equals(
+            options.HostKeyPolicy,
+            GuacamoleSshHostKeyPolicies.Strict,
+            StringComparison.Ordinal);
+        if (strictHostKey)
+        {
+            ValidateKnownHostEntry(options.HostKey, nameof(request));
+        }
+        else if (options.HostKey is not null)
+        {
+            throw new ArgumentException(
+                "An SSH host key is allowed only with strict host-key policy.",
+                nameof(request));
+        }
+
+        ValidateUtf8Secret(
+            options.PrivateKeyUtf8,
+            MaximumPrivateKeyBytes,
+            "The SSH private key is invalid.",
+            nameof(request));
+        ValidateUtf8Secret(
+            options.PassphraseUtf8,
+            MaximumPassphraseBytes,
+            "The SSH private-key passphrase is invalid.",
+            nameof(request));
+
+        if (string.Equals(
+                options.AuthenticationMode,
+                GuacamoleSshAuthenticationModes.Password,
+                StringComparison.Ordinal))
+        {
+            if (request.PasswordUtf8.IsEmpty
+                || !options.PrivateKeyUtf8.IsEmpty
+                || !options.PassphraseUtf8.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "SSH password authentication requires only a password.",
+                    nameof(request));
+            }
+        }
+        else if (string.Equals(
+                     options.AuthenticationMode,
+                     GuacamoleSshAuthenticationModes.PublicKey,
+                     StringComparison.Ordinal))
+        {
+            if (!request.PasswordUtf8.IsEmpty || options.PrivateKeyUtf8.IsEmpty)
+            {
+                throw new ArgumentException(
+                    "SSH public-key authentication requires only an OpenSSH private key and optional passphrase.",
+                    nameof(request));
+            }
+            if (!options.PrivateKeyUtf8.Span.StartsWith("-----BEGIN OPENSSH PRIVATE KEY-----"u8)
+                || options.PrivateKeyUtf8.Span.IndexOf("-----END OPENSSH PRIVATE KEY-----"u8) < 0)
+            {
+                throw new ArgumentException(
+                    "The SSH private key must use OpenSSH format.",
+                    nameof(request));
+            }
+        }
+        else if (!request.PasswordUtf8.IsEmpty
+                 || !options.PrivateKeyUtf8.IsEmpty
+                 || !options.PassphraseUtf8.IsEmpty)
+        {
+            throw new ArgumentException(
+                "SSH NONE authentication cannot include credential material.",
+                nameof(request));
+        }
+    }
+
+    private static void ValidateKnownHostEntry(string? value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value != value.Trim()
+            || value.Length > MaximumHostKeyLength
+            || value.Any(character => character is '\r' or '\n' || char.IsControl(character)))
+        {
+            throw new ArgumentException("The SSH host-key entry is invalid.", parameterName);
+        }
+
+        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var offset = parts.Length > 0 && parts[0].StartsWith('@') ? 1 : 0;
+        if (parts.Length < offset + 3)
+        {
+            throw new ArgumentException("The SSH host-key entry is invalid.", parameterName);
+        }
+
+        var keyType = parts[offset + 1];
+        if (!keyType.StartsWith("ssh-", StringComparison.Ordinal)
+            && !keyType.StartsWith("ecdsa-", StringComparison.Ordinal)
+            && !keyType.StartsWith("sk-", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The SSH host-key type is unsupported.", parameterName);
+        }
+
+        byte[] decodedKey;
+        try
+        {
+            decodedKey = Convert.FromBase64String(parts[offset + 2]);
+        }
+        catch (FormatException exception)
+        {
+            throw new ArgumentException("The SSH host-key data is invalid.", parameterName, exception);
+        }
+
+        try
+        {
+            if (decodedKey.Length == 0)
+            {
+                throw new ArgumentException("The SSH host-key data is invalid.", parameterName);
+            }
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(decodedKey);
+        }
+    }
+
     private static string NormalizeCertificateFingerprint(string value)
     {
         if (string.IsNullOrWhiteSpace(value)
@@ -548,6 +747,31 @@ public sealed class GuacamoleJsonLaunchEncoder
         }
 
         return string.Concat(algorithm, ":", hash.ToUpperInvariant());
+    }
+
+    private static void ValidateUtf8Secret(
+        ReadOnlyMemory<byte> value,
+        int maximumBytes,
+        string message,
+        string parameterName)
+    {
+        if (value.Length > maximumBytes)
+        {
+            throw new ArgumentException(message, parameterName);
+        }
+        if (value.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = StrictUtf8.GetCharCount(value.Span);
+        }
+        catch (DecoderFallbackException exception)
+        {
+            throw new ArgumentException(message, parameterName, exception);
+        }
     }
 
     private static void ValidateOptionalRange(
