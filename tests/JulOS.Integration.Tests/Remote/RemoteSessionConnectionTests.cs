@@ -141,6 +141,43 @@ public sealed class RemoteSessionConnectionTests
     }
 
     [TestMethod]
+    public async Task AccountUnavailableRemainsDistinctFromInvalidCredentials()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 5, 8, 0, 0, TimeSpan.Zero));
+        var runtime = new RecordingRuntimeManager();
+        var networkProfileId = Guid.Parse("88888888-8888-4888-8888-888888888888");
+        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var provisioned = await CreateProvisionedSessionAsync(
+            scope.ServiceProvider,
+            administrator.UserId,
+            networkProfileId,
+            clock,
+            "remote-provider-account-unavailable").ConfigureAwait(false);
+        var runtimeId = $"remote-{provisioned.SessionId:N}";
+        var connections = scope.ServiceProvider.GetRequiredService<IRemoteSessionConnectionService>();
+
+        var failed = await connections.FailAsync(new FailRemoteSessionCommand(
+            provisioned.SessionId,
+            runtimeId,
+            provisioned.Revision,
+            RemoteProviderFailureCodes.AccountUnavailable,
+            "The target account is unavailable.",
+            Retryable: false)).ConfigureAwait(false);
+
+        Assert.AreEqual(RemoteSessionStates.Failed, failed.State);
+        Assert.IsNotNull(failed.Failure);
+        Assert.AreEqual(RemoteProviderFailureCodes.AccountUnavailable, failed.Failure.Code);
+        Assert.AreNotEqual(RemoteSessionFailureCodes.AuthenticationFailed, failed.Failure.Code);
+        Assert.AreEqual("The target account is unavailable.", failed.Failure.Detail);
+        Assert.IsFalse(failed.Failure.Retryable);
+    }
+
+    [TestMethod]
     public async Task ActivityUsesServerTimeAndCoalescesFrequentWrites()
     {
         await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
