@@ -35,6 +35,24 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/complete-rem-005-input-resize.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('packages/JulOS.Remote/frontend/test/remote.source.test.mjs')
+          text = path.read_text(encoding='utf-8-sig')
+          old = '''  const callback = [...pending.values()][0];
+  callback();
+  assert.equal(runs, 1);
+'''
+          new = '''  const [firedId, callback] = [...pending.entries()][0];
+  pending.delete(firedId);
+  callback();
+  assert.equal(runs, 1);
+'''
+          if text.count(old) != 1:
+              raise RuntimeError('Expected the generated fake-timer callback anchor exactly once.')
+          path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+          PY
           cd packages/JulOS.Remote/frontend
           npm ci
           npm run build
