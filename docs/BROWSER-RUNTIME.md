@@ -37,7 +37,7 @@ It declares:
 
 BRW-003 combines the repository version with the digest produced by the publication workflow. Runtime Manager accepts only the resulting digest-pinned image reference. It applies the declared CPU, memory and PID limits, the exact configured network, dropped capabilities and `no-new-privileges`.
 
-No host port is published. The display proxy reaches port `5900` only through the package runtime network.
+No host port is published. The display proxy reaches port `5900` only through the package runtime network. x11vnc uses an explicit IPv4 listener and disables its optional IPv6 listener so startup and health checks cannot vary with the host's dual-stack socket behavior.
 
 ## Display credential
 
@@ -76,7 +76,7 @@ On normal exit, interruption or termination it:
 - removes the complete temporary profile, logs and VNC password file;
 - returns Chromium's exit code when Chromium ends normally.
 
-The health probe requires all four processes and the local VNC port. It has a 30-second startup grace period and becomes unhealthy after three failed bounded checks.
+The health probe requires all four processes and the local IPv4 VNC port. It has a 30-second startup grace period and becomes unhealthy after three failed bounded checks.
 
 ## Chromium sandbox boundary
 
