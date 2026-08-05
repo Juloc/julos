@@ -23,6 +23,10 @@ public sealed partial class BrowserRuntimeTests
 
         StringAssert.Matches(dockerfile, DigestPinnedBaseImage());
         StringAssert.Contains(dockerfile, "FROM ${DEBIAN_IMAGE}");
+        StringAssert.Matches(dockerfile, DebianSnapshotPin());
+        StringAssert.Matches(dockerfile, DebianSecuritySnapshotPin());
+        StringAssert.Contains(dockerfile, "snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}");
+        StringAssert.Contains(dockerfile, "snapshot.debian.org/archive/debian-security/${DEBIAN_SECURITY_SNAPSHOT}");
         StringAssert.Contains(dockerfile, "ARG CHROMIUM_VERSION=");
         StringAssert.Contains(dockerfile, "USER 10001:10001");
         StringAssert.Contains(dockerfile, "EXPOSE 5900/tcp");
@@ -50,4 +54,10 @@ public sealed partial class BrowserRuntimeTests
 
     [GeneratedRegex(@"ARG DEBIAN_IMAGE=\S+@sha256:[0-9a-f]{64}")]
     private static partial Regex DigestPinnedBaseImage();
+
+    [GeneratedRegex(@"ARG DEBIAN_SNAPSHOT=[0-9]{8}T[0-9]{6}Z")]
+    private static partial Regex DebianSnapshotPin();
+
+    [GeneratedRegex(@"ARG DEBIAN_SECURITY_SNAPSHOT=[0-9]{8}T[0-9]{6}Z")]
+    private static partial Regex DebianSecuritySnapshotPin();
 }
