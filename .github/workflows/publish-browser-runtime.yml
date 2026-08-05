@@ -92,6 +92,56 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Smoke-test runtime lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="julos-browser-runtime-smoke:${{ steps.version.outputs.version }}"
+          docker build \
+            --file packages/JulOS.Browser/runtime/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ steps.version.outputs.version }}" \
+            --tag "$image" \
+            .
+
+          if docker run --rm --network none "$image"; then
+            echo "Browser runtime started without its required display password." >&2
+            exit 1
+          fi
+
+          container_id="$(docker run --detach \
+            --network none \
+            --cpus 2 \
+            --memory 1024m \
+            --pids-limit 256 \
+            --security-opt no-new-privileges=true \
+            --cap-drop ALL \
+            --env JULOS_VNC_PASSWORD=A7b9C2d4 \
+            "$image")"
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "10001:10001"
+          test "$(docker image inspect --format '{{json .Config.ExposedPorts}}' "$image")" = '{"5900/tcp":{}}'
+          test "$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$container_id")" = '{}'
+
+          for attempt in $(seq 1 45); do
+            status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id")"
+            if [ "$status" = healthy ]; then
+              break
+            fi
+            if [ "$status" = unhealthy ] || [ "$status" = missing ]; then
+              docker logs "$container_id" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" = healthy
+          docker stop --time 10 "$container_id" >/dev/null
+          test "$(docker inspect --format '{{.State.Running}}' "$container_id")" = false
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
