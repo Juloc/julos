@@ -7,7 +7,7 @@
 name: julos-alpha
 
 x-server: &server
-  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.1}
+  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.2}
   environment:
     ASPNETCORE_ENVIRONMENT: Production
     ASPNETCORE_HTTP_PORTS: 8080
@@ -19,8 +19,14 @@ x-server: &server
     Remote__Display__ProviderEndpointTemplate: ${JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE:-}
     Remote__Display__PublicOrigin: ${JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN:-}
     Remote__Display__GrantLifetimeSeconds: ${JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS:-60}
+  secrets:
+    - source: julos-primary-key
+      target: /run/julos-secret-keys/primary.key
+      uid: "1654"
+      gid: "1654"
+      mode: 0400
   volumes:
-    - ${JULOS_SECRET_KEY_RING_PATH:?Set JULOS_SECRET_KEY_RING_PATH in deploy/alpha/.env}:/run/julos-secret-keys:ro
+    - data-protection:/var/lib/julos/data-protection
   security_opt:
     - no-new-privileges:true
 
@@ -66,5 +72,10 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+secrets:
+  julos-primary-key:
+    environment: JULOS_PRIMARY_KEY
+
 volumes:
+  data-protection:
   postgres-data:
