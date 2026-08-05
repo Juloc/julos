@@ -142,16 +142,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
           smoke_directory="$GITHUB_WORKSPACE/.alpha-smoke"
           env_file="$smoke_directory/.env"
           mkdir -p "$smoke_directory/secret-keys"
-          chmod 700 "$smoke_directory/secret-keys"
           openssl rand -base64 32 > "$smoke_directory/secret-keys/primary.key"
-          chmod 600 "$smoke_directory/secret-keys/primary.key"
+
+          container_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
+          container_uid="${container_user%%:*}"
+          container_gid="${container_user#*:}"
+          if [ "$container_gid" = "$container_user" ]; then
+            container_gid="$container_uid"
+          fi
+          if [[ ! "$container_uid" =~ ^[0-9]+$ || ! "$container_gid" =~ ^[0-9]+$ ]]; then
+            echo "The server image must declare a numeric non-root runtime user, got: $container_user" >&2
+            exit 1
+          fi
+          if [ "$container_uid" = 0 ]; then
+            echo "The server image must not run as root." >&2
+            exit 1
+          fi
+          sudo chown -R "$container_uid:$container_gid" "$smoke_directory/secret-keys"
+          sudo chmod 700 "$smoke_directory/secret-keys"
+          sudo chmod 600 "$smoke_directory/secret-keys/primary.key"
+
           postgres_password="$(openssl rand -hex 24)"
           cat > "$env_file" <<EOF
           JULOS_VERSION=${{ needs.validate.outputs.version }}
-          JULOS_SERVER_IMAGE=ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}
+          JULOS_SERVER_IMAGE=$image
           JULOS_POSTGRES_PASSWORD=$postgres_password
           JULOS_SECRET_KEY_RING_PATH=$smoke_directory/secret-keys
           JULOS_BIND_ADDRESS=127.0.0.1
