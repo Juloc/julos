@@ -28,7 +28,7 @@ JulOS.Remote.Transport
 
 The root `VERSION` file is the sole package-version source. Published versions are immutable. A changed package requires a new version; the publication workflow never uses `--skip-duplicate` and therefore fails when a version already exists.
 
-Version `0.1.0` is the initial Julgate-compatible extraction. Version `0.2.0` is the first additive provider-policy release and preserves the published constructor while adding explicit RDP and VNC options.
+Version `0.1.0` is the initial Julgate-compatible extraction. Version `0.2.0` adds explicit RDP and VNC policy. Version `0.3.0` preserves the published constructor and adds explicit SSH authentication, host-key, network and terminal policy.
 
 The package metadata links every version to `https://github.com/Juloc/julos` and records the exact source commit supplied by the workflow.
 
@@ -42,11 +42,13 @@ The package contains:
 - `GuacamoleLaunchRequest`
   - provider-side target and option input
   - password represented as caller-owned UTF-8 memory
-  - additive explicit RDP and VNC policy properties
+  - additive explicit RDP, VNC and SSH policy properties
 - `GuacamoleRdpOptions`
   - security, certificate, resize and clipboard policy
 - `GuacamoleVncOptions`
   - resize, clipboard, cursor, display quality and bounded retry policy
+- `GuacamoleSshOptions`
+  - authentication, caller-owned private-key/passphrase memory, host-key verification, timeout, keepalive and terminal policy
 - `GuacamoleJsonLaunchEncoder`
   - Guacamole parameter mapping
   - JSON-auth payload construction
@@ -63,7 +65,7 @@ These types are provider-side. They are not Core contracts and are never seriali
 
 - callers obtain target values only through an authorized provider operation
 - the shared library does not store values or own key management
-- caller-owned password buffers remain caller-owned and must be cleared after use
+- caller-owned password, private-key and passphrase buffers remain caller-owned and must be cleared after use
 - intermediate JSON, signature, signed payload and copied key buffers are cleared after encoding
 - Guacamole's required AES-CBC format is isolated to this adapter and locally documented
 - browser code never receives a raw provider key or target secret
