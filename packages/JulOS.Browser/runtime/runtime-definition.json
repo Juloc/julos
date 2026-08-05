@@ -1,0 +1,18 @@
+{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.browser",
+  "ImageRepository": "ghcr.io/juloc/julos-browser-runtime",
+  "DisplayProtocol": "vnc",
+  "DisplayPort": 5900,
+  "Limits": {
+    "MemoryMegabytes": 1024,
+    "CpuLimit": 2.0,
+    "PidsLimit": 256
+  },
+  "Environment": {
+    "JULOS_START_URL": "about:blank"
+  },
+  "RequiredSecretEnvironment": [
+    "JULOS_VNC_PASSWORD"
+  ]
+}
