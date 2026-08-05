@@ -1,0 +1,157 @@
+# Publishes the isolated Browser runtime only from the validated JulOS integration branch.
+# Pull requests never receive package write access.
+
+name: Publish Browser Runtime
+
+on:
+  push:
+    branches:
+      - agent/complete-julos-work-breakdown
+    paths:
+      - VERSION
+      - packages/JulOS.Browser/runtime/**
+      - .github/workflows/publish-browser-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-browser-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/juloc/julos-browser-runtime
+
+jobs:
+  publish:
+    name: Validate, build, attest and publish
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Validate the complete repository
+        run: sh tools/validate.sh
+
+      - name: Read immutable image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "VERSION is not a supported immutable image version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse an existing immutable version
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${{ steps.version.outputs.version }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Browser runtime version already exists: $image" >&2
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish the immutable runtime
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/JulOS.Browser/runtime/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=julos-browser-runtime
+          cache-to: type=gha,mode=max,scope=julos-browser-runtime
+          provenance: false
+          sbom: false
+
+      - name: Attest image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record immutable runtime reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          reference="${IMAGE_NAME}@${{ steps.image.outputs.digest }}"
+          printf '%s\n' "$reference" > browser-runtime-reference.txt
+          printf '%s  %s\n' "${{ steps.image.outputs.digest }}" "${IMAGE_NAME}" > browser-runtime-digest.txt
+
+      - name: Upload runtime evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: JulOS-Browser-Runtime-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            browser-runtime-reference.txt
+            browser-runtime-digest.txt
+          if-no-files-found: error
+          retention-days: 90
