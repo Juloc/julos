@@ -1,4 +1,4 @@
-# JulOS 0.3.0 alpha
+﻿# JulOS 0.3.0 alpha
 
 This directory installs the first testable JulOS alpha from immutable container tags. It is intended for evaluation on a trusted host, not direct public exposure.
 
