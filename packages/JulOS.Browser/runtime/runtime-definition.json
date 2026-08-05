@@ -2,6 +2,8 @@
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.browser",
   "ImageRepository": "ghcr.io/juloc/julos-browser-runtime",
+  "ImageReferenceFormat": "ghcr.io/juloc/julos-browser-runtime:{version}@sha256:{digest}",
+  "NetworkPolicy": "configured-isolated",
   "DisplayProtocol": "vnc",
   "DisplayPort": 5900,
   "Limits": {
