@@ -81,17 +81,16 @@ internal static class RemoteDisplayEndpoints
                 "Remote display requires a WebSocket request.");
         }
 
-        var subprotocol = gateway.WebSocketSubprotocol;
         var requestedProtocols = context.WebSockets.WebSocketRequestedProtocols;
-        if (requestedProtocols.Count != 1
-            || !string.Equals(requestedProtocols[0], subprotocol, StringComparison.Ordinal))
+        if (requestedProtocols.Count != 1)
         {
             return Failure(
                 StatusCodes.Status400BadRequest,
                 "remote.display_subprotocol_required",
-                "Remote display requires the configured WebSocket subprotocol.");
+                "Remote display requires exactly one WebSocket subprotocol.");
         }
 
+        var subprotocol = requestedProtocols[0];
         using var provider = new ClientWebSocket();
         provider.Options.AddSubProtocol(subprotocol);
         try
@@ -118,7 +117,7 @@ internal static class RemoteDisplayEndpoints
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_subprotocol_invalid",
-                "The Remote display provider did not negotiate the configured WebSocket subprotocol.");
+                "The Remote display provider did not negotiate the requested WebSocket subprotocol.");
         }
 
         using var browser = await context.WebSockets
