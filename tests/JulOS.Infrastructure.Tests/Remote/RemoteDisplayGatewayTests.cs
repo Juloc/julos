@@ -9,6 +9,7 @@ public sealed class RemoteDisplayGatewayTests
 {
     private const string CallerPackageId = "de.juloc.julos.remote";
     private const string RuntimeId = "remote-11111111111141118111111111111111";
+    private const string TestSubprotocol = "display-test";
 
     [TestMethod]
     public void IssueCreatesTokenFreeExactDescriptor()
@@ -29,6 +30,7 @@ public sealed class RemoteDisplayGatewayTests
 
         Assert.AreEqual(RemoteDisplayGateway.DisplayKind, descriptor.Kind);
         Assert.AreEqual(RemoteDisplayGateway.ContractVersion, descriptor.ContractVersion);
+        Assert.AreEqual(TestSubprotocol, gateway.WebSocketSubprotocol);
         Assert.AreEqual(clock.GetUtcNow().AddSeconds(60), descriptor.ExpiresAtUtc);
         Assert.IsFalse(descriptor.Endpoint.Contains("token", StringComparison.OrdinalIgnoreCase));
         Assert.IsTrue(descriptor.Endpoint.StartsWith(
@@ -100,7 +102,7 @@ public sealed class RemoteDisplayGatewayTests
     }
 
     [TestMethod]
-    public void ConfigurationRejectsUnsafeOriginsAndProviderTemplates()
+    public void ConfigurationRejectsUnsafeOriginsProviderTemplatesAndSubprotocols()
     {
         var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
 
@@ -108,19 +110,29 @@ public sealed class RemoteDisplayGatewayTests
             RemoteDisplayGateway.Read(
                 Configuration(
                     ("Remote:Display:ProviderEndpointTemplate", "http://provider/{runtimeId}"),
-                    ("Remote:Display:PublicOrigin", "https://os.example.test")),
+                    ("Remote:Display:PublicOrigin", "https://os.example.test"),
+                    ("Remote:Display:WebSocketSubprotocol", TestSubprotocol)),
                 clock));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             RemoteDisplayGateway.Read(
                 Configuration(
                     ("Remote:Display:ProviderEndpointTemplate", "ws://provider/{runtimeId}"),
-                    ("Remote:Display:PublicOrigin", "https://os.example.test/path")),
+                    ("Remote:Display:PublicOrigin", "https://os.example.test/path"),
+                    ("Remote:Display:WebSocketSubprotocol", TestSubprotocol)),
                 clock));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             RemoteDisplayGateway.Read(
                 Configuration(
                     ("Remote:Display:ProviderEndpointTemplate", "ws://provider/{runtimeId}"),
                     ("Remote:Display:PublicOrigin", "https://os.example.test"),
+                    ("Remote:Display:WebSocketSubprotocol", "invalid protocol")),
+                clock));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            RemoteDisplayGateway.Read(
+                Configuration(
+                    ("Remote:Display:ProviderEndpointTemplate", "ws://provider/{runtimeId}"),
+                    ("Remote:Display:PublicOrigin", "https://os.example.test"),
+                    ("Remote:Display:WebSocketSubprotocol", TestSubprotocol),
                     ("Remote:Display:GrantLifetimeSeconds", "301")),
                 clock));
     }
@@ -130,6 +142,7 @@ public sealed class RemoteDisplayGatewayTests
             Configuration(
                 ("Remote:Display:ProviderEndpointTemplate", "ws://provider.test/runtime/{runtimeId}"),
                 ("Remote:Display:PublicOrigin", "https://os.example.test"),
+                ("Remote:Display:WebSocketSubprotocol", TestSubprotocol),
                 ("Remote:Display:GrantLifetimeSeconds", "60")),
             clock);
 
