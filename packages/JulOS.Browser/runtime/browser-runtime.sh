@@ -87,6 +87,8 @@ x11vnc \
     -display "$DISPLAY" \
     -rfbauth "$password_file" \
     -rfbport 5900 \
+    -listen 0.0.0.0 \
+    -no6 \
     -forever \
     -shared \
     -repeat \

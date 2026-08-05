@@ -35,6 +35,8 @@ public sealed partial class BrowserRuntimeTests
 
         StringAssert.Contains(launcher, "JULOS_VNC_PASSWORD is required.");
         StringAssert.Contains(launcher, "unset JULOS_VNC_PASSWORD");
+        StringAssert.Contains(launcher, "-no6");
+        StringAssert.Contains(launcher, "nc -z 127.0.0.1 5900");
         StringAssert.Contains(launcher, "rm -rf \"$runtime_directory\"");
 
         Assert.AreEqual("de.juloc.julos.browser", root.GetProperty("PackageId").GetString());

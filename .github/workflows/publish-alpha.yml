@@ -4,29 +4,14 @@ on:
   pull_request:
     paths:
       - VERSION
-      - Directory.Build.props
-      - Directory.Packages.props
-      - global.json
-      - src/**
-      - packages/**
       - deploy/alpha/**
       - docs/releases/**
-      - tools/**
       - .github/workflows/publish-alpha.yml
   push:
     branches:
       - agent/complete-julos-work-breakdown
     paths:
       - VERSION
-      - Directory.Build.props
-      - Directory.Packages.props
-      - global.json
-      - src/**
-      - packages/**
-      - deploy/alpha/**
-      - docs/releases/**
-      - tools/**
-      - .github/workflows/publish-alpha.yml
   workflow_dispatch:
 
 permissions:
@@ -75,20 +60,19 @@ jobs:
             echo "VERSION must be an alpha prerelease, got: $version" >&2
             exit 1
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && \
+             git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
             echo "Tag v$version already exists; alpha releases are immutable." >&2
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up .NET
-        if: github.event_name != 'pull_request'
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
       - name: Set up Node
-        if: github.event_name != 'pull_request'
         uses: actions/setup-node@v7
         with:
           node-version-file: src/JulOS.Desktop/.nvmrc
@@ -96,7 +80,6 @@ jobs:
           cache-dependency-path: src/JulOS.Desktop/package-lock.json
 
       - name: Cache NuGet packages
-        if: github.event_name != 'pull_request'
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
@@ -104,11 +87,9 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Run complete repository validation
-        if: github.event_name != 'pull_request'
         run: sh tools/validate.sh
 
       - name: Verify validation left the tree unchanged
-        if: github.event_name != 'pull_request'
         run: |
           git status --short
           git diff --stat
