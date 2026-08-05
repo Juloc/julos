@@ -22,6 +22,7 @@ public sealed partial class BrowserRuntimeTests
         var limits = root.GetProperty("Limits");
 
         StringAssert.Matches(dockerfile, DigestPinnedBaseImage());
+        StringAssert.Contains(dockerfile, "FROM ${DEBIAN_IMAGE}");
         StringAssert.Contains(dockerfile, "ARG CHROMIUM_VERSION=");
         StringAssert.Contains(dockerfile, "USER 10001:10001");
         StringAssert.Contains(dockerfile, "EXPOSE 5900/tcp");
@@ -46,6 +47,6 @@ public sealed partial class BrowserRuntimeTests
             "JULOS_VNC_PASSWORD");
     }
 
-    [GeneratedRegex(@"FROM\s+\$\{DEBIAN_IMAGE\}.*DEBIAN_IMAGE=.+@sha256:[0-9a-f]{64}", RegexOptions.Singleline)]
+    [GeneratedRegex(@"ARG DEBIAN_IMAGE=\S+@sha256:[0-9a-f]{64}")]
     private static partial Regex DigestPinnedBaseImage();
 }
