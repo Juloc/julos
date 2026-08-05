@@ -4,8 +4,15 @@ on:
   pull_request:
     paths:
       - VERSION
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - src/**
+      - packages/**
+      - tests/**
       - deploy/alpha/**
       - docs/releases/**
+      - tools/**
       - .github/workflows/publish-alpha.yml
   push:
     branches:
@@ -126,33 +133,22 @@ jobs:
           image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
           smoke_directory="$GITHUB_WORKSPACE/.alpha-smoke"
           env_file="$smoke_directory/.env"
-          mkdir -p "$smoke_directory/secret-keys"
-          openssl rand -base64 32 > "$smoke_directory/secret-keys/primary.key"
+          mkdir -p "$smoke_directory"
 
           container_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
           container_uid="${container_user%%:*}"
-          container_gid="${container_user#*:}"
-          if [ "$container_gid" = "$container_user" ]; then
-            container_gid="$container_uid"
-          fi
-          if [[ ! "$container_uid" =~ ^[0-9]+$ || ! "$container_gid" =~ ^[0-9]+$ ]]; then
+          if [[ ! "$container_uid" =~ ^[0-9]+$ || "$container_uid" = 0 ]]; then
             echo "The server image must declare a numeric non-root runtime user, got: $container_user" >&2
             exit 1
           fi
-          if [ "$container_uid" = 0 ]; then
-            echo "The server image must not run as root." >&2
-            exit 1
-          fi
-          sudo chown -R "$container_uid:$container_gid" "$smoke_directory/secret-keys"
-          sudo chmod 700 "$smoke_directory/secret-keys"
-          sudo chmod 600 "$smoke_directory/secret-keys/primary.key"
 
           postgres_password="$(openssl rand -hex 24)"
+          primary_key="$(openssl rand -base64 32)"
           cat > "$env_file" <<EOF
           JULOS_VERSION=${{ needs.validate.outputs.version }}
           JULOS_SERVER_IMAGE=$image
           JULOS_POSTGRES_PASSWORD=$postgres_password
-          JULOS_SECRET_KEY_RING_PATH=$smoke_directory/secret-keys
+          JULOS_PRIMARY_KEY=$primary_key
           JULOS_BIND_ADDRESS=127.0.0.1
           JULOS_SERVER_PORT=18080
           JULOS_POSTGRES_DB=julos
@@ -165,9 +161,24 @@ jobs:
           }
           trap cleanup EXIT
 
-          docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml config --quiet
-          docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml up --detach --wait --wait-timeout 180
+          compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml)
+          "${compose[@]}" config --quiet
+          "${compose[@]}" up --detach --wait --wait-timeout 180
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
+
+          "${compose[@]}" exec -T server sh -c \
+            'test -e /usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2 && key=$(find /var/lib/julos/data-protection -name "key-*.xml" -print -quit) && test -n "$key" && grep -q julosDataProtection "$key"'
+
+          "${compose[@]}" restart server
+          "${compose[@]}" up --detach --wait --wait-timeout 120
+          curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
+
+          logs="$("${compose[@]}" logs --no-color server migrate)"
+          if grep -Eq 'Cannot load library libgssapi_krb5|may not be persisted outside of the container|No XML encryptor configured' <<< "$logs"; then
+            echo "$logs" >&2
+            echo "The alpha stack emitted a known runtime dependency or key-persistence warning." >&2
+            exit 1
+          fi
 
       - name: Prepare release files
         shell: bash
