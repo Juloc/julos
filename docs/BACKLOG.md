@@ -37,8 +37,9 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | REM-002 | Julgate inventory and extraction boundaries | Done | Verified Julgate responsibilities are mapped to shared transport, Remote, Runtime Manager, Desktop, Files, Browser, migration-only code or explicit rejection. |
 | REM-003 | Shared transport implementation | Done | `JulOS.Remote.Transport` 0.1.0 is the single tested, immutable and attested implementation consumed by JulOS Remote and Julgate; both repositories validate successfully. |
 | REM-004 | Remote worker and session orchestration | Done | Exact-idempotent ownership, policy-gated runtimes, authenticated provider events, lifecycle enforcement, cleanup, explicit detach and active-session resume authorization are implemented and validated. |
-| REM-005 | Functional Remote display client and same-origin transport | In progress | PR #39 provides the display path; the acceptance follow-up adds explicit keyboard release, debounced resize and reconnect-safe handlers. Deployed provider validation remains. |
-| Phase 6 | Remote and Browser | In progress | REM-001 through REM-004 are complete; REM-005 is functionally implemented in PR #39 and awaits final validation plus deployed provider testing. Browser remains planned. |
+| REM-005 | Functional Remote display client and same-origin transport | In progress | Repository acceptance is complete through PRs #39 and #40; deployed provider, browser and Android validation remains in #37. |
+| REM-006 | RDP provider integration | In progress | PR #42 adds additive explicit Guacamole 1.6.0 security, certificate, resize and clipboard policy plus distinct account-unavailable failure handling; real provider integration and deployed validation remain. |
+| Phase 6 | Remote and Browser | In progress | REM-001 through REM-005 are repository-complete apart from deployed evidence; REM-006 is in progress. VNC, SSH and Browser remain planned. |
 | Phase 7 | Docker and Proxmox | Planned | Depends on Agent, packages, widgets and Remote for console. |
 | Phase 8 | Files and Caddy | Planned | Includes separate Caddy UI integration API work. |
 | Phase 9 | Discovery and operational hardening | Planned | Depends on stable Agent and package runtime. |
@@ -94,6 +95,8 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 - the complete repository validator passes with 381 .NET tests, 91 Desktop tests, architecture checks, frontend build, manifest validation, container build and a clean working tree.
 
 REM-005 has a token-free graphical descriptor and authenticated same-origin WebSocket proxy. PR #39 builds the existing Remote custom element with the official Apache Guacamole 1.6.0 browser artifact, pinned by ZIP and library SHA-256. The browser, JulOS proxy and hidden provider negotiate one exact WebSocket subprotocol before frames are forwarded. One `Guacamole.Keyboard` receives desktop and mobile `InputSink` events, `Ctrl+Alt+Shift+Escape` releases capture and resets pressed keys, exactly one pointer or touchscreen adapter is active, resize is collapsed through one 150 ms scheduler, and reconnect, full-screen, failure and teardown states are visible. The remaining REM-005 work is deployed provider validation and any provider-specific UX defects found there.
+
+REM-006 keeps RDP ownership inside `JulOS.Remote.Transport` and the Remote package. The additive options contract preserves the published 0.1.0 constructor while validating exact Guacamole security modes, strict/ignore/TOFU/pinned certificate policy, display-update/reconnect resize policy and directional clipboard settings. NLA-based modes require credentials before launch. `remote.account_unavailable` remains distinct from `remote.authentication_failed` when a trusted provider can classify the target account state.
 
 ## Specification status
 
