@@ -10,7 +10,6 @@ namespace JulOS.Server.Remote;
 internal static class RemoteDisplayEndpoints
 {
     private const int BufferSize = 16 * 1024;
-    private const string GuacamoleSubprotocol = "guacamole";
 
     internal static IEndpointRouteBuilder MapJulOsRemoteDisplay(this IEndpointRouteBuilder endpoints)
     {
@@ -82,21 +81,19 @@ internal static class RemoteDisplayEndpoints
                 "Remote display requires a WebSocket request.");
         }
 
+        var subprotocol = gateway.WebSocketSubprotocol;
         var requestedProtocols = context.WebSockets.WebSocketRequestedProtocols;
         if (requestedProtocols.Count != 1
-            || !string.Equals(
-                requestedProtocols[0],
-                GuacamoleSubprotocol,
-                StringComparison.Ordinal))
+            || !string.Equals(requestedProtocols[0], subprotocol, StringComparison.Ordinal))
         {
             return Failure(
                 StatusCodes.Status400BadRequest,
                 "remote.display_subprotocol_required",
-                "Remote display requires the guacamole WebSocket subprotocol.");
+                "Remote display requires the configured WebSocket subprotocol.");
         }
 
         using var provider = new ClientWebSocket();
-        provider.Options.AddSubProtocol(GuacamoleSubprotocol);
+        provider.Options.AddSubProtocol(subprotocol);
         try
         {
             await provider.ConnectAsync(providerEndpoint, cancellationToken).ConfigureAwait(false);
@@ -116,19 +113,16 @@ internal static class RemoteDisplayEndpoints
                 "The Remote display provider is unavailable.");
         }
 
-        if (!string.Equals(
-                provider.SubProtocol,
-                GuacamoleSubprotocol,
-                StringComparison.Ordinal))
+        if (!string.Equals(provider.SubProtocol, subprotocol, StringComparison.Ordinal))
         {
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_subprotocol_invalid",
-                "The Remote display provider did not negotiate the guacamole WebSocket subprotocol.");
+                "The Remote display provider did not negotiate the configured WebSocket subprotocol.");
         }
 
         using var browser = await context.WebSockets
-            .AcceptWebSocketAsync(GuacamoleSubprotocol)
+            .AcceptWebSocketAsync(subprotocol)
             .ConfigureAwait(false);
         await ProxyAsync(browser, provider, cancellationToken).ConfigureAwait(false);
         return Results.Empty;
