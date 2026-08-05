@@ -10,7 +10,7 @@
 /// <param name="UserName">Optional target user name.</param>
 /// <param name="PasswordUtf8">Optional target password encoded as UTF-8. The caller owns and clears the backing buffer.</param>
 /// <param name="Domain">Optional desktop domain.</param>
-/// <param name="IgnoreCertificate">Whether the desktop provider may ignore the target certificate.</param>
+/// <param name="IgnoreCertificate">Legacy compatibility flag used only when <see cref="RdpOptions"/> is absent.</param>
 /// <param name="KeyboardLayout">Optional desktop keyboard layout.</param>
 /// <param name="TerminalFontSize">Requested terminal font size.</param>
 /// <param name="EnableDrive">Whether desktop drive redirection is enabled.</param>
@@ -35,7 +35,13 @@ public sealed record GuacamoleLaunchRequest(
     string? DriveName,
     string? DrivePath,
     string? ClientName,
-    DateTimeOffset ExpiresAtUtc);
+    DateTimeOffset ExpiresAtUtc)
+{
+    /// <summary>
+    /// Gets explicit RDP provider policy. Existing consumers may leave this unset to retain 0.1.0 behavior.
+    /// </summary>
+    public GuacamoleRdpOptions? RdpOptions { get; init; }
+}
 
 /// <summary>Encrypted Guacamole launch data produced inside the provider boundary.</summary>
 /// <param name="EncryptedData">Base64-encoded encrypted and authenticated JSON payload.</param>
