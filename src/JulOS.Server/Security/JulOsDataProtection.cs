@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 
@@ -40,11 +41,16 @@ public sealed class JulOsDataProtectionKeyProvider
         var encodedKey = File.ReadAllText(keyPath).Trim();
         var key = new byte[KeySize];
 
-        var decoded = encodedKey.StartsWith("hex:", StringComparison.OrdinalIgnoreCase)
-            ? Convert.TryFromHexString(encodedKey.AsSpan(4), key, out var bytesWritten)
-                && bytesWritten == KeySize
-            : Convert.TryFromBase64String(encodedKey, key, out bytesWritten)
+        bool decoded;
+        if (encodedKey.StartsWith("hex:", StringComparison.OrdinalIgnoreCase))
+        {
+            decoded = TryDecodeHex(encodedKey.AsSpan(4), key);
+        }
+        else
+        {
+            decoded = Convert.TryFromBase64String(encodedKey, key, out var bytesWritten)
                 && bytesWritten == KeySize;
+        }
 
         if (!decoded)
         {
@@ -54,6 +60,28 @@ public sealed class JulOsDataProtectionKeyProvider
         }
 
         return key;
+    }
+
+    private static bool TryDecodeHex(ReadOnlySpan<char> encodedKey, Span<byte> key)
+    {
+        if (encodedKey.Length != key.Length * 2)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < key.Length; index++)
+        {
+            if (!byte.TryParse(
+                    encodedKey.Slice(index * 2, 2),
+                    NumberStyles.AllowHexSpecifier,
+                    CultureInfo.InvariantCulture,
+                    out key[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
