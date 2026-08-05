@@ -17,23 +17,19 @@ public sealed class RemoteDisplayGateway
 
     private const int DefaultGrantLifetimeSeconds = 60;
     private const int MaximumGrantLifetimeSeconds = 300;
-    private const int MaximumSubprotocolLength = 128;
     private readonly string providerEndpointTemplate;
     private readonly string publicOrigin;
-    private readonly string webSocketSubprotocol;
     private readonly TimeSpan grantLifetime;
     private readonly TimeProvider timeProvider;
 
     private RemoteDisplayGateway(
         string providerEndpointTemplate,
         string publicOrigin,
-        string webSocketSubprotocol,
         TimeSpan grantLifetime,
         TimeProvider timeProvider)
     {
         this.providerEndpointTemplate = providerEndpointTemplate;
         this.publicOrigin = publicOrigin;
-        this.webSocketSubprotocol = webSocketSubprotocol;
         this.grantLifetime = grantLifetime;
         this.timeProvider = timeProvider;
     }
@@ -41,18 +37,7 @@ public sealed class RemoteDisplayGateway
     /// <summary>Gets whether the display gateway has complete configuration.</summary>
     public bool IsConfigured =>
         this.providerEndpointTemplate.Length > 0
-        && this.publicOrigin.Length > 0
-        && this.webSocketSubprotocol.Length > 0;
-
-    /// <summary>Gets the configured provider-neutral WebSocket subprotocol.</summary>
-    public string WebSocketSubprotocol
-    {
-        get
-        {
-            EnsureConfigured();
-            return this.webSocketSubprotocol;
-        }
-    }
+        && this.publicOrigin.Length > 0;
 
     /// <summary>Reads display gateway configuration. Missing complete configuration disables grants.</summary>
     public static RemoteDisplayGateway Read(IConfiguration configuration, TimeProvider timeProvider)
@@ -64,17 +49,13 @@ public sealed class RemoteDisplayGateway
             ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE");
         var configuredOrigin = configuration["Remote:Display:PublicOrigin"]
             ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN");
-        var configuredSubprotocol = configuration["Remote:Display:WebSocketSubprotocol"]
-            ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_WEBSOCKET_SUBPROTOCOL");
         var lifetimeValue = configuration["Remote:Display:GrantLifetimeSeconds"]
             ?? Environment.GetEnvironmentVariable("JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS");
 
         if (string.IsNullOrWhiteSpace(providerTemplate)
-            && string.IsNullOrWhiteSpace(configuredOrigin)
-            && string.IsNullOrWhiteSpace(configuredSubprotocol))
+            && string.IsNullOrWhiteSpace(configuredOrigin))
         {
             return new RemoteDisplayGateway(
-                string.Empty,
                 string.Empty,
                 string.Empty,
                 TimeSpan.Zero,
@@ -83,7 +64,6 @@ public sealed class RemoteDisplayGateway
 
         providerTemplate = ValidateProviderTemplate(providerTemplate);
         configuredOrigin = ValidatePublicOrigin(configuredOrigin);
-        configuredSubprotocol = ValidateWebSocketSubprotocol(configuredSubprotocol);
 
         var lifetimeSeconds = string.IsNullOrWhiteSpace(lifetimeValue)
             ? DefaultGrantLifetimeSeconds
@@ -103,7 +83,6 @@ public sealed class RemoteDisplayGateway
         return new RemoteDisplayGateway(
             providerTemplate,
             configuredOrigin,
-            configuredSubprotocol,
             TimeSpan.FromSeconds(lifetimeSeconds),
             timeProvider);
     }
@@ -249,24 +228,6 @@ public sealed class RemoteDisplayGateway
         TryNormalizePublicOrigin(value)
         ?? throw new InvalidOperationException(
             "Remote display public origin must be one absolute HTTP or HTTPS origin without path, query, fragment or user information.");
-
-    private static string ValidateWebSocketSubprotocol(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Length > MaximumSubprotocolLength
-            || value.Any(character => !IsHttpTokenCharacter(character)))
-        {
-            throw new InvalidOperationException(
-                "Remote display WebSocket subprotocol must be one non-empty HTTP token of at most 128 characters.");
-        }
-
-        return value;
-    }
-
-    private static bool IsHttpTokenCharacter(char character) =>
-        char.IsAsciiLetterOrDigit(character)
-        || character is '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-'
-            or '.' or '^' or '_' or '`' or '|' or '~';
 
     private static string? TryNormalizePublicOrigin(string? value)
     {
