@@ -46,6 +46,11 @@ public sealed record GuacamoleLaunchRequest(
     /// Gets explicit VNC provider policy. Existing consumers may leave this unset to retain 0.1.0 behavior.
     /// </summary>
     public GuacamoleVncOptions? VncOptions { get; init; }
+
+    /// <summary>
+    /// Gets explicit SSH provider policy. Existing consumers may leave this unset to retain 0.1.0 behavior.
+    /// </summary>
+    public GuacamoleSshOptions? SshOptions { get; init; }
 }
 
 /// <summary>Encrypted Guacamole launch data produced inside the provider boundary.</summary>
