@@ -1,6 +1,11 @@
 name: Complete REM-005 Guacamole handshake
 
 on:
+  push:
+    branches:
+      - agent/rem-005-package-display-client
+    paths:
+      - .github/workflows/complete-rem-005-guacamole-handshake.yml
   pull_request:
     branches:
       - agent/complete-julos-work-breakdown
@@ -16,7 +21,7 @@ concurrency:
 
 jobs:
   complete:
-    if: github.repository == 'Juloc/julos' && github.head_ref == 'agent/rem-005-package-display-client'
+    if: github.repository == 'Juloc/julos' && (github.ref == 'refs/heads/agent/rem-005-package-display-client' || github.head_ref == 'agent/rem-005-package-display-client')
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR branch
