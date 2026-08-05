@@ -186,6 +186,7 @@ export async function register(context) {
     #keyboard = null;
     #pointer = null;
     #resizeObserver = null;
+    #resizeScheduler = null;
 
     connectedCallback() {
       if (this.#connected) {
@@ -220,6 +221,7 @@ export async function register(context) {
           .viewer { min-width: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(18rem, 1fr) auto; }
           .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .65rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
           .toolbar .spacer { flex: 1; }
+          .keyboard-hint { font-size: .85rem; opacity: .75; }
           .stage { min-width: 0; min-height: 18rem; overflow: hidden; position: relative; background: #111; outline: none; touch-action: none; }
           .stage > div { transform-origin: top left; }
           .status { margin: 0; padding: .65rem; min-height: 2.5rem; border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
@@ -240,6 +242,7 @@ export async function register(context) {
             <div class="toolbar">
               <button id="reconnect" type="button" disabled>${de ? 'Neu verbinden' : 'Reconnect'}</button>
               <button id="fullscreen" type="button" disabled>${de ? 'Vollbild' : 'Full screen'}</button>
+              <span class="keyboard-hint">${de ? 'Tastatur freigeben: Strg+Alt+Umschalt+Esc' : 'Release keyboard: Ctrl+Alt+Shift+Esc'}</span>
               <span class="spacer"></span>
               <button id="disconnect" type="button" disabled>${de ? 'Trennen' : 'Disconnect'}</button>
             </div>
@@ -407,6 +410,11 @@ export async function register(context) {
         stage,
         client,
         isCoarsePointer(),
+        () => this.#setStatus(
+          context.language === 'de'
+            ? 'Tastatur freigegeben. Anzeige anklicken, um sie wieder zu erfassen.'
+            : 'Keyboard released. Click the display to capture it again.',
+        ),
       );
       this.#pointer = createPointerPipeline(
         Guacamole,
@@ -414,7 +422,10 @@ export async function register(context) {
         client,
         isCoarsePointer(),
       );
-      stage.addEventListener('pointerdown', () => stage.focus(), { passive: true });
+      stage.onpointerdown = () => {
+        stage.focus();
+        this.#setStatus(context.language === 'de' ? 'Verbunden' : 'Connected', 'connected');
+      };
 
       client.onstatechange = (state) => {
         if (state === Guacamole.Client.State.CONNECTED) {
@@ -435,9 +446,12 @@ export async function register(context) {
         this.#required('reconnect').disabled = this.#session === null;
       };
 
-      this.#resizeObserver = new ResizeObserver(() => resizeDisplay(stage, display, client));
+      this.#resizeScheduler = createResizeScheduler(
+        () => resizeDisplay(stage, display, client),
+      );
+      this.#resizeObserver = new ResizeObserver(() => this.#resizeScheduler?.schedule());
       this.#resizeObserver.observe(stage);
-      resizeDisplay(stage, display, client);
+      this.#resizeScheduler.flush();
       client.connect(endpoint.connectData);
       stage.focus();
       this.#updateButtons();
@@ -465,6 +479,8 @@ export async function register(context) {
     #stopClient() {
       this.#resizeObserver?.disconnect();
       this.#resizeObserver = null;
+      this.#resizeScheduler?.dispose();
+      this.#resizeScheduler = null;
       this.#keyboard?.dispose();
       this.#keyboard = null;
       this.#pointer?.dispose();
@@ -478,7 +494,10 @@ export async function register(context) {
       this.#client = null;
       this.#tunnel = null;
       const stage = this.shadowRoot?.getElementById('stage');
-      stage?.replaceChildren();
+      if (stage !== null && stage !== undefined) {
+        stage.onpointerdown = null;
+        stage.replaceChildren();
+      }
       const fullscreen = this.shadowRoot?.getElementById('fullscreen');
       if (fullscreen instanceof HTMLButtonElement) {
         fullscreen.disabled = true;
@@ -578,7 +597,14 @@ export function splitDisplayEndpoint(endpoint, origin = currentOrigin()) {
   };
 }
 
-export function createKeyboardPipeline(api, target, client, mobile) {
+export function isKeyboardReleaseShortcut(event) {
+  return event.key === 'Escape'
+    && event.ctrlKey === true
+    && event.altKey === true
+    && event.shiftKey === true;
+}
+
+export function createKeyboardPipeline(api, target, client, mobile, onRelease = () => {}) {
   const inputSink = mobile ? new api.InputSink() : null;
   const sinkElement = inputSink?.getElement() ?? null;
   if (sinkElement !== null) {
@@ -592,17 +618,72 @@ export function createKeyboardPipeline(api, target, client, mobile) {
   keyboard.onkeyup = (keysym) => {
     client.sendKeyEvent(0, keysym);
   };
+  const releaseKeyboard = (event) => {
+    if (!isKeyboardReleaseShortcut(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (typeof keyboard.reset === 'function') {
+      keyboard.reset();
+    }
+    target.blur?.();
+    onRelease();
+  };
+  target.addEventListener?.('keydown', releaseKeyboard, true);
 
   return {
     keyboard,
     inputSink,
     dispose() {
+      target.removeEventListener?.('keydown', releaseKeyboard, true);
       keyboard.onkeydown = null;
       keyboard.onkeyup = null;
       if (typeof keyboard.reset === 'function') {
         keyboard.reset();
       }
       sinkElement?.remove();
+    },
+  };
+}
+
+export function createResizeScheduler(callback, delay = 150, timers = globalThis) {
+  let timeout = null;
+  let disposed = false;
+
+  const run = () => {
+    timeout = null;
+    if (!disposed) {
+      callback();
+    }
+  };
+
+  return {
+    schedule() {
+      if (disposed) {
+        return;
+      }
+      if (timeout !== null) {
+        timers.clearTimeout(timeout);
+      }
+      timeout = timers.setTimeout(run, delay);
+    },
+    flush() {
+      if (disposed) {
+        return;
+      }
+      if (timeout !== null) {
+        timers.clearTimeout(timeout);
+        timeout = null;
+      }
+      callback();
+    },
+    dispose() {
+      disposed = true;
+      if (timeout !== null) {
+        timers.clearTimeout(timeout);
+        timeout = null;
+      }
     },
   };
 }

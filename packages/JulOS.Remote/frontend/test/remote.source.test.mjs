@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   createKeyboardPipeline,
   createPointerPipeline,
+  createResizeScheduler,
+  isKeyboardReleaseShortcut,
   splitDisplayEndpoint,
   validateDisplayDescriptor,
 } from '../remote.source.js';
@@ -33,12 +35,15 @@ test('display descriptor stays same-origin and token-free', () => {
   }));
 });
 
-test('mobile text input uses exactly one keyboard pipeline', () => {
+test('mobile text input uses one keyboard pipeline and an explicit local release shortcut', () => {
   let keyboardCount = 0;
   let sinkCount = 0;
   const keyEvents = [];
   const appended = [];
   const removed = [];
+  const listeners = new Map();
+  let blurred = 0;
+  let released = 0;
 
   class Keyboard {
     constructor(target) {
@@ -65,9 +70,24 @@ test('mobile text input uses exactly one keyboard pipeline', () => {
     }
   }
 
-  const target = { append: (element) => appended.push(element) };
+  const target = {
+    append: (element) => appended.push(element),
+    addEventListener: (name, handler, capture) => listeners.set(`${name}:${capture}`, handler),
+    removeEventListener: (name, handler, capture) => {
+      if (listeners.get(`${name}:${capture}`) === handler) {
+        listeners.delete(`${name}:${capture}`);
+      }
+    },
+    blur: () => { blurred += 1; },
+  };
   const client = { sendKeyEvent: (...args) => keyEvents.push(args) };
-  const pipeline = createKeyboardPipeline({ Keyboard, InputSink }, target, client, true);
+  const pipeline = createKeyboardPipeline(
+    { Keyboard, InputSink },
+    target,
+    client,
+    true,
+    () => { released += 1; },
+  );
 
   assert.equal(keyboardCount, 1);
   assert.equal(sinkCount, 1);
@@ -76,9 +96,65 @@ test('mobile text input uses exactly one keyboard pipeline', () => {
   pipeline.keyboard.onkeyup(65);
   assert.deepEqual(keyEvents, [[1, 65], [0, 65]]);
 
-  pipeline.dispose();
+  const releaseHandler = listeners.get('keydown:true');
+  assert.equal(typeof releaseHandler, 'function');
+  const event = {
+    key: 'Escape',
+    ctrlKey: true,
+    altKey: true,
+    shiftKey: true,
+    prevented: 0,
+    stopped: 0,
+    preventDefault() { this.prevented += 1; },
+    stopImmediatePropagation() { this.stopped += 1; },
+  };
+  assert.equal(isKeyboardReleaseShortcut(event), true);
+  releaseHandler(event);
+  assert.equal(event.prevented, 1);
+  assert.equal(event.stopped, 1);
+  assert.equal(blurred, 1);
+  assert.equal(released, 1);
   assert.equal(pipeline.keyboard.resetCount, 1);
+
+  pipeline.dispose();
+  assert.equal(pipeline.keyboard.resetCount, 2);
   assert.equal(removed.length, 1);
+  assert.equal(listeners.size, 0);
+});
+
+test('resize delivery collapses repeated observations and disposal cancels pending work', () => {
+  let nextId = 0;
+  const pending = new Map();
+  const delays = [];
+  const timers = {
+    setTimeout(callback, delay) {
+      nextId += 1;
+      pending.set(nextId, callback);
+      delays.push(delay);
+      return nextId;
+    },
+    clearTimeout(id) {
+      pending.delete(id);
+    },
+  };
+  let runs = 0;
+  const scheduler = createResizeScheduler(() => { runs += 1; }, 150, timers);
+
+  scheduler.schedule();
+  scheduler.schedule();
+  scheduler.schedule();
+  assert.equal(pending.size, 1);
+  assert.deepEqual(delays, [150, 150, 150]);
+  assert.equal(runs, 0);
+
+  const callback = [...pending.values()][0];
+  callback();
+  assert.equal(runs, 1);
+
+  scheduler.schedule();
+  scheduler.dispose();
+  assert.equal(pending.size, 0);
+  assert.equal(runs, 1);
 });
 
 test('pointer input selects one desktop or touch adapter', () => {
