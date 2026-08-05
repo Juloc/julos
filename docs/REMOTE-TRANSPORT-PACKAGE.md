@@ -28,11 +28,13 @@ JulOS.Remote.Transport
 
 The root `VERSION` file is the sole package-version source. Published versions are immutable. A changed package requires a new version; the publication workflow never uses `--skip-duplicate` and therefore fails when a version already exists.
 
+Version `0.1.0` is the initial Julgate-compatible extraction. Version `0.2.0` is the first additive provider-policy release and preserves the published constructor while adding explicit RDP and VNC options.
+
 The package metadata links every version to `https://github.com/Juloc/julos` and records the exact source commit supplied by the workflow.
 
-## Initial shared surface
+## Shared surface
 
-The REM-003 first slice contains:
+The package contains:
 
 - `RemoteTransportProtocols`
   - concrete RDP, VNC and SSH identities
@@ -40,6 +42,11 @@ The REM-003 first slice contains:
 - `GuacamoleLaunchRequest`
   - provider-side target and option input
   - password represented as caller-owned UTF-8 memory
+  - additive explicit RDP and VNC policy properties
+- `GuacamoleRdpOptions`
+  - security, certificate, resize and clipboard policy
+- `GuacamoleVncOptions`
+  - resize, clipboard, cursor, display quality and bounded retry policy
 - `GuacamoleJsonLaunchEncoder`
   - Guacamole parameter mapping
   - JSON-auth payload construction
@@ -66,7 +73,7 @@ These types are provider-side. They are not Core contracts and are never seriali
 
 ### JulOS Remote
 
-The Remote worker references the source project directly. The first slice consumes the shared protocol catalog in its health model. REM-004 later consumes the launch encoder through provider orchestration.
+The Remote worker references the source project directly. It consumes the shared protocol catalog and launch encoder through the provider orchestration boundary.
 
 ### Julgate
 
