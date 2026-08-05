@@ -22,9 +22,13 @@ using JulOS.Server.Profile;
 using JulOS.Server.Remote;
 using JulOS.Server.SafeMode;
 using JulOS.Server.Secrets;
+using JulOS.Server.Security;
 
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 if (HealthProbeCommand.IsRequested(args))
 {
@@ -59,10 +63,19 @@ builder.Services.AddSingleton(SafeModeState.Read(builder.Configuration));
 builder.Services.AddJulOsRealtimeEvents();
 builder.Services.AddJulOsPackageManagement(builder.Configuration, coreDatabase);
 var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
+builder.Services.AddSingleton(secretOptions);
 builder.Services.AddJulOsSecretReferences(
     secretOptions.ActiveKeyId,
     secretOptions.KeyRingPath,
     secretOptions.LeaseLifetime);
+builder.Services
+    .AddDataProtection()
+    .SetApplicationName("JulOS")
+    .PersistKeysToFileSystem(new DirectoryInfo(JulOsDataProtection.KeyRingPath));
+builder.Services.AddSingleton<JulOsDataProtectionKeyProvider>();
+builder.Services.AddSingleton<
+    IConfigureOptions<KeyManagementOptions>,
+    JulOsDataProtectionOptions>();
 
 builder.Services
     .AddHealthChecks()
