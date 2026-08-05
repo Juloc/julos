@@ -10,6 +10,8 @@ public sealed class GuacamoleJsonLaunchEncoder
 {
     private const int JsonSecretKeyBytes = 16;
     private const int SignatureBytes = 32;
+    private const int MaximumCertificateFingerprints = 16;
+    private const int MaximumPasswordBytes = 4096;
     private const string DefaultKeyboardLayout = "de-de-qwertz";
     private const int DefaultTerminalFontSize = 12;
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -110,7 +112,7 @@ public sealed class GuacamoleJsonLaunchEncoder
 
         if (string.Equals(request.Protocol, RemoteTransportProtocols.Rdp, StringComparison.Ordinal))
         {
-            WriteDesktopParameters(writer, request);
+            WriteDesktopParameters(writer, request, ResolveRdpOptions(request));
         }
         else if (string.Equals(request.Protocol, RemoteTransportProtocols.Ssh, StringComparison.Ordinal))
         {
@@ -123,21 +125,23 @@ public sealed class GuacamoleJsonLaunchEncoder
 
     private static void WriteDesktopParameters(
         Utf8JsonWriter writer,
-        GuacamoleLaunchRequest request)
+        GuacamoleLaunchRequest request,
+        GuacamoleRdpOptions options)
     {
         if (!string.IsNullOrWhiteSpace(request.Domain))
         {
             writer.WriteString("domain", request.Domain);
         }
 
-        writer.WriteString("security", "any");
-        writer.WriteString("ignore-cert", request.IgnoreCertificate ? "true" : "false");
+        writer.WriteString("security", options.SecurityMode);
+        WriteCertificatePolicy(writer, options);
         writer.WriteString(
             "server-layout",
             string.IsNullOrWhiteSpace(request.KeyboardLayout)
                 ? DefaultKeyboardLayout
                 : request.KeyboardLayout.Trim());
-        writer.WriteString("resize-method", "reconnect");
+        writer.WriteString("resize-method", options.ResizeMethod);
+        WriteClipboardPolicy(writer, options.ClipboardPolicy);
         writer.WriteString("enable-wallpaper", "false");
 
         if (!string.IsNullOrWhiteSpace(request.ClientName))
@@ -152,6 +156,80 @@ public sealed class GuacamoleJsonLaunchEncoder
             writer.WriteString("create-drive-path", "true");
             writer.WriteString("drive-path", request.DrivePath);
         }
+    }
+
+    private static void WriteCertificatePolicy(
+        Utf8JsonWriter writer,
+        GuacamoleRdpOptions options)
+    {
+        var ignore = string.Equals(
+            options.CertificatePolicy,
+            GuacamoleRdpCertificatePolicies.Ignore,
+            StringComparison.Ordinal);
+        writer.WriteString("ignore-cert", ignore ? "true" : "false");
+
+        if (string.Equals(
+                options.CertificatePolicy,
+                GuacamoleRdpCertificatePolicies.TrustOnFirstUse,
+                StringComparison.Ordinal))
+        {
+            writer.WriteString("cert-tofu", "true");
+        }
+        else if (string.Equals(
+                options.CertificatePolicy,
+                GuacamoleRdpCertificatePolicies.Pinned,
+                StringComparison.Ordinal))
+        {
+            writer.WriteString(
+                "cert-fingerprints",
+                string.Join(
+                    ",",
+                    options.CertificateFingerprints.Select(NormalizeCertificateFingerprint)));
+        }
+    }
+
+    private static void WriteClipboardPolicy(Utf8JsonWriter writer, string policy)
+    {
+        var disableCopy = policy is
+            GuacamoleRdpClipboardPolicies.BrowserToRemote
+            or GuacamoleRdpClipboardPolicies.Disabled;
+        var disablePaste = policy is
+            GuacamoleRdpClipboardPolicies.RemoteToBrowser
+            or GuacamoleRdpClipboardPolicies.Disabled;
+
+        writer.WriteString("disable-copy", disableCopy ? "true" : "false");
+        writer.WriteString("disable-paste", disablePaste ? "true" : "false");
+    }
+
+    private static GuacamoleRdpOptions ResolveRdpOptions(GuacamoleLaunchRequest request)
+    {
+        if (!string.Equals(request.Protocol, RemoteTransportProtocols.Rdp, StringComparison.Ordinal))
+        {
+            if (request.RdpOptions is not null)
+            {
+                throw new ArgumentException(
+                    "RDP options cannot be supplied for another Remote protocol.",
+                    nameof(request));
+            }
+
+            throw new ArgumentException("The Remote protocol is not RDP.", nameof(request));
+        }
+
+        var options = request.RdpOptions
+            ?? GuacamoleRdpOptions.CompatibilityDefaults(request.IgnoreCertificate);
+        if (request.RdpOptions is not null
+            && request.IgnoreCertificate
+            && !string.Equals(
+                options.CertificatePolicy,
+                GuacamoleRdpCertificatePolicies.Ignore,
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "The legacy ignore-certificate flag conflicts with explicit RDP certificate policy.",
+                nameof(request));
+        }
+
+        return options;
     }
 
     private static string CreateClientIdentifier(string connectionName)
@@ -180,6 +258,12 @@ public sealed class GuacamoleJsonLaunchEncoder
         ValidateText(request.ConnectionName, 256, nameof(request.ConnectionName));
         ValidateText(request.SessionId, 128, nameof(request.SessionId));
         ValidateText(request.Host, 253, nameof(request.Host));
+        ValidateOptionalText(request.UserName, 256, nameof(request.UserName));
+        ValidateOptionalText(request.Domain, 256, nameof(request.Domain));
+        ValidateOptionalText(request.KeyboardLayout, 64, nameof(request.KeyboardLayout));
+        ValidateOptionalText(request.DriveName, 128, nameof(request.DriveName));
+        ValidateOptionalText(request.DrivePath, 1024, nameof(request.DrivePath));
+        ValidateOptionalText(request.ClientName, 128, nameof(request.ClientName));
 
         if (!RemoteTransportProtocols.IsSupported(request.Protocol))
         {
@@ -192,6 +276,10 @@ public sealed class GuacamoleJsonLaunchEncoder
         if (request.ExpiresAtUtc <= DateTimeOffset.UnixEpoch)
         {
             throw new ArgumentException("The launch expiry is invalid.", nameof(request));
+        }
+        if (request.PasswordUtf8.Length > MaximumPasswordBytes)
+        {
+            throw new ArgumentException("The target password is too large.", nameof(request));
         }
         if (!request.PasswordUtf8.IsEmpty)
         {
@@ -215,6 +303,111 @@ public sealed class GuacamoleJsonLaunchEncoder
                 "Drive name and path are required when drive redirection is enabled.",
                 nameof(request));
         }
+
+        if (string.Equals(request.Protocol, RemoteTransportProtocols.Rdp, StringComparison.Ordinal))
+        {
+            ValidateRdpOptions(request, ResolveRdpOptions(request));
+        }
+        else if (request.RdpOptions is not null)
+        {
+            throw new ArgumentException(
+                "RDP options cannot be supplied for another Remote protocol.",
+                nameof(request));
+        }
+    }
+
+    private static void ValidateRdpOptions(
+        GuacamoleLaunchRequest request,
+        GuacamoleRdpOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!GuacamoleRdpSecurityModes.IsSupported(options.SecurityMode))
+        {
+            throw new ArgumentException("The RDP security mode is unsupported.", nameof(request));
+        }
+        if (!GuacamoleRdpCertificatePolicies.IsSupported(options.CertificatePolicy))
+        {
+            throw new ArgumentException("The RDP certificate policy is unsupported.", nameof(request));
+        }
+        if (!GuacamoleRdpResizeMethods.IsSupported(options.ResizeMethod))
+        {
+            throw new ArgumentException("The RDP resize method is unsupported.", nameof(request));
+        }
+        if (!GuacamoleRdpClipboardPolicies.IsSupported(options.ClipboardPolicy))
+        {
+            throw new ArgumentException("The RDP clipboard policy is unsupported.", nameof(request));
+        }
+        if (GuacamoleRdpSecurityModes.RequiresPreConnectionCredentials(options.SecurityMode)
+            && (string.IsNullOrWhiteSpace(request.UserName) || request.PasswordUtf8.IsEmpty))
+        {
+            throw new ArgumentException(
+                "NLA-based RDP security requires a username and password before connection.",
+                nameof(request));
+        }
+
+        if (options.CertificateFingerprints is null)
+        {
+            throw new ArgumentException(
+                "RDP certificate fingerprints cannot be null.",
+                nameof(request));
+        }
+
+        var pinned = string.Equals(
+            options.CertificatePolicy,
+            GuacamoleRdpCertificatePolicies.Pinned,
+            StringComparison.Ordinal);
+        if (pinned)
+        {
+            if (options.CertificateFingerprints.Count is < 1 or > MaximumCertificateFingerprints)
+            {
+                throw new ArgumentException(
+                    $"Pinned RDP certificate policy requires from 1 through {MaximumCertificateFingerprints} fingerprints.",
+                    nameof(request));
+            }
+            foreach (var fingerprint in options.CertificateFingerprints)
+            {
+                _ = NormalizeCertificateFingerprint(fingerprint);
+            }
+        }
+        else if (options.CertificateFingerprints.Count != 0)
+        {
+            throw new ArgumentException(
+                "RDP certificate fingerprints are allowed only with pinned certificate policy.",
+                nameof(request));
+        }
+    }
+
+    private static string NormalizeCertificateFingerprint(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value != value.Trim()
+            || value.Length > 128
+            || value.Any(char.IsControl)
+            || value.Contains(','))
+        {
+            throw new ArgumentException("An RDP certificate fingerprint is invalid.", nameof(value));
+        }
+
+        var separator = value.IndexOf(':', StringComparison.Ordinal);
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            throw new ArgumentException("An RDP certificate fingerprint is invalid.", nameof(value));
+        }
+
+        var algorithm = value[..separator].ToLowerInvariant();
+        var hash = value[(separator + 1)..].Replace(":", string.Empty, StringComparison.Ordinal);
+        var expectedLength = algorithm switch
+        {
+            "sha1" => 40,
+            "sha256" => 64,
+            _ => 0,
+        };
+        if (hash.Length != expectedLength || hash.Any(character => !char.IsAsciiHexDigit(character)))
+        {
+            throw new ArgumentException("An RDP certificate fingerprint is invalid.", nameof(value));
+        }
+
+        return string.Concat(algorithm, ":", hash.ToUpperInvariant());
     }
 
     private static void ValidateText(string value, int maximumLength, string parameterName)
@@ -223,6 +416,18 @@ public sealed class GuacamoleJsonLaunchEncoder
             || value != value.Trim()
             || value.Length > maximumLength
             || value.Any(char.IsControl))
+        {
+            throw new ArgumentException("The value is invalid.", parameterName);
+        }
+    }
+
+    private static void ValidateOptionalText(string? value, int maximumLength, string parameterName)
+    {
+        if (value is not null
+            && (string.IsNullOrWhiteSpace(value)
+                || value != value.Trim()
+                || value.Length > maximumLength
+                || value.Any(char.IsControl)))
         {
             throw new ArgumentException("The value is invalid.", parameterName);
         }

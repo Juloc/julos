@@ -217,6 +217,7 @@ public sealed class PostgresRemoteSessionConnectionService : IRemoteSessionConne
         if (code is not (RemoteSessionFailureCodes.RuntimeUnavailable
             or RemoteSessionFailureCodes.TrustRequired
             or RemoteSessionFailureCodes.AuthenticationFailed
+            or RemoteProviderFailureCodes.AccountUnavailable
             or RemoteSessionFailureCodes.ConnectionLost))
         {
             throw new RemoteSessionContractException(
