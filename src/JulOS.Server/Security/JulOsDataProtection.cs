@@ -15,8 +15,17 @@ internal static class JulOsDataProtection
     internal const string KeyRingPath = "/var/lib/julos/data-protection";
 }
 
-internal sealed class JulOsDataProtectionKeyProvider(SecretReferenceOptions options)
+/// <summary>Reads the active JulOS encryption key for Data Protection.</summary>
+public sealed class JulOsDataProtectionKeyProvider
 {
+    private readonly SecretReferenceOptions options;
+
+    /// <summary>Creates the provider from the validated JulOS secret configuration.</summary>
+    public JulOsDataProtectionKeyProvider(IConfiguration configuration)
+    {
+        options = SecretReferenceOptions.Read(configuration);
+    }
+
     internal string ActiveKeyId => options.ActiveKeyId;
 
     internal byte[] ReadKey(string keyId)
@@ -43,9 +52,18 @@ internal sealed class JulOsDataProtectionKeyProvider(SecretReferenceOptions opti
     }
 }
 
-internal sealed class JulOsDataProtectionOptions(
-    JulOsDataProtectionKeyProvider keyProvider) : IConfigureOptions<KeyManagementOptions>
+/// <summary>Connects the JulOS XML encryptor to ASP.NET Core Data Protection.</summary>
+public sealed class JulOsDataProtectionOptions : IConfigureOptions<KeyManagementOptions>
 {
+    private readonly JulOsDataProtectionKeyProvider keyProvider;
+
+    /// <summary>Creates the Data Protection options adapter.</summary>
+    public JulOsDataProtectionOptions(JulOsDataProtectionKeyProvider keyProvider)
+    {
+        this.keyProvider = keyProvider;
+    }
+
+    /// <inheritdoc />
     public void Configure(KeyManagementOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
