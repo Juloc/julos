@@ -1,4 +1,4 @@
-{
+﻿{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.browser",
   "ImageRepository": "ghcr.io/juloc/julos-browser-runtime",
