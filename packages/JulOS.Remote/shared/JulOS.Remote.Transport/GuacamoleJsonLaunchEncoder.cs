@@ -12,6 +12,7 @@ public sealed class GuacamoleJsonLaunchEncoder
     private const int SignatureBytes = 32;
     private const int MaximumCertificateFingerprints = 16;
     private const int MaximumPasswordBytes = 4096;
+    private const int MaximumVncAutoRetry = 10;
     private const string DefaultKeyboardLayout = "de-de-qwertz";
     private const int DefaultTerminalFontSize = 12;
     private static readonly UTF8Encoding StrictUtf8 = new(
@@ -114,6 +115,13 @@ public sealed class GuacamoleJsonLaunchEncoder
         {
             WriteDesktopParameters(writer, request, ResolveRdpOptions(request));
         }
+        else if (string.Equals(request.Protocol, RemoteTransportProtocols.Vnc, StringComparison.Ordinal))
+        {
+            if (request.VncOptions is not null)
+            {
+                WriteVncParameters(writer, request.VncOptions);
+            }
+        }
         else if (string.Equals(request.Protocol, RemoteTransportProtocols.Ssh, StringComparison.Ordinal))
         {
             writer.WriteString("font-name", "monospace");
@@ -155,6 +163,63 @@ public sealed class GuacamoleJsonLaunchEncoder
             writer.WriteString("drive-name", request.DriveName);
             writer.WriteString("create-drive-path", "true");
             writer.WriteString("drive-path", request.DrivePath);
+        }
+    }
+
+    private static void WriteVncParameters(
+        Utf8JsonWriter writer,
+        GuacamoleVncOptions options)
+    {
+        writer.WriteString(
+            "disable-display-resize",
+            string.Equals(
+                options.ResizePolicy,
+                GuacamoleVncResizePolicies.Fixed,
+                StringComparison.Ordinal)
+                ? "true"
+                : "false");
+        WriteClipboardPolicy(writer, options.ClipboardPolicy);
+        writer.WriteString("read-only", options.ReadOnly ? "true" : "false");
+        writer.WriteString(
+            "disable-server-input",
+            options.DisableServerInput ? "true" : "false");
+        writer.WriteString("swap-red-blue", options.SwapRedBlue ? "true" : "false");
+        writer.WriteString("force-lossless", options.ForceLossless ? "true" : "false");
+
+        if (string.Equals(
+                options.CursorMode,
+                GuacamoleVncCursorModes.Remote,
+                StringComparison.Ordinal))
+        {
+            writer.WriteString("cursor", GuacamoleVncCursorModes.Remote);
+        }
+        if (!string.IsNullOrWhiteSpace(options.ClipboardEncoding))
+        {
+            writer.WriteString("clipboard-encoding", options.ClipboardEncoding);
+        }
+        if (options.ColorDepth is int colorDepth)
+        {
+            writer.WriteString(
+                "color-depth",
+                colorDepth.ToString(CultureInfo.InvariantCulture));
+        }
+        if (options.AutoRetry is int autoRetry)
+        {
+            writer.WriteString(
+                "autoretry",
+                autoRetry.ToString(CultureInfo.InvariantCulture));
+        }
+        if (options.CompressionLevel is int compressionLevel)
+        {
+            writer.WriteString(
+                "compress-level",
+                compressionLevel.ToString(CultureInfo.InvariantCulture));
+        }
+        if (options.QualityLevel is int qualityLevel)
+        {
+            writer.WriteString(
+                "quality-level",
+                qualityLevel.ToString(CultureInfo.InvariantCulture));
         }
     }
 
@@ -306,13 +371,41 @@ public sealed class GuacamoleJsonLaunchEncoder
 
         if (string.Equals(request.Protocol, RemoteTransportProtocols.Rdp, StringComparison.Ordinal))
         {
+            if (request.VncOptions is not null)
+            {
+                throw new ArgumentException(
+                    "VNC options cannot be supplied for another Remote protocol.",
+                    nameof(request));
+            }
             ValidateRdpOptions(request, ResolveRdpOptions(request));
         }
-        else if (request.RdpOptions is not null)
+        else if (string.Equals(request.Protocol, RemoteTransportProtocols.Vnc, StringComparison.Ordinal))
         {
-            throw new ArgumentException(
-                "RDP options cannot be supplied for another Remote protocol.",
-                nameof(request));
+            if (request.RdpOptions is not null)
+            {
+                throw new ArgumentException(
+                    "RDP options cannot be supplied for another Remote protocol.",
+                    nameof(request));
+            }
+            if (request.VncOptions is not null)
+            {
+                ValidateVncOptions(request.VncOptions, nameof(request));
+            }
+        }
+        else
+        {
+            if (request.RdpOptions is not null)
+            {
+                throw new ArgumentException(
+                    "RDP options cannot be supplied for another Remote protocol.",
+                    nameof(request));
+            }
+            if (request.VncOptions is not null)
+            {
+                throw new ArgumentException(
+                    "VNC options cannot be supplied for another Remote protocol.",
+                    nameof(request));
+            }
         }
     }
 
@@ -377,6 +470,53 @@ public sealed class GuacamoleJsonLaunchEncoder
         }
     }
 
+    private static void ValidateVncOptions(
+        GuacamoleVncOptions options,
+        string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!GuacamoleVncResizePolicies.IsSupported(options.ResizePolicy))
+        {
+            throw new ArgumentException("The VNC resize policy is unsupported.", parameterName);
+        }
+        if (!GuacamoleVncClipboardPolicies.IsSupported(options.ClipboardPolicy))
+        {
+            throw new ArgumentException("The VNC clipboard policy is unsupported.", parameterName);
+        }
+        if (!GuacamoleVncCursorModes.IsSupported(options.CursorMode))
+        {
+            throw new ArgumentException("The VNC cursor mode is unsupported.", parameterName);
+        }
+        if (options.ClipboardEncoding is not null
+            && !GuacamoleVncClipboardEncodings.IsSupported(options.ClipboardEncoding))
+        {
+            throw new ArgumentException("The VNC clipboard encoding is unsupported.", parameterName);
+        }
+        if (options.ColorDepth is not null
+            && options.ColorDepth is not (8 or 16 or 24 or 32))
+        {
+            throw new ArgumentException("The VNC color depth is unsupported.", parameterName);
+        }
+        ValidateOptionalRange(
+            options.AutoRetry,
+            0,
+            MaximumVncAutoRetry,
+            "The VNC autoretry value is invalid.",
+            parameterName);
+        ValidateOptionalRange(
+            options.CompressionLevel,
+            0,
+            9,
+            "The VNC compression level is invalid.",
+            parameterName);
+        ValidateOptionalRange(
+            options.QualityLevel,
+            0,
+            9,
+            "The VNC quality level is invalid.",
+            parameterName);
+    }
+
     private static string NormalizeCertificateFingerprint(string value)
     {
         if (string.IsNullOrWhiteSpace(value)
@@ -408,6 +548,19 @@ public sealed class GuacamoleJsonLaunchEncoder
         }
 
         return string.Concat(algorithm, ":", hash.ToUpperInvariant());
+    }
+
+    private static void ValidateOptionalRange(
+        int? value,
+        int minimum,
+        int maximum,
+        string message,
+        string parameterName)
+    {
+        if (value is int actual && (actual < minimum || actual > maximum))
+        {
+            throw new ArgumentException(message, parameterName);
+        }
     }
 
     private static void ValidateText(string value, int maximumLength, string parameterName)
