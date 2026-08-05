@@ -422,10 +422,7 @@ export async function register(context) {
         client,
         isCoarsePointer(),
       );
-      stage.onpointerdown = () => {
-        stage.focus();
-        this.#setStatus(context.language === 'de' ? 'Verbunden' : 'Connected', 'connected');
-      };
+      stage.onpointerdown = () => stage.focus();
 
       client.onstatechange = (state) => {
         if (state === Guacamole.Client.State.CONNECTED) {
