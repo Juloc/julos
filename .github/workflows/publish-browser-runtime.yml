@@ -4,6 +4,8 @@
 name: Publish Browser Runtime
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   issues:
     types:
       - opened
