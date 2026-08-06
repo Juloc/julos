@@ -1,4 +1,4 @@
-﻿// JulOS Server composition root.
+// JulOS Server composition root.
 // Local authentication protects the control plane; feature endpoints follow later work items.
 
 using JulOS.Contracts.Diagnostics;
@@ -45,12 +45,7 @@ if (DatabaseMigrationCommand.IsRequested(args))
 }
 
 const string ReadinessTag = "ready";
-const string CoreDatabaseConnectionName = "CoreDatabase";
-
-var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnectionName)
-    ?? throw new InvalidOperationException(
-        $"The connection string '{CoreDatabaseConnectionName}' is not configured. "
-        + $"Set ConnectionStrings__{CoreDatabaseConnectionName} or see deploy/compose/README.md.");
+var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
@@ -86,6 +81,11 @@ builder.Services
         args: [coreDatabase]);
 
 var app = builder.Build();
+
+if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
+{
+    await CoreDatabaseMigrator.MigrateAsync(coreDatabase).ConfigureAwait(false);
+}
 
 app.UseJulOsErrorHandling();
 app.UseJulOsAgentProtocol();
