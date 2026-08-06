@@ -1,0 +1,190 @@
+name: Publish Browser Runtime Release
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - packages/JulOS.Browser/runtime/**
+      - .github/workflows/publish-browser-runtime-release.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-browser-runtime-release
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/juloc/julos-browser-runtime
+
+jobs:
+  release:
+    name: Validate and publish browser runtime
+    if: >-
+      github.repository == 'Juloc/julos' &&
+      github.actor == 'Juloc' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'release/browser-runtime-alpha2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Check out the release source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Read immutable version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Unsupported runtime version: $version" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build smoke-test image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --file packages/JulOS.Browser/runtime/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ steps.version.outputs.value }}" \
+            --tag "julos-browser-runtime-smoke:${{ steps.version.outputs.value }}" \
+            .
+
+      - name: Verify password validation and runtime lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="julos-browser-runtime-smoke:${{ steps.version.outputs.value }}"
+
+          set +e
+          output="$(docker run --rm --network none "$image" 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep -Fq "JULOS_VNC_PASSWORD is required." <<<"$output"
+
+          container_id="$(docker run --detach \
+            --network none \
+            --cpus 2 \
+            --memory 1024m \
+            --pids-limit 256 \
+            --security-opt no-new-privileges=true \
+            --cap-drop ALL \
+            --env JULOS_VNC_PASSWORD=A7b9C2d4 \
+            "$image")"
+
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          diagnostics() {
+            docker inspect --format '{{json .State}}' "$container_id" >&2 || true
+            docker logs "$container_id" >&2 || true
+            docker exec "$container_id" sh -c '
+              for log in /tmp/julos-browser/logs/*.log; do
+                [ -e "$log" ] || continue
+                printf "\n== %s ==\n" "$log"
+                cat "$log"
+              done
+            ' >&2 || true
+            docker exec "$container_id" /usr/local/bin/browser-runtime-health >&2 || true
+          }
+          trap cleanup EXIT
+
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "10001:10001"
+          test "$(docker image inspect --format '{{json .Config.ExposedPorts}}' "$image")" = '{"5900/tcp":{}}'
+
+          for attempt in $(seq 1 45); do
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id")"
+            case "$health" in
+              healthy)
+                break
+                ;;
+              unhealthy|missing)
+                diagnostics
+                exit 1
+                ;;
+            esac
+            sleep 2
+          done
+
+          if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" != healthy ]; then
+            diagnostics
+            exit 1
+          fi
+
+          docker stop --time 10 "$container_id" >/dev/null
+          test "$(docker inspect --format '{{.State.Running}}' "$container_id")" = false
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check immutable runtime version
+        id: existing
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${{ steps.version.outputs.value }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Runtime image already exists: $image"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.existing.outputs.exists != 'true'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        if: steps.existing.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish immutable runtime
+        if: steps.existing.outputs.exists != 'true'
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/JulOS.Browser/runtime/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}
+          build-args: |
+            JULOS_VERSION=${{ steps.version.outputs.value }}
+          cache-from: type=gha,scope=julos-browser-runtime
+          cache-to: type=gha,mode=max,scope=julos-browser-runtime
+          provenance: false
+          sbom: false
+
+      - name: Attest runtime provenance
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify published manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker manifest inspect "${IMAGE_NAME}:${{ steps.version.outputs.value }}" >/dev/null
