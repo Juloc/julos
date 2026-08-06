@@ -1,0 +1,200 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://os.juloc.de/schemas/package-manifest.v1.schema.json",
+  "title": "JulOS Package Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "SchemaVersion",
+    "PackageId",
+    "Version",
+    "PublisherId",
+    "DisplayNameKey",
+    "DescriptionKey",
+    "Runtime",
+    "Permissions",
+    "Applications",
+    "Widgets",
+    "Capabilities",
+    "Migrations",
+    "Frontend"
+  ],
+  "properties": {
+    "SchemaVersion": { "const": "1" },
+    "PackageId": { "$ref": "#/$defs/packageId" },
+    "Version": { "$ref": "#/$defs/semanticVersion" },
+    "PublisherId": { "$ref": "#/$defs/identifier" },
+    "DisplayNameKey": { "$ref": "#/$defs/resourceKey" },
+    "DescriptionKey": { "$ref": "#/$defs/resourceKey" },
+    "Runtime": { "$ref": "#/$defs/runtime" },
+    "Permissions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/permission" }
+    },
+    "Applications": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/application" }
+    },
+    "Widgets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/widget" }
+    },
+    "Capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capability" }
+    },
+    "Migrations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/migration" }
+    },
+    "Frontend": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/frontend" }
+      ]
+    }
+  },
+  "$defs": {
+    "packageId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "maxLength": 200
+    },
+    "semanticVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "stableKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "resourceKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "permission": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Kind",
+        "Image",
+        "EntryPoint",
+        "MemoryLimitMegabytes",
+        "CpuLimit",
+        "StartupTimeoutSeconds",
+        "NetworkAccess"
+      ],
+      "properties": {
+        "Kind": { "enum": ["none", "container", "process"] },
+        "Image": { "type": ["string", "null"] },
+        "EntryPoint": { "type": ["string", "null"] },
+        "MemoryLimitMegabytes": { "type": "integer", "minimum": 16, "maximum": 32768 },
+        "CpuLimit": { "type": "number", "exclusiveMinimum": 0, "maximum": 32 },
+        "StartupTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "NetworkAccess": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "Kind": { "const": "container" } } },
+          "then": { "properties": { "Image": { "type": "string", "pattern": "^[^@\\s]+@sha256:[a-f0-9]{64}$" } } }
+        },
+        {
+          "if": { "properties": { "Kind": { "const": "process" } } },
+          "then": { "properties": { "EntryPoint": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["StableKey", "DisplayNameKey", "InstancePolicy", "DefaultWidth", "DefaultHeight", "MinimumWidth", "MinimumHeight", "Viewports"],
+      "properties": {
+        "StableKey": { "$ref": "#/$defs/stableKey" },
+        "DisplayNameKey": { "$ref": "#/$defs/resourceKey" },
+        "InstancePolicy": { "enum": ["single-instance-per-user", "single-instance-per-target", "multiple-instances"] },
+        "DefaultWidth": { "type": "integer", "minimum": 120, "maximum": 16384 },
+        "DefaultHeight": { "type": "integer", "minimum": 120, "maximum": 16384 },
+        "MinimumWidth": { "type": "integer", "minimum": 120, "maximum": 16384 },
+        "MinimumHeight": { "type": "integer", "minimum": 120, "maximum": 16384 },
+        "Viewports": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["desktop", "tablet", "mobile"] }
+        }
+      }
+    },
+    "widget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["StableKey", "DisplayNameKey", "ElementName", "Sizes", "DefaultSize"],
+      "properties": {
+        "StableKey": { "$ref": "#/$defs/stableKey" },
+        "DisplayNameKey": { "$ref": "#/$defs/resourceKey" },
+        "ElementName": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$" },
+        "Sizes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["small", "medium", "wide", "large"] }
+        },
+        "DefaultSize": { "enum": ["small", "medium", "wide", "large"] }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Name", "Direction", "ContractVersion", "Required"],
+      "properties": {
+        "Name": { "$ref": "#/$defs/permission" },
+        "Direction": { "enum": ["provides", "requires"] },
+        "ContractVersion": { "$ref": "#/$defs/semanticVersion" },
+        "Required": { "type": "boolean" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["MigrationId", "Resource", "Reversible", "Digest"],
+      "properties": {
+        "MigrationId": { "$ref": "#/$defs/identifier" },
+        "Resource": { "enum": ["core-registration", "package-database", "runtime-data"] },
+        "Reversible": { "type": "boolean" },
+        "Digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ModulePath", "Sha256", "ExportedElements"],
+      "properties": {
+        "ModulePath": { "type": "string", "pattern": "^frontend/(?!.*(?:^|/)\\.\\.?/).+\\.js$" },
+        "Sha256": { "$ref": "#/$defs/sha256" },
+        "ExportedElements": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$" }
+        }
+      }
+    }
+  }
+}

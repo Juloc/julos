@@ -1,5 +1,10 @@
-﻿using JulOS.Contracts.Errors;
-
+﻿using JulOS.Application.Authentication;
+using JulOS.Application.Authorization;
+using JulOS.Application.Concurrency;
+using JulOS.Application.Profile;
+using JulOS.Application.Operations;
+using JulOS.Application.Secrets;
+using JulOS.Contracts.Errors;
 using JulOS.Domain;
 
 using Microsoft.AspNetCore.Diagnostics;
@@ -40,6 +45,26 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = ruleViolation.Message;
         }
+        else if (exception is AuthenticationFailureException authenticationFailure)
+        {
+            context.ProblemDetails.Detail = authenticationFailure.Message;
+        }
+        else if (exception is AuthorizationAdministrationException authorizationFailure)
+        {
+            context.ProblemDetails.Detail = authorizationFailure.Message;
+        }
+        else if (exception is OperationFailureException operationFailure)
+        {
+            context.ProblemDetails.Detail = operationFailure.Message;
+        }
+        else if (exception is ProfileFailureException profileFailure)
+        {
+            context.ProblemDetails.Detail = profileFailure.Message;
+        }
+        else if (exception is SecretReferenceFailureException secretFailure)
+        {
+            context.ProblemDetails.Detail = secretFailure.Message;
+        }
         else if (exception is not null)
         {
             context.ProblemDetails.Detail = null;
@@ -49,13 +74,50 @@ internal static class ProblemDetailsCustomizer
         context.ProblemDetails.Extensions[ProblemExtensionNames.CorrelationId] =
             CorrelationId.Get(context.HttpContext);
         context.ProblemDetails.Extensions[ProblemExtensionNames.Retryable] = retryable;
+
+        if (exception is ConcurrencyConflictException { CurrentRevision: int currentRevision })
+        {
+            context.ProblemDetails.Extensions[ProblemExtensionNames.CurrentRevision] = currentRevision;
+        }
     }
 
     private static (string Code, bool Retryable) Classify(int status, Exception? exception)
     {
+        if (exception is ConcurrencyConflictException)
+        {
+            return (PlatformErrorCodes.ConcurrencyConflict, false);
+        }
+
+        if (exception is AuthenticationFailureException authenticationFailure)
+        {
+            return (authenticationFailure.Code, false);
+        }
+
+        if (exception is AuthorizationAdministrationException authorizationFailure)
+        {
+            return (authorizationFailure.Code, false);
+        }
+
         if (exception is DomainRuleViolationException ruleViolation)
         {
             return (ruleViolation.Code, false);
+        }
+
+        if (exception is OperationFailureException operationFailure)
+        {
+            return (operationFailure.Code, false);
+        }
+
+        if (exception is ProfileFailureException profileFailure)
+        {
+            return (profileFailure.Code, false);
+        }
+
+        if (exception is SecretReferenceFailureException secretFailure)
+        {
+            return (
+                secretFailure.Code,
+                secretFailure.Reason == SecretReferenceFailureReason.Unavailable);
         }
 
         return status switch
@@ -65,6 +127,7 @@ internal static class ProblemDetailsCustomizer
             StatusCodes.Status403Forbidden => (PlatformErrorCodes.Forbidden, false),
             StatusCodes.Status404NotFound => (PlatformErrorCodes.NotFound, false),
             StatusCodes.Status409Conflict => (PlatformErrorCodes.RuleViolation, false),
+            StatusCodes.Status429TooManyRequests => (PlatformErrorCodes.RateLimited, true),
             StatusCodes.Status503ServiceUnavailable => (PlatformErrorCodes.Unexpected, true),
             _ when status >= StatusCodes.Status500InternalServerError => (PlatformErrorCodes.Unexpected, false),
             _ => (PlatformErrorCodes.Invalid, false),
@@ -80,6 +143,7 @@ internal static class ProblemDetailsCustomizer
             StatusCodes.Status403Forbidden => "The request is not permitted.",
             StatusCodes.Status404NotFound => "The resource does not exist.",
             StatusCodes.Status409Conflict => "The request conflicts with the current state.",
+            StatusCodes.Status429TooManyRequests => "Too many requests were submitted.",
             StatusCodes.Status503ServiceUnavailable => "A required dependency is unavailable.",
             _ => "The request failed.",
         };

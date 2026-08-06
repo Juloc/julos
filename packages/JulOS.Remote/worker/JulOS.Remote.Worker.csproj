@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>JulOS Remote package worker.</Description>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
+    <ProjectReference Include="..\shared\JulOS.Remote.Transport\JulOS.Remote.Transport.csproj" />
+  </ItemGroup>
+
+</Project>

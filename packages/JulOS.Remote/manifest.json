@@ -1,0 +1,65 @@
+﻿{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.remote",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-official",
+  "DisplayNameKey": "package.remote.name",
+  "DescriptionKey": "package.remote.description",
+  "Runtime": {
+    "Kind": "process",
+    "Image": null,
+    "EntryPoint": "worker/JulOS.Remote.Worker.dll",
+    "MemoryLimitMegabytes": 256,
+    "CpuLimit": 1,
+    "StartupTimeoutSeconds": 30,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [
+    {
+      "StableKey": "remote",
+      "DisplayNameKey": "app.remote.name",
+      "InstancePolicy": "single-instance-per-target",
+      "DefaultWidth": 1100,
+      "DefaultHeight": 760,
+      "MinimumWidth": 640,
+      "MinimumHeight": 420,
+      "Viewports": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    }
+  ],
+  "Widgets": [
+    {
+      "StableKey": "remote-sessions",
+      "DisplayNameKey": "widget.remote.sessions.name",
+      "ElementName": "julos-remote-widget",
+      "Sizes": [
+        "small",
+        "medium"
+      ],
+      "DefaultSize": "small"
+    }
+  ],
+  "Capabilities": [
+    {
+      "Name": "remote.session",
+      "Direction": "requires",
+      "ContractVersion": "1.0.0",
+      "Required": true
+    }
+  ],
+  "Migrations": [],
+  "Frontend": {
+    "ModulePath": "frontend/remote.js",
+    "Sha256": "c09ccfb67da2d481957092718edc6729bdaad1d329074a927b77c7d3fd92dd96",
+    "ExportedElements": [
+      "julos-remote-app",
+      "julos-remote-widget"
+    ]
+  }
+}

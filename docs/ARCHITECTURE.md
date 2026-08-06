@@ -85,6 +85,8 @@ Application services implement core use cases through ports:
 - create and manage session references
 - lease secrets for one authorized operation
 
+The Core secret-reference service stores only AES-GCM ciphertext and non-secret metadata in PostgreSQL. Encryption keys live in an external file key ring owned by the deployment. The Application lease port checks the durable operation resource before decrypting: system secrets require a Core operation, package secrets require the same `SourcePackageId`, and cancelled, queued or terminal operations receive no lease. The byte buffer never crosses the HTTP API and is zeroed when the short lease ends.
+
 Application services do not perform product-specific protocol work.
 
 ## 5. JulOS Server
@@ -104,6 +106,14 @@ It owns:
 - package worker control clients
 
 Server remains functional when every optional package is disabled or faulted.
+
+Core persistence is implemented in Infrastructure. `CoreDbContext` owns the `core` schema and maps persistence-specific rows to Domain concepts; Domain contains no EF Core reference, persistence annotation or materialization-only constructor. Server only composes the context and invokes the explicit migration process. Package schemas are outside the context and cannot be reached through its model.
+
+Local account records, password hashes, roles, setup completion and profile preferences are Infrastructure-owned persistence. The Application profile port exposes only the authenticated user's supported preferences and optimistic-concurrency revision; Infrastructure validates and persists them through `CoreDbContext`. Server composes ASP.NET Core Identity, cookie sessions, rate limiting and the shared antiforgery validator. A fallback policy denies anonymous access by default; endpoint owners must explicitly mark the setup, login, status or health surfaces anonymous.
+
+Authorization keeps three owners separate. Domain owns pure permission and scope evaluation. Application owns the stable Core permission catalog and role-administration ports. Infrastructure resolves direct user assignments and inherited role assignments from PostgreSQL, while Server maps named policies and administrator endpoints. No role name bypasses permission evaluation; even the system administrator role is authorized through explicit global assignments.
+
+Operation resources follow the same inward dependency direction. Contracts define the public queued/running/terminal and progress representations. Application owns lifecycle transitions and the executor-facing port. Infrastructure persists authoritative state, idempotency fingerprints, progress events and cancellation requests in the Core schema. Server only authenticates the user, enforces operation permissions and maps the versioned HTTP resources. Package workers and Agents advance operations through the Application port; they do not update Core tables directly.
 
 ## 6. JulOS Desktop
 

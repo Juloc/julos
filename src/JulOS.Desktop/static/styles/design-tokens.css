@@ -1,0 +1,141 @@
+﻿:root {
+  color-scheme: light;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+
+  --julos-color-accent: #0f6cbd;
+  --julos-color-accent-hover: #115ea3;
+  --julos-color-accent-pressed: #0c3b5e;
+  --julos-color-accent-foreground: #ffffff;
+  --julos-color-background: #f5f5f5;
+  --julos-color-background-gradient: radial-gradient(circle at 18% 12%, #e7f3ff 0, transparent 34%), linear-gradient(145deg, #f7f9fc 0%, #edf2f7 100%);
+  --julos-color-surface: rgb(255 255 255 / 88%);
+  --julos-color-surface-solid: #ffffff;
+  --julos-color-surface-hover: rgb(255 255 255 / 96%);
+  --julos-color-subtle: #f0f0f0;
+  --julos-color-border: rgb(0 0 0 / 12%);
+  --julos-color-border-strong: rgb(0 0 0 / 22%);
+  --julos-color-text: #242424;
+  --julos-color-text-secondary: #616161;
+  --julos-color-shadow: rgb(0 0 0 / 18%);
+  --julos-color-critical: #c50f1f;
+  --julos-color-success: #107c10;
+  --julos-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px var(--julos-color-accent);
+
+  --julos-radius-small: 4px;
+  --julos-radius-medium: 8px;
+  --julos-radius-large: 12px;
+  --julos-radius-xlarge: 16px;
+  --julos-shadow-flyout: 0 8px 28px var(--julos-color-shadow);
+  --julos-taskbar-height: 56px;
+  --julos-control-height: 40px;
+  --julos-duration-fast: 120ms;
+  --julos-duration-normal: 180ms;
+  --julos-easing-standard: cubic-bezier(0.33, 0, 0.67, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --julos-color-accent: #479ef5;
+  --julos-color-accent-hover: #62abf5;
+  --julos-color-accent-pressed: #2886de;
+  --julos-color-accent-foreground: #0f1419;
+  --julos-color-background: #1b1a19;
+  --julos-color-background-gradient: radial-gradient(circle at 18% 12%, #183b59 0, transparent 34%), linear-gradient(145deg, #202428 0%, #151719 100%);
+  --julos-color-surface: rgb(32 32 32 / 90%);
+  --julos-color-surface-solid: #242424;
+  --julos-color-surface-hover: rgb(45 45 45 / 96%);
+  --julos-color-subtle: #2d2d2d;
+  --julos-color-border: rgb(255 255 255 / 12%);
+  --julos-color-border-strong: rgb(255 255 255 / 24%);
+  --julos-color-text: #ffffff;
+  --julos-color-text-secondary: #c7c7c7;
+  --julos-color-shadow: rgb(0 0 0 / 58%);
+  --julos-focus-ring: 0 0 0 2px #1b1a19, 0 0 0 4px var(--julos-color-accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]),
+  :root[data-theme="system"] {
+    color-scheme: dark;
+    --julos-color-accent: #479ef5;
+    --julos-color-accent-hover: #62abf5;
+    --julos-color-accent-pressed: #2886de;
+    --julos-color-accent-foreground: #0f1419;
+    --julos-color-background: #1b1a19;
+    --julos-color-background-gradient: radial-gradient(circle at 18% 12%, #183b59 0, transparent 34%), linear-gradient(145deg, #202428 0%, #151719 100%);
+    --julos-color-surface: rgb(32 32 32 / 90%);
+    --julos-color-surface-solid: #242424;
+    --julos-color-surface-hover: rgb(45 45 45 / 96%);
+    --julos-color-subtle: #2d2d2d;
+    --julos-color-border: rgb(255 255 255 / 12%);
+    --julos-color-border-strong: rgb(255 255 255 / 24%);
+    --julos-color-text: #ffffff;
+    --julos-color-text-secondary: #c7c7c7;
+    --julos-color-shadow: rgb(0 0 0 / 58%);
+    --julos-focus-ring: 0 0 0 2px #1b1a19, 0 0 0 4px var(--julos-color-accent);
+  }
+}
+
+:root[data-motion="reduced"] {
+  --julos-duration-fast: 0ms;
+  --julos-duration-normal: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion]),
+  :root[data-motion="reduced"] {
+    --julos-duration-fast: 0ms;
+    --julos-duration-normal: 0ms;
+  }
+}
+
+html,
+body {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--julos-color-background);
+  color: var(--julos-color-text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.unsupported-browser {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  max-width: 100%;
+  padding: 32px max(24px, calc((100vw - 680px) / 2));
+  background: var(--julos-color-background-gradient);
+  color: var(--julos-color-text-secondary);
+  line-height: 1.5;
+}
+
+.unsupported-browser[hidden] {
+  display: none;
+}
+
+.unsupported-browser h1 {
+  margin: 0 0 12px;
+  color: var(--julos-color-text);
+  font-size: clamp(24px, 5vw, 38px);
+  line-height: 1.15;
+}
+
+.unsupported-browser p {
+  margin: 4px 0;
+}

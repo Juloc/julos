@@ -13,6 +13,12 @@ This document defines the initial persistent model and transport conventions. Ex
 - Package schemas are isolated from core tables and from each other.
 - JSON columns are used only for genuinely versioned or package-defined structures, not to avoid normal relational modeling.
 
+The first core migration implements the Phase 1 entities that already have domain behavior: packages, applications and launch targets, layouts and placements, session references, Agents and capabilities, problems, notifications, audit events and permission assignments. Persistence ownership fields such as user identifiers and timestamps are stored where the contracts require them, but future authentication, package-manifest, secret and settings fields are not invented before their owning work items.
+
+All these tables live in the `core` schema. The Entity Framework migration history is also schema-qualified. Package data remains in package-owned schemas introduced by `PKG-004`; no package table is mapped by `CoreDbContext`.
+
+Every currently persisted mutable row maps its numeric revision as a database concurrency token. A stale mutation is rejected rather than retried or merged implicitly. The HTTP representation is status 409 with code `request.concurrency_conflict` and `currentRevision` when the row still exists; a client refreshes authoritative state before deciding whether to reapply its intent.
+
 ## 2. Core entities
 
 ### 2.1 User
@@ -24,6 +30,7 @@ DisplayName
 PreferredLanguage
 TimeZone
 Theme
+Motion
 CreatedAtUtc
 UpdatedAtUtc
 Revision
@@ -295,7 +302,18 @@ DeletedAtUtc
 Revision
 ```
 
-No API returns the secret value after creation. A package receives an operation-specific credential lease through the secret service.
+`OwningScopeType` is `system` or `package` in the first contract. A package scope requires a valid package identity; a system scope has no scope identifier. `Purpose` is stable non-secret metadata and cannot be changed independently of the reference.
+
+The Core store additionally owns the encryption-key identifier, 96-bit nonce, ciphertext and 128-bit authentication tag. These fields are never transport members. Active rows require all protected-value fields; deletion clears all four fields and retains only the metadata tombstone.
+
+HTTP contract:
+
+- `POST /api/v1/secret-references` creates encrypted value material and returns metadata only
+- `GET /api/v1/secret-references/{id}` returns metadata only
+- `POST /api/v1/secret-references/{id}/rotation` replaces encrypted value material using an expected revision
+- `DELETE /api/v1/secret-references/{id}?revision={revision}` destroys value material
+
+No API returns the secret value after creation. A package or Core worker receives a short-lived operation-specific credential lease through the Application port only while the owning operation is running and not cancelling.
 
 ### 2.15 Problem
 
@@ -457,15 +475,49 @@ A problem body never contains an exception message, a stack frame or an internal
 ### 5.1 Authentication and profile
 
 ```text
+GET  /api/v1/auth/status
+POST /api/v1/auth/setup
 POST /api/v1/auth/login
+GET  /api/v1/auth/antiforgery
 POST /api/v1/auth/logout
 GET  /api/v1/profile
 PUT  /api/v1/profile/preferences
 ```
 
-Login is omitted when external OIDC-only mode is configured.
+`GET /api/v1/auth/status` and the one-time setup and login mutations are anonymous. Status exposes only whether initial setup is required and, when a valid session exists, the current user's identifier, username and display name.
 
-### 5.2 Applications
+`POST /api/v1/auth/setup` accepts `userName`, `displayName` and `password`, creates exactly one initial administrator and establishes the session. The database serializes competing setup calls through the singleton setup row. A completed setup returns `authentication.setup_already_completed`; it is never silently repeated.
+
+`POST /api/v1/auth/login` establishes the same server-side Identity cookie. Unknown usernames, wrong passwords and locked accounts all return `authentication.invalid_credentials`, so the public response does not disclose account existence or lock state. Setup and login share a per-source rate limit and return the common retryable `request.rate_limited` problem with `Retry-After` when available.
+
+`GET /api/v1/auth/antiforgery` requires a valid session and returns the request-header name and token. `POST /api/v1/auth/logout` requires that token and ends the session. Raw authentication tokens and password hashes never appear in an API response.
+
+Local-account login remains available until a later accepted decision explicitly introduces an OIDC-only mode.
+
+`GET /api/v1/profile` returns the authenticated account identifier, username, display name, supported language, IANA time-zone identifier, theme, motion mode and current revision. `PUT /api/v1/profile/preferences` changes only the current account and requires the session antiforgery token. The request carries `preferredLanguage`, `timeZone`, `theme`, `motion` and the caller's `revision`.
+
+Accepted language values are `en` and `de`. Themes are `system`, `light` and `dark`; motion is `enabled` or `reduced`. The time-zone identifier must resolve through the server's time-zone database and is persisted unchanged. Unsupported languages, unknown time zones, themes or motion values return HTTP 400 with `profile.preferences_invalid`. Stale revisions return the common HTTP 409 concurrency problem and `currentRevision`; the newer stored preferences remain authoritative.
+
+### 5.2 Authorization administration
+
+```text
+GET    /api/v1/authorization/roles
+POST   /api/v1/authorization/roles
+PUT    /api/v1/authorization/roles/{roleId}
+DELETE /api/v1/authorization/roles/{roleId}?revision={revision}
+GET    /api/v1/authorization/roles/{roleId}/members
+POST   /api/v1/authorization/roles/{roleId}/members/{userId}
+DELETE /api/v1/authorization/roles/{roleId}/members/{userId}
+GET    /api/v1/authorization/assignments
+POST   /api/v1/authorization/assignments
+DELETE /api/v1/authorization/assignments/{assignmentId}
+```
+
+Core permission names introduced here are `core.system.version.read`, `core.authorization.read` and `core.authorization.manage`. Assignments target a user or role and a global, package or resource scope. A user's effective set is the union of direct assignments and assignments inherited from current role membership; every final decision is made by the pure Core permission evaluator.
+
+The administrator role is a system role. It cannot be renamed or deleted, and its last member cannot be removed. It has no implicit superuser behavior: setup and the upgrade migration create explicit global assignments. Every authorization mutation requires `core.authorization.manage` and an antiforgery token. Reads require `core.authorization.read`. The version endpoint requires `core.system.version.read`.
+
+### 5.3 Applications
 
 ```text
 GET  /api/v1/applications
@@ -476,7 +528,7 @@ POST /api/v1/applications/{applicationId}/launch
 
 Launch returns either a native window descriptor, background operation or session reference.
 
-### 5.3 Desktop layouts
+### 5.4 Desktop layouts
 
 ```text
 GET  /api/v1/layouts?viewportClass=desktop
@@ -490,7 +542,7 @@ DELETE /api/v1/layouts/{layoutId}/windows/{windowId}
 
 Window updates may be batched at `/windows:batch` after a measured need exists.
 
-### 5.4 Packages
+### 5.5 Packages
 
 ```text
 GET  /api/v1/packages
@@ -506,7 +558,7 @@ GET  /api/v1/packages/{packageId}/health
 GET  /api/v1/packages/{packageId}/logs
 ```
 
-### 5.5 Agents
+### 5.6 Agents
 
 ```text
 POST /api/v1/agents/enrollment-tokens
@@ -518,7 +570,7 @@ POST /api/v1/agents/{agentId}/rename
 
 Agent binary communication does not use these browser-facing endpoints.
 
-### 5.6 Problems and notifications
+### 5.7 Problems and notifications
 
 ```text
 GET  /api/v1/problems
@@ -531,7 +583,7 @@ POST /api/v1/notifications/{notificationId}/read
 
 Manual resolution does not prevent a detector from reopening a problem when the condition still exists.
 
-### 5.7 Sessions
+### 5.8 Sessions
 
 ```text
 GET  /api/v1/sessions
@@ -543,7 +595,7 @@ POST /api/v1/sessions/{sessionId}/terminate
 
 Transport signaling uses package-specific authenticated endpoints behind the session reference.
 
-### 5.8 System diagnostics
+### 5.9 System diagnostics
 
 ```text
 GET  /api/v1/system/version
@@ -558,7 +610,7 @@ Returns the stable component name and the semantic version the component was bui
 }
 ```
 
-This endpoint is unauthenticated while no authentication exists. `API-004` attaches its authorization policy together with every other endpoint policy.
+The fallback authentication policy now requires a valid local session. `API-004` replaces that broad requirement with the explicit system-version permission policy together with the remaining endpoint policies.
 
 Health endpoints stay outside `/api/v1` because an orchestrator probes them, not an API client:
 
@@ -594,7 +646,7 @@ Payloads remain small. Events tell clients what changed; APIs return authoritati
 
 ## 7. Background operations
 
-Long actions such as package installation, image pull, backup, large file transfer or session startup use an operation resource.
+Long actions such as package installation, image pull, backup, large file transfer or session startup use a durable operation resource.
 
 ```text
 OperationId
@@ -609,7 +661,10 @@ CreatedAtUtc
 StartedAtUtc
 CompletedAtUtc
 FailureCode
+FailureDetail
 CorrelationId
+CancellationRequested
+Revision
 ```
 
 Operation states:
@@ -622,7 +677,26 @@ Failed
 Cancelled
 ```
 
-An operation is not reported as successful until the requested state is verifiably reached.
+Progress is an immutable ordered stream:
+
+```text
+EventId
+OperationId
+ProgressPercent
+CurrentStep
+OccurredAtUtc
+```
+
+Initial HTTP endpoints:
+
+```text
+POST /api/v1/operations
+GET  /api/v1/operations/{operationId}
+GET  /api/v1/operations/{operationId}/events
+POST /api/v1/operations/{operationId}/cancellation
+```
+
+Creation returns `202 Accepted` and requires an idempotency key. Reusing the same key with the same canonical request returns the original resource; reusing it for different work returns `409 Conflict`. An operation is not reported as successful until its owning executor explicitly verifies the requested state. A running cancellation is stored durably until the worker or Agent acknowledges it. Failed operations expose only a stable code and sanitized safe detail, never an exception, stack trace or credential.
 
 ## 8. App discovery contracts
 

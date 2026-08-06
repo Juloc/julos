@@ -1,0 +1,250 @@
+# Validates the isolated Browser runtime on pull requests and publishes it from main.
+# Pull requests never receive package write operations.
+
+name: Publish Browser Runtime
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+      - packages/JulOS.Browser/runtime/**
+      - .github/workflows/publish-browser-runtime.yml
+  pull_request:
+    paths:
+      - VERSION
+      - packages/JulOS.Browser/runtime/**
+      - .github/workflows/publish-browser-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-browser-runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/juloc/julos-browser-runtime
+
+jobs:
+  publish:
+    name: Validate runtime and publish trusted pushes
+    if: github.repository == 'Juloc/julos'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Validate the complete repository
+        run: sh tools/validate.sh
+
+      - name: Read immutable image version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "VERSION is not a supported immutable image version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test runtime lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="julos-browser-runtime-smoke:${{ steps.version.outputs.version }}"
+          docker build \
+            --file packages/JulOS.Browser/runtime/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ steps.version.outputs.version }}" \
+            --tag "$image" \
+            .
+
+          set +e
+          missing_password_output="$(docker run --rm --network none "$image" 2>&1)"
+          missing_password_status=$?
+          set -e
+
+          printf '%s\n' "$missing_password_output"
+          if [ "$missing_password_status" -eq 0 ]; then
+            echo "Browser runtime started without its required display password." >&2
+            exit 1
+          fi
+          if ! grep -Fq "JULOS_VNC_PASSWORD is required." <<<"$missing_password_output"; then
+            echo "Browser runtime failed without the expected password validation." >&2
+            exit 1
+          fi
+
+          container_id="$(docker run --detach \
+            --network none \
+            --cpus 2 \
+            --memory 1024m \
+            --pids-limit 256 \
+            --security-opt no-new-privileges=true \
+            --cap-drop ALL \
+            --env JULOS_VNC_PASSWORD=A7b9C2d4 \
+            "$image")"
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          dump_runtime_diagnostics() {
+            docker inspect --format '{{json .State}}' "$container_id" >&2 || true
+            docker logs "$container_id" >&2 || true
+            docker exec "$container_id" sh -c '
+              for log in /tmp/julos-browser/logs/*.log; do
+                [ -e "$log" ] || continue
+                printf "\n== %s ==\n" "$log"
+                cat "$log"
+              done
+            ' >&2 || true
+            docker exec "$container_id" /usr/local/bin/browser-runtime-health >&2 || true
+          }
+          trap cleanup EXIT
+
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "10001:10001"
+          test "$(docker image inspect --format '{{json .Config.ExposedPorts}}' "$image")" = '{"5900/tcp":{}}'
+          port_bindings="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$container_id")"
+          if [ "$port_bindings" != '{}' ] && [ "$port_bindings" != 'null' ]; then
+            echo "Browser runtime unexpectedly published a host port: $port_bindings" >&2
+            dump_runtime_diagnostics
+            exit 1
+          fi
+
+          for attempt in $(seq 1 45); do
+            status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id")"
+            if [ "$status" = healthy ]; then
+              break
+            fi
+            if [ "$status" = unhealthy ] || [ "$status" = missing ]; then
+              dump_runtime_diagnostics
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" != healthy ]; then
+            dump_runtime_diagnostics
+            exit 1
+          fi
+          docker stop --time 10 "$container_id" >/dev/null
+          test "$(docker inspect --format '{{.State.Running}}' "$container_id")" = false
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse an existing immutable version
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}:${{ steps.version.outputs.version }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Browser runtime version already exists: $image" >&2
+            exit 1
+          fi
+
+      - name: Set up QEMU
+        if: github.event_name != 'pull_request'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        if: github.event_name != 'pull_request'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish the immutable runtime
+        if: github.event_name != 'pull_request'
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/JulOS.Browser/runtime/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=julos-browser-runtime
+          cache-to: type=gha,mode=max,scope=julos-browser-runtime
+          provenance: false
+          sbom: false
+
+      - name: Attest image provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record immutable runtime reference
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          reference="${IMAGE_NAME}@${{ steps.image.outputs.digest }}"
+          printf '%s\n' "$reference" > browser-runtime-reference.txt
+          printf '%s  %s\n' "${{ steps.image.outputs.digest }}" "${IMAGE_NAME}" > browser-runtime-digest.txt
+
+      - name: Upload runtime evidence
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: JulOS-Browser-Runtime-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: |
+            browser-runtime-reference.txt
+            browser-runtime-digest.txt
+          if-no-files-found: error
+          retention-days: 90

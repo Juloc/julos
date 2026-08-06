@@ -1,4 +1,10 @@
-﻿using JulOS.Domain;
+﻿using JulOS.Application.Authentication;
+using JulOS.Application.Authorization;
+using JulOS.Application.Concurrency;
+using JulOS.Application.Profile;
+using JulOS.Application.Operations;
+using JulOS.Application.Secrets;
+using JulOS.Domain;
 
 namespace JulOS.Server.Errors;
 
@@ -48,6 +54,53 @@ internal static class ErrorHandling
     {
         return exception switch
         {
+            AuthenticationFailureException authentication => authentication.Reason switch
+            {
+                AuthenticationFailureReason.SetupAlreadyCompleted => StatusCodes.Status409Conflict,
+                AuthenticationFailureReason.SetupRequired => StatusCodes.Status409Conflict,
+                AuthenticationFailureReason.InvalidSetupRequest => StatusCodes.Status400BadRequest,
+                AuthenticationFailureReason.InvalidCredentials => StatusCodes.Status401Unauthorized,
+                AuthenticationFailureReason.AntiforgeryInvalid => StatusCodes.Status400BadRequest,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            AuthorizationAdministrationException authorization => authorization.Reason switch
+            {
+                AuthorizationAdministrationFailureReason.InvalidRole => StatusCodes.Status400BadRequest,
+                AuthorizationAdministrationFailureReason.InvalidAssignment => StatusCodes.Status400BadRequest,
+                AuthorizationAdministrationFailureReason.RoleNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.UserNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.AssignmentNotFound => StatusCodes.Status404NotFound,
+                AuthorizationAdministrationFailureReason.SystemRoleImmutable => StatusCodes.Status409Conflict,
+                AuthorizationAdministrationFailureReason.LastAdministrator => StatusCodes.Status409Conflict,
+                AuthorizationAdministrationFailureReason.DuplicateAssignment => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            OperationFailureException operation => operation.Reason switch
+            {
+                OperationFailureReason.Invalid => StatusCodes.Status400BadRequest,
+                OperationFailureReason.NotFound => StatusCodes.Status404NotFound,
+                OperationFailureReason.IdempotencyConflict => StatusCodes.Status409Conflict,
+                OperationFailureReason.InvalidTransition => StatusCodes.Status409Conflict,
+                OperationFailureReason.NotCancellable => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            ProfileFailureException profile => profile.Reason switch
+            {
+                ProfileFailureReason.InvalidPreferences => StatusCodes.Status400BadRequest,
+                ProfileFailureReason.NotFound => StatusCodes.Status404NotFound,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            SecretReferenceFailureException secret => secret.Reason switch
+            {
+                SecretReferenceFailureReason.Invalid => StatusCodes.Status400BadRequest,
+                SecretReferenceFailureReason.NotFound => StatusCodes.Status404NotFound,
+                SecretReferenceFailureReason.Deleted => StatusCodes.Status409Conflict,
+                SecretReferenceFailureReason.LeaseDenied => StatusCodes.Status404NotFound,
+                SecretReferenceFailureReason.Unavailable => StatusCodes.Status503ServiceUnavailable,
+                SecretReferenceFailureReason.LeaseExpired => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status500InternalServerError,
+            },
+            ConcurrencyConflictException => StatusCodes.Status409Conflict,
             DomainRuleViolationException => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status500InternalServerError,

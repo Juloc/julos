@@ -6,6 +6,14 @@ It provides a fast desktop shell with independent windows, snapping, widgets, ap
 
 Initial deployment domain: `os.juloc.de`.
 
+## Alpha release
+
+`0.3.0-alpha.1` is the first installable evaluation build. It is intended to verify installation, desktop interaction and the package architecture before the remaining 1.0 packages are implemented.
+
+Use the minimal [`deploy/alpha/compose.yaml`](deploy/alpha/compose.yaml) stack and follow the [`alpha installation guide`](deploy/alpha/README.md). The exact scope and known boundaries are documented in the [`0.3.0-alpha.1 release notes`](docs/releases/0.3.0-alpha.1.md).
+
+The alpha is not intended for direct public internet exposure. Docker, Proxmox, Files, Caddy, discovery, final hardening and Julgate migration remain outside this release.
+
 ## Product principles
 
 - The core stays small and knows no Docker, Proxmox, Caddy, file or remote protocol details.
@@ -86,7 +94,20 @@ pwsh tools/validate.ps1
 
 Both entry points call `tools/validate.mjs`, so they run identical checks. Add `--list` to see the stages, `--stage <name>` to run one. A failed stage exits non-zero and names itself. `node tools/normalize-encoding.mjs` corrects encoding-policy violations.
 
+The core database is migrated only by the explicit migration command:
+
+```bash
+dotnet tool restore
+dotnet run --project src/JulOS.Server -- --migrate-database
+```
+
+Normal Server startup never changes the schema. The development Compose stack runs this command in its one-shot `migrate` service before starting Server.
+
+After a fresh migration, `GET /api/v1/auth/status` reports that initial setup is required. Create the first administrator once through `POST /api/v1/auth/setup`; subsequent API calls use the secure `.JulOS.Session` cookie. Authenticated users read their current profile from `GET /api/v1/profile` and update validated language, time-zone, theme and motion preferences through `PUT /api/v1/profile/preferences` with an antiforgery token and current revision. Authentication and profile payloads, failures and operational defaults are specified in [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md) and [`docs/SECURITY_AND_OPERATIONS.md`](docs/SECURITY_AND_OPERATIONS.md).
+
 ## Run locally
+
+For the released alpha, use [`deploy/alpha`](deploy/alpha/README.md). For source development:
 
 ```bash
 cd deploy/compose
@@ -104,9 +125,7 @@ Set `JULOS_POSTGRES_PASSWORD` in `.env` first; the stack refuses to start withou
 
 ## Repository status
 
-The product and architecture specification is complete, and the engineering foundation of phase 0 is in place: the solution builds, architecture tests enforce the dependency boundaries, the Desktop toolchain type checks and builds, one command validates the repository, the development stack runs, and continuous integration runs that same command.
-
-Work continues through the dependency order in [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md); [`docs/BACKLOG.md`](docs/BACKLOG.md) names the current item.
+The foundation, core model, persistence, authentication, desktop shell and package platform are implemented. Agent, Remote and Browser foundations are included in the alpha with explicit deployment-validation limits. The remaining official packages and final 1.0 hardening continue through the dependency order in [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md); [`docs/BACKLOG.md`](docs/BACKLOG.md) remains the authoritative item status.
 
 ## Initial repository strategy
 
@@ -115,3 +134,7 @@ Core, Desktop, Agent, Package SDK, official packages and runtime images remain i
 ## License
 
 No license has been selected yet. Until a license is added, all rights are reserved.
+
+## Durable operations
+
+Long-running control-plane work uses versioned operation resources backed by PostgreSQL. Creation is idempotent, progress and cancellation survive reconnects, and success is recorded only after the owning executor verifies the requested state. See [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md#7-background-operations).

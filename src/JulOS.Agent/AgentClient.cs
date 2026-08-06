@@ -1,0 +1,203 @@
+﻿using System.Globalization;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+using JulOS.Contracts.Agents;
+
+namespace JulOS.Agent;
+
+internal sealed class AgentClient
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly HttpClient httpClient;
+    private readonly AgentOptions options;
+    private readonly LinuxMetricsCollector metricsCollector;
+    private readonly AgentCommandExecutor commandExecutor;
+    private readonly TimeProvider timeProvider;
+    private readonly AgentCapabilityInventory capabilityInventory;
+    private readonly AgentRuntimeDiagnostics diagnostics;
+
+    internal AgentClient(
+        HttpClient httpClient,
+        AgentOptions options,
+        LinuxMetricsCollector metricsCollector,
+        AgentCommandExecutor commandExecutor,
+        TimeProvider timeProvider,
+        AgentCapabilityInventory? capabilityInventory = null,
+        AgentRuntimeDiagnostics? diagnostics = null)
+    {
+        this.httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        this.metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
+        this.commandExecutor = commandExecutor ?? throw new ArgumentNullException(nameof(commandExecutor));
+        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        this.capabilityInventory = capabilityInventory ?? new AgentCapabilityInventory();
+        this.diagnostics = diagnostics ?? new AgentRuntimeDiagnostics(timeProvider.GetUtcNow());
+    }
+
+    internal async Task RunAsync(CancellationToken cancellationToken)
+    {
+        var heartbeatDue = DateTimeOffset.MinValue;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var now = this.timeProvider.GetUtcNow();
+            if (now >= heartbeatDue)
+            {
+                await this.SendHeartbeatAndMetricsAsync(cancellationToken).ConfigureAwait(false);
+                heartbeatDue = now + this.options.HeartbeatInterval;
+            }
+
+            await this.PollCommandAsync(cancellationToken).ConfigureAwait(false);
+            await Task.Delay(this.options.CommandPollInterval, this.timeProvider, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task SendHeartbeatAndMetricsAsync(CancellationToken cancellationToken)
+    {
+        var observedAtUtc = this.timeProvider.GetUtcNow();
+        var heartbeat = new AgentHeartbeatRequest(
+            this.options.Version,
+            this.capabilityInventory.CreateHeartbeatCapabilities(),
+            observedAtUtc);
+        await this.SendAsync(
+            HttpMethod.Post,
+            "/api/v1/agent/heartbeat",
+            heartbeat,
+            cancellationToken).ConfigureAwait(false);
+        this.diagnostics.RecordHeartbeatSucceeded(observedAtUtc);
+
+        var metrics = await this.metricsCollector.CollectAsync(cancellationToken).ConfigureAwait(false);
+        await this.SendAsync(
+            HttpMethod.Post,
+            "/api/v1/agent/metrics",
+            new AgentMetricBatchRequest(metrics),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task PollCommandAsync(CancellationToken cancellationToken)
+    {
+        using var request = this.CreateRequest(HttpMethod.Get, "/api/v1/agent/commands/next");
+        using var response = await this.httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return;
+        }
+
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        var command = await response.Content.ReadFromJsonAsync<AgentCommandResponse>(
+            JsonOptions,
+            cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Agent command response is empty.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var remaining = command.ExpiresAtUtc - this.timeProvider.GetUtcNow();
+        if (remaining > TimeSpan.Zero)
+        {
+            deadline.CancelAfter(remaining);
+        }
+        else
+        {
+            deadline.Cancel();
+        }
+
+        AgentCommandExecution execution;
+        try
+        {
+            execution = await this.commandExecutor.ExecuteAsync(command, deadline.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            execution = new AgentCommandExecution(
+                false,
+                JsonSerializer.SerializeToElement(new { }),
+                "agent.command_deadline_exceeded");
+        }
+
+        await this.SendAsync(
+            HttpMethod.Post,
+            $"/api/v1/agent/commands/{command.CommandId:D}/complete",
+            new CompleteAgentCommandRequest(
+                execution.Succeeded,
+                execution.Result,
+                execution.ErrorCode,
+                command.Revision),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SendAsync<T>(
+        HttpMethod method,
+        string path,
+        T body,
+        CancellationToken cancellationToken)
+    {
+        using var request = this.CreateRequest(method, path);
+        request.Content = JsonContent.Create(body, options: JsonOptions);
+        using var response = await this.httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        ValidateServerProtocol(response);
+        await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("X-JulOS-Agent-Id", this.options.AgentId.ToString("D"));
+        request.Headers.Add("X-JulOS-Agent-Credential", this.options.Credential);
+        request.Headers.Add(
+            AgentProtocolContract.HeaderName,
+            AgentProtocolContract.CurrentVersion.ToString(CultureInfo.InvariantCulture));
+        request.Headers.Accept.ParseAdd("application/json");
+        return request;
+    }
+
+    private static void ValidateServerProtocol(HttpResponseMessage response)
+    {
+        if (response.StatusCode == HttpStatusCode.UpgradeRequired)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_incompatible",
+                "The Server rejected the Agent protocol version.");
+        }
+        if (!response.Headers.TryGetValues(AgentProtocolContract.HeaderName, out var values)
+            || !int.TryParse(
+                values.SingleOrDefault(),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var protocolVersion)
+            || protocolVersion != AgentProtocolContract.CurrentVersion)
+        {
+            throw new AgentProtocolException(
+                "agent.protocol_negotiation_failed",
+                "The Server did not confirm the current Agent protocol version.");
+        }
+    }
+
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var detail = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (detail.Length > 512)
+        {
+            detail = detail[..512];
+        }
+
+        throw new HttpRequestException(
+            $"JulOS Agent request failed with status {(int)response.StatusCode}: {detail}",
+            inner: null,
+            response.StatusCode);
+    }
+}

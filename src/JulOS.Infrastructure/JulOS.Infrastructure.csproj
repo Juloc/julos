@@ -6,11 +6,24 @@
 
   <ItemGroup>
     <ProjectReference Include="..\JulOS.Application\JulOS.Application.csproj" />
+    <ProjectReference Include="..\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="JulOS.Infrastructure.Tests" />
+    <InternalsVisibleTo Include="JulOS.Integration.Tests" />
   </ItemGroup>
 
 </Project>

@@ -145,11 +145,13 @@ Contracts contain no persistence annotations or implementation behavior.
 
 ### JulOS.Infrastructure
 
-Contains core persistence, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
+Contains core persistence, the ASP.NET Core Identity stores for local users and roles, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
+
+Secret storage is a Core-backed Infrastructure adapter. AES-256-GCM ciphertext, nonce, tag and key identifier are stored in PostgreSQL; the 32-byte key files are loaded from the absolute external `Secrets:KeyRingPath`. The active key identifier and lease lifetime are non-secret configuration, while key contents are deployment material. The HTTP layer exposes metadata-only create, read, rotate and delete operations; decrypted bytes exist only inside the operation-scoped Application lease.
 
 ### JulOS.Server
 
-ASP.NET Core composition root. It owns middleware, endpoint mapping, authentication setup, background-service registration and dependency injection wiring.
+ASP.NET Core composition root. It owns middleware, endpoint mapping, authentication setup, secure cookie configuration, default-deny fallback authorization, rate limiting, antiforgery, background-service registration and dependency injection wiring.
 
 ### JulOS.Desktop
 
@@ -313,6 +315,13 @@ Request flow:
 
 Packages never obtain another package's service instance.
 
+
+## 8.1 Durable operation execution
+
+`IOperationService` is the Core-owned boundary for long-running work. A caller creates a queued operation with a user-scoped idempotency key. The owning executor explicitly marks it running, appends progress, and reaches exactly one terminal state. Current status and every accepted progress event are committed in PostgreSQL, so reconnects and Server restarts do not invent completion or lose cancellation intent.
+
+A cancellation request for queued work cancels it immediately. A running request sets a durable cancellation timestamp; the worker or Agent must observe that flag and later acknowledge cancellation through the same lifecycle port. Failure completion accepts only a stable code and sanitized safe detail. Raw exceptions remain inside the executor boundary.
+
 ## 9. Window manager implementation
 
 The desktop maintains an in-memory window store synchronized with persisted layout revisions.
@@ -394,6 +403,12 @@ Julgate and guacd implementation details remain behind Remote package contracts.
 - soft deletion is used only when audit or recovery requires it
 - domain history is not duplicated from external systems
 
+`CoreDbContext` lives in Infrastructure and owns only the PostgreSQL `core` schema. It maps persistence-specific rows to the Phase 1 domain concepts instead of adding EF Core constructors or annotations to Domain. Package-owned schemas never enter this context.
+
+The migration history table is `core.__ef_migrations_history`. Schema changes run only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service. Normal Server startup does not call `Migrate`, and manual schema edits are unsupported.
+
+The first migration uses database keys, foreign keys, unique indexes and check constraints to enforce identities, valid revisions, fault metadata, scope shape, layout bounds and lifecycle timestamps. Audit events additionally have a PostgreSQL trigger that rejects updates and deletes.
+
 ## 13. Events and real-time updates
 
 Server publishes versioned events through SignalR:
@@ -442,6 +457,8 @@ Rules:
 - package manifests declare localization bundles
 - no user-facing string is hard-coded in TypeScript or backend response construction
 - date, time, number and storage formatting use the selected locale
+- profile preferences accept only `en` or `de`, a resolvable IANA time zone, `system`/`light`/`dark` theme and `enabled`/`reduced` motion
+- preference updates use the current user revision and never silently overwrite a concurrent change
 
 ## 16. Performance rules
 

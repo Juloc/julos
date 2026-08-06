@@ -161,7 +161,7 @@ Implemented as `.github/workflows/validation.yml`, which runs `sh tools/validate
 
 Only downloaded packages are cached, never build output or `node_modules`, and the run ends with `git diff --exit-code` so a tracked file modified by validation fails the build.
 
-PostgreSQL integration tests are added by `API-001` together with the persistence they cover. There is no integration test to run yet, so no database service is configured; a service that starts and tests nothing would report a check that did not happen.
+`API-001` adds the PostgreSQL service and real persistence integration tests. The workflow still invokes only `tools/validate.sh`; the service is an execution dependency, not a second validation command list.
 
 ### FND-007 — Add version and release metadata foundation
 
@@ -378,6 +378,8 @@ Default deny. An empty assignment set grants nothing, and a narrow grant never w
 
 ### API-001 — Add PostgreSQL core persistence
 
+Status: done.
+
 Depends on: CORE-002 through CORE-008, FND-005.
 
 Deliver DbContext, mappings, first migration and migration command.
@@ -387,7 +389,15 @@ Acceptance:
 - empty database migrates successfully
 - constraints reflect domain invariants
 
+Implemented as `CoreDbContext` and relational storage rows in `JulOS.Infrastructure.Persistence.Core`. The context owns only the `core` schema; package schemas remain outside it. Stable identifiers are never database-generated, mutable rows map `Revision` as a concurrency token, and PostgreSQL check constraints preserve domain invariants even when data enters below the application layer. Audit events are protected by an update/delete trigger as well as their immutable domain type.
+
+The committed migration is applied only through `JulOS.Server --migrate-database`. The development Compose stack runs that command in a one-shot service and starts Server only after it succeeds, so normal startup never changes the schema.
+
+`tests/JulOS.Integration.Tests` creates isolated databases on a real PostgreSQL service and proves that an empty database migrates, invalid states are rejected and audit rows are append-only. CI supplies the service through `JULOS_TEST_POSTGRES`; SQLite is not used.
+
 ### API-002 — Add optimistic concurrency
+
+Status: done.
 
 Depends on: API-001.
 
@@ -398,7 +408,13 @@ Acceptance:
 - stale update returns conflict with current revision
 - silent last-write-wins does not occur
 
+Implemented by mapping every currently persisted mutable row revision as an Entity Framework Core concurrency token. `CoreDbContext` translates provider conflicts into the transport-neutral `ConcurrencyConflictException`, reads the authoritative stored revision and never retries or overwrites automatically.
+
+The Server maps that exception through the existing API-006 error pipeline to HTTP 409 with `request.concurrency_conflict` and the `currentRevision` Problem Details extension. Real PostgreSQL integration tests prove that a stale package write fails, the newer row remains unchanged and the public error contract contains the current revision. Layout, window, widget, session, Agent and problem rows use the same model rule; settings receive it when API-005 introduces their persistence.
+
 ### API-003 — Add local authentication
+
+Status: done.
 
 Depends on: API-001.
 
@@ -409,7 +425,15 @@ Acceptance:
 - desktop and APIs reject unauthenticated users
 - login rate limiting is tested
 
+Implemented with ASP.NET Core Identity persisted in the existing `core` schema. The singleton `authentication_setup` row is locked inside one database transaction, so only one initial administrator can be created even when setup requests race. The administrator receives the system `Administrator` role, while permission evaluation and role-management endpoints remain owned by `API-004`.
+
+The Server uses a secure, HTTP-only, same-site session cookie, a validated configurable session timeout, lockout after repeated failures and a per-IP fixed-window limit for setup and login. Login failures deliberately return one public code for an unknown user, a wrong password and a locked account. Logout requires a valid antiforgery token.
+
+A fallback authorization policy protects every endpoint unless it is explicitly anonymous. Only authentication setup/status/login and health probes are anonymous. Integration tests run against migrated PostgreSQL and prove one-time setup, protected APIs, cookie attributes, lockout, rate limiting, antiforgery logout and configurable session expiry.
+
 ### API-004 — Add role and permission authorization
+
+Status: done.
 
 Depends on: API-003, CORE-008.
 
@@ -423,7 +447,15 @@ Acceptance:
 - unauthorized calls return 401 or 403 correctly
 - no endpoint outside authentication and health is reachable unauthenticated
 
+Implemented through `JulOS.Application.Authorization`, the Infrastructure-backed permission reader and role administrator, and policy handlers in `JulOS.Server.Authorization`. Permission evaluation uses the existing pure Domain evaluator and combines direct user grants with grants inherited from local Identity roles. There is no administrator bypass: the system administrator role receives the three initial Core permissions as ordinary global assignments.
+
+The version endpoint requires `core.system.version.read`. Authorization administration is split into read and manage permissions. Role, membership and grant mutations require both the manage policy and antiforgery validation. System roles cannot be renamed or deleted, and the last administrator cannot be removed.
+
+Migration `20260802131339_AddRoleAuthorization` adds role descriptions, makes global grants genuinely unique with PostgreSQL `NULLS NOT DISTINCT`, and backfills explicit administrator grants for installations upgraded from `API-003`. Integration tests cover anonymous `401`, authenticated `403`, role inheritance, administrative mutations, system-role safety, antiforgery metadata and the upgrade backfill against PostgreSQL.
+
 ### API-005 — Add profile and preferences API
+
+Status: done.
 
 Depends on: API-003.
 
@@ -433,6 +465,10 @@ Acceptance:
 
 - English and German are valid
 - invalid timezone and locale fail validation
+
+Implemented through versioned Profile contracts, an Application profile port, the Core-backed Infrastructure service and authenticated Server endpoints. The current user can read only their own profile and change only the supported preference fields. Mutations require the common antiforgery contract and the caller's current revision.
+
+Migration `AddProfilePreferences` adds the persisted motion mode and enforces the supported language and motion values in PostgreSQL. Integration tests cover defaults, valid German and `Europe/Berlin` updates, invalid locale and time-zone rejection, antiforgery, endpoint metadata and stale-revision conflicts.
 
 ### API-006 — Add common Problem Details and correlation IDs
 
@@ -468,6 +504,14 @@ Acceptance:
 - background work is not reported as success before completion
 - operation failure retains a safe cause
 
+Status: done.
+
+Implemented through versioned operation and progress contracts, an Application lifecycle port, PostgreSQL-backed Infrastructure storage and permission-protected Server endpoints. Creation is idempotent per user and key. Queued resources remain queued until an owning executor explicitly starts them; only the executor can mark verified work as succeeded. Progress events are immutable and update the current summary atomically.
+
+Running cancellation is a durable request observed by the owning worker or Agent through the Application service; queued cancellation becomes terminal immediately. Failed operations persist only a stable code and caller-safe detail. Migration `AddOperationResources` creates the operation and progress tables and backfills the three explicit operation permissions for an existing administrator role.
+
+Integration tests cover antiforgery, idempotency conflict, reconnect-safe reads, progress ordering, persistent cancellation and safe failed-operation causes against real PostgreSQL.
+
 ### API-008 — Add secret-reference service
 
 Depends on: API-001, API-004.
@@ -478,6 +522,14 @@ Acceptance:
 
 - secret value is never returned after creation
 - logs and audit tests contain no plaintext
+
+Status: done.
+
+Implemented through versioned metadata-only contracts, an Application service and lease port, AES-256-GCM protection in Infrastructure, Core PostgreSQL persistence and permission-protected Server endpoints. The active encryption key and retained decryption keys are loaded from external `*.key` files, never from PostgreSQL or ordinary configuration columns. Associated data binds ciphertext to the opaque reference, scope and purpose so copied or altered records fail authentication.
+
+Create and rotate accept a value only for the current request and return metadata without the value. Delete destroys the nonce, ciphertext, authentication tag and key identifier while retaining a revisioned tombstone. Every mutation appends an audit event whose summary and safe details state only that the value was omitted.
+
+The lease port releases decrypted bytes only for a running, non-cancelling operation whose Core or package identity owns the secret scope. Leases expire within the configured short lifetime and zero their buffers on expiry or disposal. Integration tests verify encryption at rest, response and audit redaction, antiforgery, optimistic concurrency, scope denial, rotation, deletion and real PostgreSQL constraints.
 
 ### API-009 — Add audit service
 

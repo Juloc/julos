@@ -1,0 +1,25 @@
+﻿{
+  "SchemaVersion": "99",
+  "PackageId": "de.juloc.julos.unsupported",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-test",
+  "DisplayNameKey": "package.unsupported.name",
+  "DescriptionKey": "package.unsupported.description",
+  "Runtime": {
+    "Kind": "none",
+    "Image": null,
+    "EntryPoint": null,
+    "MemoryLimitMegabytes": 16,
+    "CpuLimit": 0.1,
+    "StartupTimeoutSeconds": 10,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [],
+  "Widgets": [],
+  "Capabilities": [],
+  "Migrations": [],
+  "Frontend": null
+}

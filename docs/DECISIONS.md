@@ -222,3 +222,38 @@ Reason: `TimeProvider` is the platform's clock abstraction and already has a mai
 `tests/JulOS.Infrastructure.Tests` holds unit tests for control-plane adapters that need no external dependency. `tests/JulOS.Integration.Tests` remains for tests that run against a real PostgreSQL instance or another live dependency.
 
 Reason: an adapter such as the identifier generator is pure logic and must not require a database container to run. Putting it in the integration project would make the fast test set depend on infrastructure it does not need.
+
+## D026 — Persistence rows stay outside Domain
+
+**Status:** Accepted
+
+Entity Framework Core maps relational storage rows in Infrastructure rather than materializing the Domain aggregates directly. Each row exposes only storage data and a one-way `FromDomain` conversion where a Domain aggregate already exists. It contains no lifecycle rule, authorization decision or alternate state transition.
+
+Reason: some Domain types deliberately require services such as `TimeProvider` or enforce creation through named operations. Adding persistence-only constructors, mutable setters or EF annotations would weaken those invariants and make Domain depend on PostgreSQL tooling. Separate rows keep the Domain persistence-neutral while database constraints provide an independent final enforcement layer.
+
+## D027 — Local authentication uses Identity cookies and a default-deny fallback
+
+**Status:** Accepted
+
+Local accounts and roles use ASP.NET Core Identity stores in the existing `core` schema. Browser sessions use one secure, HTTP-only, same-site-strict Identity cookie. Server installs an authenticated-user fallback policy, and only setup, login, authentication status and health probes may opt out explicitly.
+
+Reason: Identity supplies reviewed password hashing, lockout, security stamps and cookie integration without placing credential behavior in Domain. A fallback policy makes a newly added endpoint private unless its owner consciously declares otherwise. Roles are stored now because the first administrator needs a stable system role, but permission mapping and role administration stay in `API-004` so authentication does not invent authorization behavior.
+
+## D028 — Authorization has no role-name bypass
+
+**Status:** Accepted
+
+Backend policies resolve direct user grants and grants inherited from current ASP.NET Core Identity roles, then call the pure Core permission evaluator for the requested permission and scope. The built-in administrator role is immutable and receives explicit global assignments; its name never short-circuits a policy.
+
+Reason: a role-name superuser branch would create a second authorization system outside the Domain model, hide missing assignments and make scoped permissions impossible to reason about. Explicit persisted grants keep policy behavior visible, testable and migratable. Existing administrators are backfilled during the `API-004` migration so an upgrade cannot lock out the operator.
+
+
+## D029 — External AES-GCM secret key ring
+
+**Status:** Accepted
+
+Core secret references use AES-256-GCM with a random 96-bit nonce and a 128-bit authentication tag. The reference identifier, owning scope and purpose are authenticated associated data. PostgreSQL stores ciphertext and the non-secret key identifier; 32-byte encryption keys are Base64 files in an external deployment-owned key-ring directory. One configured active key encrypts new values, while retained keys decrypt existing rows.
+
+The control plane never returns a stored value through HTTP. Decryption occurs only through the operation-scoped Application lease after the durable operation is verified as running, non-cancelling and owned by the matching Core or package scope. Lease buffers are zeroed on expiry or disposal. Deletion destroys all protected-value columns and retains a revisioned metadata tombstone plus a sanitized audit event.
+
+Reason: authenticated encryption protects confidentiality and detects record substitution without inventing a custom cryptographic construction. Keeping key files outside PostgreSQL means a database backup alone cannot decrypt credentials. A small explicit key ring supports controlled encryption-key rotation without an indefinite dual storage path or a dependency on an external secret product for the first supported deployment.

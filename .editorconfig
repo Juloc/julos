@@ -42,6 +42,11 @@ indent_size = 2
 indent_style = space
 indent_size = 4
 
+# EF migration bodies are generated code. The generator emits small inline arrays
+# for indexes and constraints; CA1861 is not actionable at this boundary.
+[src/JulOS.Infrastructure/Persistence/Core/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none
+
 [*.{ts,tsx,js,jsx,mjs,cjs,css,scss,html}]
 indent_style = space
 indent_size = 2

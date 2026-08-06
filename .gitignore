@@ -24,6 +24,7 @@ src/JulOS.Desktop/build/
 .env.*
 !.env.example
 !**/.env.example
+deploy/compose/secret-keys/
 
 # Transient agent worktrees
 .claude/worktrees/

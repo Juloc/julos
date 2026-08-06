@@ -1,0 +1,72 @@
+﻿{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.reference",
+  "Version": "1.0.0",
+  "PublisherId": "juloc-official",
+  "DisplayNameKey": "package.reference.name",
+  "DescriptionKey": "package.reference.description",
+  "Runtime": {
+    "Kind": "process",
+    "Image": null,
+    "EntryPoint": "worker/JulOS.ReferencePackage.Worker.dll",
+    "MemoryLimitMegabytes": 128,
+    "CpuLimit": 0.5,
+    "StartupTimeoutSeconds": 30,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [
+    {
+      "StableKey": "reference",
+      "DisplayNameKey": "app.reference.name",
+      "InstancePolicy": "single-instance-per-user",
+      "DefaultWidth": 720,
+      "DefaultHeight": 520,
+      "MinimumWidth": 360,
+      "MinimumHeight": 280,
+      "Viewports": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ]
+    }
+  ],
+  "Widgets": [
+    {
+      "StableKey": "status",
+      "DisplayNameKey": "widget.reference.status.name",
+      "ElementName": "julos-reference-widget",
+      "Sizes": [
+        "small",
+        "medium"
+      ],
+      "DefaultSize": "small"
+    }
+  ],
+  "Capabilities": [
+    {
+      "Name": "reference.echo",
+      "Direction": "provides",
+      "ContractVersion": "1.0.0",
+      "Required": false
+    }
+  ],
+  "Migrations": [
+    {
+      "MigrationId": "001-initialize-reference-data",
+      "Resource": "package-database",
+      "Reversible": true,
+      "Digest": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "Frontend": {
+    "ModulePath": "frontend/reference-package.js",
+    "Sha256": "0b1c90cb36e8411c88b082dbee9974f98839df48a4923d814f92653d38373533",
+    "ExportedElements": [
+      "julos-reference-app",
+      "julos-reference-widget"
+    ]
+  }
+}

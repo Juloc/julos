@@ -13,15 +13,26 @@ public sealed class ProjectReferenceTests
         [PlatformProjects.Domain] = [],
         [PlatformProjects.Contracts] = [],
         [PlatformProjects.Application] = [PlatformProjects.Domain, PlatformProjects.Contracts],
-        [PlatformProjects.Infrastructure] = [PlatformProjects.Application],
+        [PlatformProjects.Infrastructure] = [
+            PlatformProjects.Application,
+            PlatformProjects.PackageSdk,
+        ],
         [PlatformProjects.Server] = [PlatformProjects.Application, PlatformProjects.Infrastructure],
         [PlatformProjects.PackageSdk] = [PlatformProjects.Contracts],
         [PlatformProjects.Agent] = [PlatformProjects.Contracts],
         [PlatformProjects.RuntimeManager] = [PlatformProjects.Contracts],
+        ["tests/JulOS.Agent.Tests/JulOS.Agent.Tests.csproj"] = [PlatformProjects.Agent],
         [PlatformProjects.ArchitectureTests] = [],
         [PlatformProjects.DomainTests] = [PlatformProjects.Domain],
-        [PlatformProjects.InfrastructureTests] = [PlatformProjects.Infrastructure],
+        [PlatformProjects.InfrastructureTests] = [
+            PlatformProjects.Infrastructure,
+            PlatformProjects.RuntimeManager,
+        ],
         [PlatformProjects.IntegrationTests] = [PlatformProjects.Server],
+        ["tests/JulOS.Remote.Transport.Tests/JulOS.Remote.Transport.Tests.csproj"] = [
+            "packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj",
+            "packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj",
+        ],
     };
 
     [TestMethod]

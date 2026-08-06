@@ -75,6 +75,17 @@ Run against a real supported PostgreSQL container or isolated database:
 
 SQLite is not used as a substitute for PostgreSQL behavior.
 
+Continuous integration starts the pinned supported PostgreSQL image and sets `JULOS_TEST_POSTGRES` to its maintenance database. Each persistence test creates an isolated database, applies committed migrations and drops the database afterward. A local run without that variable reports the PostgreSQL tests as inconclusive rather than pretending they passed.
+
+`API-001` covers clean migration, database enforcement of representative domain invariants, schema ownership and append-only audit storage. Later persistence work items extend the same real-database suite for concurrency, package isolation, upgrade fixtures and backup metadata.
+
+`API-002` adds a real two-writer PostgreSQL test that proves the second stale save fails and the first committed revision remains authoritative. A Server integration test separately verifies the HTTP 409 code and `currentRevision` extension, so storage and transport behavior cannot silently diverge.
+
+`API-003` extends the migrated PostgreSQL suite with the real Identity schema and drives the production HTTP host. It verifies serialized one-time administrator setup, protected API fallback, secure cookie attributes, indistinguishable credential failures, account lockout, per-IP rate limiting, antiforgery-protected logout and configured session expiry.
+
+
+`API-007` adds real PostgreSQL and production-host tests for queued state, user-scoped idempotency, immutable progress events, durable cancellation requests and safe failure causes. The suite proves that no creation response reports success and that a new HTTP request reads the same authoritative state.
+
 ### 2.5 API integration tests
 
 `tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.
@@ -215,6 +226,9 @@ Runtime Manager is security-critical. Tests verify:
 - cross-user layout and session isolation
 - package schema access isolation
 - secret values absent from APIs, logs and audit events
+- AES-GCM ciphertext differs across encryptions and fails when reference metadata is altered
+- secret-reference deletion clears protected-value columns
+- leases require a matching running operation, expire and zero their buffer
 - anti-forgery rejection
 - login rate limits
 - unsafe redirect rejection
@@ -383,6 +397,14 @@ Reviewers verify:
 - performance impact
 - Markdown updates
 - backlog update
+
+Profile and preference integration coverage verifies:
+
+- authenticated reads return persisted defaults and revisions
+- English and German, valid IANA time zones and all documented theme and motion values round-trip
+- unsupported locale and time-zone values return the stable validation code
+- missing antiforgery tokens fail before mutation
+- stale revisions return HTTP 409 with the authoritative revision and do not overwrite newer preferences
 
 ## 15. Definition of done
 

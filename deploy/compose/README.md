@@ -11,11 +11,35 @@ cp .env.example .env
 
 Set `JULOS_POSTGRES_PASSWORD` in `.env`. The stack refuses to start without it, so no weak default password can reach a running system.
 
+Create the external secret-encryption key ring before the first start:
+
+```bash
+mkdir -p secret-keys
+umask 077
+openssl rand -base64 32 > secret-keys/primary.key
+```
+
+`JULOS_SECRET_KEY_RING_PATH` points at this host directory. The directory is mounted read-only at `/run/julos-secret-keys`; it is not part of the PostgreSQL volume or database backup. Keep the key ring in a separate protected backup. Losing every key file makes existing secret references undecryptable.
+
 ```bash
 docker compose up --build
 ```
 
+The one-shot `migrate` service applies committed Entity Framework Core migrations after PostgreSQL becomes healthy. Server starts only after migration succeeds. A migration failure therefore leaves Server stopped instead of running against an unknown schema.
+
 The server answers on `http://127.0.0.1:8080`.
+
+
+A fresh database has no account. `GET /api/v1/auth/status` reports `setupRequired: true`; `POST /api/v1/auth/setup` creates the only initial administrator and returns the secure session cookie. Setup cannot be repeated after the database transaction records completion.
+
+To apply migrations outside Compose, set `ConnectionStrings__CoreDatabase` and run:
+
+```bash
+dotnet tool restore
+dotnet run --project src/JulOS.Server -- --migrate-database
+```
+
+Do not edit core tables or migration history manually.
 
 ## Health
 
@@ -34,7 +58,7 @@ The runtime image ships no HTTP client tool, so the probe adds no attack surface
 
 ## Data
 
-PostgreSQL data lives in the named volume `julos-dev_postgres-data` and survives `docker compose down`.
+PostgreSQL data lives in the named volume `julos-dev_postgres-data` and survives `docker compose down`. Encrypted secret values are stored in PostgreSQL, while the AES key ring remains in the separately managed host directory configured by `JULOS_SECRET_KEY_RING_PATH`.
 
 ```bash
 docker compose down --volumes   # discards the development database

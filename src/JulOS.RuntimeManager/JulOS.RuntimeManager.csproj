@@ -6,13 +6,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\JulOS.Contracts\JulOS.Contracts.csproj" />
   </ItemGroup>
 
   <!--
     Runtime Manager is a separate trust boundary. It must not reference
     JulOS.Domain, JulOS.Application, JulOS.Infrastructure or JulOS.Server.
-    Its authenticated runtime API is delivered by PKG-003.
   -->
 
 </Project>

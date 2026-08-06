@@ -35,12 +35,19 @@ Authentication at one boundary does not automatically authorize another boundary
 
 Initial deployment supports local accounts with:
 
-- secure password hashing through ASP.NET Core Identity
-- secure, HTTP-only and same-site cookies
-- configurable session timeout
-- login rate limiting
-- account lockout with safe recovery
-- forced initial administrator creation during setup
+- password hashing and verification through ASP.NET Core Identity
+- secure, HTTP-only, same-site-strict cookies named `.JulOS.Session`
+- configurable sliding session timeout
+- a per-IP fixed-window limit shared by setup and login
+- account lockout after repeated failures without a user-enumerating response
+- one database-serialized initial administrator creation during setup
+- antiforgery validation before logout
+
+The defaults are 30 minutes for the session, 15 minutes for lockout, five failed passwords before lockout and five setup/login requests per 60 seconds. They are configured through `Authentication__SessionTimeoutMinutes`, `Authentication__LockoutMinutes`, `Authentication__MaximumFailedAccessAttempts`, `Authentication__LoginPermitLimit` and `Authentication__LoginWindowSeconds`. Invalid or unsafe ranges stop Server startup instead of being silently corrected.
+
+The initial password must be 12 to 1024 characters and satisfy the Identity digit, lowercase, uppercase, non-alphanumeric and unique-character rules. The setup endpoint never logs or returns it. Password hashes, security stamps and lockout state remain in the `core` identity tables.
+
+Safe lockout recovery in `API-003` is time expiry. Administrative account recovery and session revocation require audited authorization work and are added by their owning later items; no unauthenticated reset endpoint exists.
 
 ### 3.2 OIDC
 
@@ -87,7 +94,15 @@ discovery.approve
 Rules:
 
 - every API mutation has a backend policy
+- default deny applies to anonymous users and to authenticated users without the exact permission
+- direct user grants and current role grants are evaluated through the same Core permission model
+- role names never bypass permission checks; the administrator role receives explicit assignments
+- system roles cannot be renamed or deleted, and the last administrator cannot be removed
+- role, membership and grant mutations require both authorization and antiforgery validation
+- profile preference updates are limited to the authenticated account, require antiforgery validation and use optimistic concurrency
 - package workers receive only the user and scope claims required for one operation
+- operation failures store only stable codes and sanitized safe details
+- operation target references and progress steps never contain credentials
 - read and control permissions are separate
 - destructive actions use narrower permissions where necessary
 - a package cannot grant permissions to itself
@@ -108,7 +123,13 @@ Requirements:
 - secret rotation does not require recreating unrelated configuration
 - deletion is explicit and auditable
 
-Development examples use placeholders only.
+Core secret references use AES-256-GCM. Every encryption uses a random 96-bit nonce and a 128-bit authentication tag. The opaque reference identity, owning scope and purpose are authenticated associated data, so ciphertext cannot be copied to a different reference or scope without detection.
+
+`Secrets:KeyRingPath` points to an absolute external directory containing one Base64-encoded 32-byte key per `<key-id>.key` file. `Secrets:ActiveKeyId` selects the key for new writes; retained files decrypt older rows. The directory must be readable only by the Server identity and backed up separately from PostgreSQL. Key files are never generated automatically in production, stored in the database, written to logs or included in ordinary application backup archives. Activating or retiring a key requires a controlled Server restart.
+
+Deletion clears the encryption-key identifier, nonce, ciphertext and authentication tag in the same transaction that appends the sanitized audit event. A lease is issued only for a running, non-cancelling operation whose package identity matches the reference scope, expires after 30 seconds to 15 minutes, and zeroes its in-memory buffer when disposed or expired.
+
+Development examples use generated test-only keys and placeholders only.
 
 ## 6. Agents
 
@@ -383,6 +404,8 @@ A release cannot be marked stable until a clean restore test succeeds.
 ## 20. Updates
 
 ### 20.1 Core update
+
+Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Compose runs it as a one-shot service before Server and refuses to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit `core.__ef_migrations_history` or core tables manually.
 
 - pull versioned images, never an unpinned `latest` deployment reference
 - verify release metadata

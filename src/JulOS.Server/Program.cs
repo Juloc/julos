@@ -1,32 +1,83 @@
 ﻿// JulOS Server composition root.
-// Authentication, persistence and feature endpoints are wired by later work items.
+// Local authentication protects the control plane; feature endpoints follow later work items.
 
 using JulOS.Contracts.Diagnostics;
+using JulOS.Infrastructure.Agents;
 using JulOS.Infrastructure.Health;
+using JulOS.Infrastructure.Packages;
+using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
+using JulOS.Infrastructure.Secrets;
 using JulOS.Server;
+using JulOS.Server.Agents;
+using JulOS.Server.Auditing;
+using JulOS.Server.Authentication;
+using JulOS.Server.Authorization;
 using JulOS.Server.Errors;
+using JulOS.Server.Events;
+using JulOS.Server.Layouts;
+using JulOS.Server.Operations;
+using JulOS.Server.Packages;
+using JulOS.Server.Profile;
+using JulOS.Server.Remote;
+using JulOS.Server.SafeMode;
+using JulOS.Server.Secrets;
+using JulOS.Server.Security;
 
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 if (HealthProbeCommand.IsRequested(args))
 {
     return await HealthProbeCommand.RunAsync(args).ConfigureAwait(false);
 }
 
-const string ReadinessTag = "ready";
-const string CoreDatabaseConnectionName = "CoreDatabase";
-
 var builder = WebApplication.CreateBuilder(args);
 
-// The control plane cannot operate without its database, so a missing connection
-// string stops startup instead of producing a server that fails on first use.
-var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnectionName)
-    ?? throw new InvalidOperationException(
-        $"The connection string '{CoreDatabaseConnectionName}' is not configured. "
-        + $"Set ConnectionStrings__{CoreDatabaseConnectionName} or see deploy/compose/README.md.");
+if (DatabaseMigrationCommand.IsRequested(args))
+{
+    return await DatabaseMigrationCommand
+        .RunAsync(builder.Configuration)
+        .ConfigureAwait(false);
+}
+
+const string ReadinessTag = "ready";
+var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 
 builder.Services.AddJulOsErrorHandling();
+builder.Services.AddJulOsCorePersistence(coreDatabase);
+builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
+builder.Services.AddHostedService<RemoteSessionLifecycleWorker>();
+builder.Services.AddJulOsAgentControl();
+builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
+builder.Services.AddJulOsAuthorization();
+builder.Services.AddSingleton(SafeModeState.Read(builder.Configuration));
+builder.Services.AddJulOsRealtimeEvents();
+builder.Services.AddJulOsPackageManagement(builder.Configuration, coreDatabase);
+var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
+builder.Services.AddSingleton(secretOptions);
+builder.Services.AddJulOsSecretReferences(
+    secretOptions.ActiveKeyId,
+    secretOptions.KeyRingPath,
+    secretOptions.LeaseLifetime);
+var dataProtectionKeyRingPath =
+    builder.Configuration["DataProtection:KeyRingPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
+{
+    dataProtectionKeyRingPath = JulOsDataProtection.KeyRingPath;
+}
+
+builder.Services
+    .AddDataProtection()
+    .SetApplicationName("JulOS")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
+builder.Services.AddSingleton<JulOsDataProtectionKeyProvider>();
+builder.Services.AddSingleton<
+    IConfigureOptions<KeyManagementOptions>,
+    JulOsDataProtectionOptions>();
 
 builder.Services
     .AddHealthChecks()
@@ -38,20 +89,51 @@ builder.Services
 
 var app = builder.Build();
 
+if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
+{
+    await CoreDatabaseMigrator.MigrateAsync(coreDatabase).ConfigureAwait(false);
+}
+
 app.UseJulOsErrorHandling();
+app.UseJulOsAgentProtocol();
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.UseRateLimiter();
+app.UseWebSockets();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
 
-// Liveness answers whether the process itself is running, so it registers no
-// dependency check. A failing dependency must not cause a restart loop.
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+    .AllowAnonymous();
 app.MapHealthChecks(
     "/health/ready",
-    new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) });
+    new HealthCheckOptions { Predicate = registration => registration.Tags.Contains(ReadinessTag) })
+    .AllowAnonymous();
 
-// Diagnostics. API-004 attaches the authorization policy once roles exist.
+app.MapJulOsLocalAuthentication();
+app.MapJulOsAuthorization();
+app.MapJulOsProfile();
+app.MapJulOsDesktopLayouts();
+app.MapJulOsPackages();
+app.MapJulOsPackageCapabilities();
+app.MapJulOsPackageUpdates();
+app.MapJulOsOperations();
+app.MapJulOsSecretReferences();
+app.MapJulOsSafeMode();
+app.MapJulOsAudit();
+app.MapJulOsAgents();
+app.MapJulOsRealtimeEvents();
+app.MapJulOsRemoteProviderEvents();
+app.MapJulOsRemoteDisplay();
+
 app.MapGet(
     "/api/v1/system/version",
-    () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current));
+    () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current))
+    .RequireAuthorization(JulOsAuthorizationPolicies.SystemVersionRead);
+
+app.MapFallback(() => TypedResults.NotFound())
+    .AllowAnonymous();
 
 ServerLog.Starting(app.Logger, ServerVersion.ComponentName, ServerVersion.Current);
 
