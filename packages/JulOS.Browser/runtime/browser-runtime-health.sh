@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+# Keep this default aligned with browser-runtime.sh.
 runtime_directory="${XDG_RUNTIME_DIR:-/run/julos-browser}"
 
 for process_name in xvfb openbox x11vnc chromium; do
