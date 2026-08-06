@@ -1,8 +1,8 @@
-﻿using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Persistence.Core;
 
 namespace JulOS.Server;
 
-/// <summary>The explicit core database migration process.</summary>
+/// <summary>The explicit core database initialization process.</summary>
 internal static class DatabaseMigrationCommand
 {
     private const string CommandSwitch = "--migrate-database";
@@ -16,13 +16,9 @@ internal static class DatabaseMigrationCommand
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        var connectionString = configuration.GetConnectionString("CoreDatabase")
-            ?? throw new InvalidOperationException(
-                "The connection string 'CoreDatabase' is not configured. "
-                + "Set ConnectionStrings__CoreDatabase or see deploy/compose/README.md.");
-
+        var database = CoreDatabaseConfiguration.Read(configuration);
         await CoreDatabaseMigrator
-            .MigrateAsync(connectionString, cancellationToken)
+            .MigrateAsync(database, cancellationToken)
             .ConfigureAwait(false);
 
         return 0;
