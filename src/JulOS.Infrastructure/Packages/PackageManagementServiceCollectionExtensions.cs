@@ -1,4 +1,4 @@
-﻿using JulOS.Application.Packages;
+using JulOS.Application.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Remote;
 using JulOS.PackageSdk;
@@ -12,18 +12,14 @@ namespace JulOS.Infrastructure.Packages;
 public static class PackageManagementServiceCollectionExtensions
 {
     /// <summary>Adds the complete JulOS package-management Infrastructure implementation.</summary>
-    /// <param name="services">Dependency-injection service collection.</param>
-    /// <param name="configuration">Package root and trusted-publisher configuration.</param>
-    /// <param name="coreDatabaseConnectionString">Administrative Core PostgreSQL connection.</param>
-    /// <returns>The same service collection.</returns>
     public static IServiceCollection AddJulOsPackageManagement(
         this IServiceCollection services,
         IConfiguration configuration,
-        string coreDatabaseConnectionString)
+        CoreDatabaseConfiguration coreDatabase)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
-        ArgumentException.ThrowIfNullOrWhiteSpace(coreDatabaseConnectionString);
+        ArgumentNullException.ThrowIfNull(coreDatabase);
 
         var packageRoot = configuration["Packages:Root"]
             ?? Environment.GetEnvironmentVariable("JULOS_PACKAGE_ROOT")
@@ -46,11 +42,16 @@ public static class PackageManagementServiceCollectionExtensions
                 publisher.PublisherId,
                 publisher.KeyId,
                 publisher.PublicKeyPem))));
-        services.AddSingleton(new PostgresPackageStorageProvisioner(coreDatabaseConnectionString));
-        services.AddSingleton<IPackageWorkerSupervisor>(new ProcessPackageWorkerSupervisor(
-            packageRoot,
-            serverEndpoint,
-            coreDatabaseConnectionString));
+        services.AddSingleton(new PostgresPackageStorageProvisioner(
+            coreDatabase,
+            packageRoot));
+        services.AddSingleton<IPackageWorkerSupervisor>(
+            coreDatabase.Provider == CoreDatabaseProvider.Sqlite
+                ? new DisabledPackageWorkerSupervisor()
+                : new ProcessPackageWorkerSupervisor(
+                    packageRoot,
+                    serverEndpoint,
+                    coreDatabase.ConnectionString));
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
@@ -84,6 +85,17 @@ public static class PackageManagementServiceCollectionExtensions
             provider => provider.GetRequiredService<CapabilityBroker>());
         return services;
     }
+
+    /// <summary>Adds PostgreSQL package management for compatibility with existing callers.</summary>
+    public static IServiceCollection AddJulOsPackageManagement(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string coreDatabaseConnectionString) =>
+        services.AddJulOsPackageManagement(
+            configuration,
+            new CoreDatabaseConfiguration(
+                CoreDatabaseProvider.PostgreSql,
+                coreDatabaseConnectionString));
 
     private sealed record TrustedPublisherConfiguration(
         string PublisherId,
