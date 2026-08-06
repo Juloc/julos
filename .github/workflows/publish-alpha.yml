@@ -16,7 +16,7 @@ on:
       - .github/workflows/publish-alpha.yml
   push:
     branches:
-      - agent/complete-julos-work-breakdown
+      - main
     paths:
       - VERSION
   workflow_dispatch:
