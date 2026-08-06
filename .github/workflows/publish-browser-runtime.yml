@@ -139,7 +139,7 @@ jobs:
             docker inspect --format '{{json .State}}' "$container_id" >&2 || true
             docker logs "$container_id" >&2 || true
             docker exec "$container_id" sh -c '
-              for log in /tmp/julos-browser/*.log; do
+              for log in /tmp/julos-browser/logs/*.log; do
                 [ -e "$log" ] || continue
                 printf "\n== %s ==\n" "$log"
                 cat "$log"
