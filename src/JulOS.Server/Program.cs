@@ -63,10 +63,17 @@ builder.Services.AddJulOsSecretReferences(
     secretOptions.ActiveKeyId,
     secretOptions.KeyRingPath,
     secretOptions.LeaseLifetime);
+var dataProtectionKeyRingPath =
+    builder.Configuration["DataProtection:KeyRingPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
+{
+    dataProtectionKeyRingPath = JulOsDataProtection.KeyRingPath;
+}
+
 builder.Services
     .AddDataProtection()
     .SetApplicationName("JulOS")
-    .PersistKeysToFileSystem(new DirectoryInfo(JulOsDataProtection.KeyRingPath));
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
 builder.Services.AddSingleton<JulOsDataProtectionKeyProvider>();
 builder.Services.AddSingleton<
     IConfigureOptions<KeyManagementOptions>,
