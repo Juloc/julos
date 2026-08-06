@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!--
     Central package management. Every NuGet version is declared exactly once here.

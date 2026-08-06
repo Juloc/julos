@@ -1,4 +1,4 @@
-using JulOS.Application.Packages;
+﻿using JulOS.Application.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Remote;
 using JulOS.PackageSdk;

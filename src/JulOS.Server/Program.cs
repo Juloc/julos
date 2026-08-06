@@ -1,4 +1,4 @@
-// JulOS Server composition root.
+﻿// JulOS Server composition root.
 // Local authentication protects the control plane; feature endpoints follow later work items.
 
 using JulOS.Contracts.Diagnostics;
