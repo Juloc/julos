@@ -1,12 +1,17 @@
-# Publishes the isolated Browser runtime only from the validated JulOS integration branch.
-# Pull requests never receive package write access.
+# Validates the isolated Browser runtime on pull requests and publishes it from main.
+# Pull requests never receive package write operations.
 
 name: Publish Browser Runtime
 
 on:
   push:
     branches:
-      - agent/complete-julos-work-breakdown
+      - main
+    paths:
+      - VERSION
+      - packages/JulOS.Browser/runtime/**
+      - .github/workflows/publish-browser-runtime.yml
+  pull_request:
     paths:
       - VERSION
       - packages/JulOS.Browser/runtime/**
@@ -25,7 +30,7 @@ env:
 
 jobs:
   publish:
-    name: Validate, build, attest and publish
+    name: Validate runtime and publish trusted pushes
     if: github.repository == 'Juloc/julos'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -130,6 +135,18 @@ jobs:
           cleanup() {
             docker rm --force "$container_id" >/dev/null 2>&1 || true
           }
+          dump_runtime_diagnostics() {
+            docker inspect --format '{{json .State}}' "$container_id" >&2 || true
+            docker logs "$container_id" >&2 || true
+            docker exec "$container_id" sh -c '
+              for log in /tmp/julos-browser/*.log; do
+                [ -e "$log" ] || continue
+                printf "\n== %s ==\n" "$log"
+                cat "$log"
+              done
+            ' >&2 || true
+            docker exec "$container_id" /usr/local/bin/browser-runtime-health >&2 || true
+          }
           trap cleanup EXIT
 
           test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "10001:10001"
@@ -137,6 +154,7 @@ jobs:
           port_bindings="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$container_id")"
           if [ "$port_bindings" != '{}' ] && [ "$port_bindings" != 'null' ]; then
             echo "Browser runtime unexpectedly published a host port: $port_bindings" >&2
+            dump_runtime_diagnostics
             exit 1
           fi
 
@@ -146,17 +164,21 @@ jobs:
               break
             fi
             if [ "$status" = unhealthy ] || [ "$status" = missing ]; then
-              docker logs "$container_id" >&2
+              dump_runtime_diagnostics
               exit 1
             fi
             sleep 2
           done
 
-          test "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" = healthy
+          if [ "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" != healthy ]; then
+            dump_runtime_diagnostics
+            exit 1
+          fi
           docker stop --time 10 "$container_id" >/dev/null
           test "$(docker inspect --format '{{.State.Running}}' "$container_id")" = false
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -164,6 +186,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Refuse an existing immutable version
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -174,12 +197,15 @@ jobs:
           fi
 
       - name: Set up QEMU
+        if: github.event_name != 'pull_request'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
+        if: github.event_name != 'pull_request'
         uses: docker/setup-buildx-action@v4
 
       - name: Build and publish the immutable runtime
+        if: github.event_name != 'pull_request'
         id: image
         uses: docker/build-push-action@v7
         with:
@@ -196,6 +222,7 @@ jobs:
           sbom: false
 
       - name: Attest image provenance
+        if: github.event_name != 'pull_request'
         uses: actions/attest@v4
         with:
           subject-name: ${{ env.IMAGE_NAME }}
@@ -203,6 +230,7 @@ jobs:
           push-to-registry: true
 
       - name: Record immutable runtime reference
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
@@ -211,6 +239,7 @@ jobs:
           printf '%s  %s\n' "${{ steps.image.outputs.digest }}" "${IMAGE_NAME}" > browser-runtime-digest.txt
 
       - name: Upload runtime evidence
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: JulOS-Browser-Runtime-${{ steps.version.outputs.version }}-${{ github.sha }}
