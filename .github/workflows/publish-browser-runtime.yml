@@ -103,8 +103,18 @@ jobs:
             --tag "$image" \
             .
 
-          if docker run --rm --network none "$image"; then
+          set +e
+          missing_password_output="$(docker run --rm --network none "$image" 2>&1)"
+          missing_password_status=$?
+          set -e
+
+          printf '%s\n' "$missing_password_output"
+          if [ "$missing_password_status" -eq 0 ]; then
             echo "Browser runtime started without its required display password." >&2
+            exit 1
+          fi
+          if ! grep -Fq "JULOS_VNC_PASSWORD is required." <<<"$missing_password_output"; then
+            echo "Browser runtime failed without the expected password validation." >&2
             exit 1
           fi
 
