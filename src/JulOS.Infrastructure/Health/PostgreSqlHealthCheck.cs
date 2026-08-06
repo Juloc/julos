@@ -1,28 +1,31 @@
-﻿using Microsoft.Extensions.Diagnostics.HealthChecks;
+﻿using System.Data.Common;
+
+using JulOS.Infrastructure.Persistence.Core;
+
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 using Npgsql;
 
 namespace JulOS.Infrastructure.Health;
 
-/// <summary>
-/// Reports whether the core database is reachable and accepting queries.
-/// </summary>
-/// <remarks>
-/// The check opens a connection and runs a trivial statement rather than only
-/// resolving the host, because a reachable server that refuses authentication or
-/// has not finished starting is not a ready dependency.
-/// </remarks>
+/// <summary>Reports whether the configured core database accepts queries.</summary>
 public sealed class PostgreSqlHealthCheck : IHealthCheck
 {
-    private readonly string connectionString;
+    private readonly CoreDatabaseConfiguration database;
 
-    /// <summary>Creates the check for one core database connection string.</summary>
-    /// <param name="connectionString">A Npgsql connection string. Never logged or reported.</param>
+    /// <summary>Creates a PostgreSQL check for compatibility with existing callers.</summary>
     public PostgreSqlHealthCheck(string connectionString)
+        : this(new CoreDatabaseConfiguration(CoreDatabaseProvider.PostgreSql, connectionString))
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+    }
 
-        this.connectionString = connectionString;
+    /// <summary>Creates the check for the configured core database.</summary>
+    public PostgreSqlHealthCheck(CoreDatabaseConfiguration database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentException.ThrowIfNullOrWhiteSpace(database.ConnectionString);
+        this.database = database;
     }
 
     /// <inheritdoc />
@@ -34,21 +37,27 @@ public sealed class PostgreSqlHealthCheck : IHealthCheck
 
         try
         {
-            await using var connection = new NpgsqlConnection(this.connectionString);
+            await using var connection = CreateConnection();
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-            await using var command = new NpgsqlCommand("SELECT 1", connection);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT 1";
             _ = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
             return HealthCheckResult.Healthy("The core database accepted a query.");
         }
-        catch (NpgsqlException exception)
+        catch (DbException exception)
         {
-            // The message describes the transport failure and holds no credentials.
             return new HealthCheckResult(
                 context.Registration.FailureStatus,
                 "The core database is not reachable.",
                 exception);
         }
     }
+
+    private DbConnection CreateConnection() => this.database.Provider switch
+    {
+        CoreDatabaseProvider.Sqlite => new SqliteConnection(this.database.ConnectionString),
+        _ => new NpgsqlConnection(this.database.ConnectionString),
+    };
 }

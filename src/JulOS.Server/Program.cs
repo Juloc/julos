@@ -22,9 +22,13 @@ using JulOS.Server.Profile;
 using JulOS.Server.Remote;
 using JulOS.Server.SafeMode;
 using JulOS.Server.Secrets;
+using JulOS.Server.Security;
 
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 if (HealthProbeCommand.IsRequested(args))
 {
@@ -41,12 +45,7 @@ if (DatabaseMigrationCommand.IsRequested(args))
 }
 
 const string ReadinessTag = "ready";
-const string CoreDatabaseConnectionName = "CoreDatabase";
-
-var coreDatabase = builder.Configuration.GetConnectionString(CoreDatabaseConnectionName)
-    ?? throw new InvalidOperationException(
-        $"The connection string '{CoreDatabaseConnectionName}' is not configured. "
-        + $"Set ConnectionStrings__{CoreDatabaseConnectionName} or see deploy/compose/README.md.");
+var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
@@ -59,10 +58,26 @@ builder.Services.AddSingleton(SafeModeState.Read(builder.Configuration));
 builder.Services.AddJulOsRealtimeEvents();
 builder.Services.AddJulOsPackageManagement(builder.Configuration, coreDatabase);
 var secretOptions = SecretReferenceOptions.Read(builder.Configuration);
+builder.Services.AddSingleton(secretOptions);
 builder.Services.AddJulOsSecretReferences(
     secretOptions.ActiveKeyId,
     secretOptions.KeyRingPath,
     secretOptions.LeaseLifetime);
+var dataProtectionKeyRingPath =
+    builder.Configuration["DataProtection:KeyRingPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeyRingPath))
+{
+    dataProtectionKeyRingPath = JulOsDataProtection.KeyRingPath;
+}
+
+builder.Services
+    .AddDataProtection()
+    .SetApplicationName("JulOS")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyRingPath));
+builder.Services.AddSingleton<JulOsDataProtectionKeyProvider>();
+builder.Services.AddSingleton<
+    IConfigureOptions<KeyManagementOptions>,
+    JulOsDataProtectionOptions>();
 
 builder.Services
     .AddHealthChecks()
@@ -73,6 +88,11 @@ builder.Services
         args: [coreDatabase]);
 
 var app = builder.Build();
+
+if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
+{
+    await CoreDatabaseMigrator.MigrateAsync(coreDatabase).ConfigureAwait(false);
+}
 
 app.UseJulOsErrorHandling();
 app.UseJulOsAgentProtocol();

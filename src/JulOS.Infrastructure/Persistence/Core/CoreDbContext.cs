@@ -92,6 +92,32 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         CoreModelConfiguration.Configure(builder);
         AgentPersistenceModelConfiguration.Configure(builder);
         RemoteSessionModelConfiguration.Configure(builder);
+
+        if (this.Database.IsSqlite())
+        {
+            ConfigureSqliteModel(builder);
+        }
+    }
+
+    private static void ConfigureSqliteModel(ModelBuilder builder)
+    {
+        foreach (var entityType in builder.Model.GetEntityTypes())
+        {
+            entityType.SetSchema(null);
+
+            foreach (var property in entityType.GetProperties())
+            {
+                if (string.Equals(property.GetColumnType(), "jsonb", StringComparison.OrdinalIgnoreCase))
+                {
+                    property.SetColumnType("TEXT");
+                }
+            }
+
+            foreach (var checkConstraint in entityType.GetDeclaredCheckConstraints().ToArray())
+            {
+                entityType.RemoveCheckConstraint(checkConstraint.ModelName);
+            }
+        }
     }
 
     private void PrepareIdentityRevisions()

@@ -85,6 +85,9 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:CoreDatabase", this.connectionString);
         builder.UseSetting("Secrets:ActiveKeyId", "primary");
         builder.UseSetting("Secrets:KeyRingPath", SecretKeyRingPath.Value);
+        builder.UseSetting(
+            "DataProtection:KeyRingPath",
+            Path.Combine(SecretKeyRingPath.Value, "data-protection"));
         builder.UseSetting("Secrets:LeaseLifetimeSeconds", "300");
         builder.UseSetting(
             "Remote:ProviderCallback:Endpoint",

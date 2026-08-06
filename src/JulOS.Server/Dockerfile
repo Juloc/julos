@@ -59,6 +59,14 @@ LABEL org.opencontainers.image.title="JulOS Server" \
       org.opencontainers.image.source="https://github.com/Juloc/julos" \
       org.opencontainers.image.version="${JULOS_VERSION}"
 
+# Npgsql loads the system GSSAPI library even when password authentication is
+# used. The runtime image also owns the durable ASP.NET Data Protection directory
+# before the non-root application user starts.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -o "$APP_UID" -g "$APP_UID" /var/lib/julos/data-protection
+
 # The image ships no shell utilities for probing. The application answers its own
 # readiness probe through --health-check, so no HTTP client tool is installed.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
