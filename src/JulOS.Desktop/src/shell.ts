@@ -2,6 +2,7 @@
 import { applyAppearance, isMotionMode, isThemeMode } from './appearance.js';
 import { mapClientFailure, type ClientFailureState } from './client-failure.js';
 import { DesktopClientServices } from './client-services.js';
+import { DesktopRuntime } from './desktop-runtime.js';
 import {
   normalizeLanguage,
   translate,
@@ -33,6 +34,7 @@ export class JulOsShell extends HTMLElement {
   #language: SupportedLanguage = normalizeLanguage(globalThis.navigator?.language);
   #clockTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   #clientServices: DesktopClientServices | null = null;
+  #desktopRuntime: DesktopRuntime | null = null;
   #authenticationMode: AuthenticationViewMode | null = null;
   #authenticationSubmitting = false;
   #connected = false;
@@ -62,13 +64,19 @@ export class JulOsShell extends HTMLElement {
       this.#clockTimer = null;
     }
 
+    this.#stopDesktopRuntime();
     this.#stopClientServices();
     this.#connected = false;
   }
 
   async #initialize(): Promise<void> {
     const authenticated = await this.#loadSession();
-    if (!authenticated || !this.#connected || this.#clientServices !== null) {
+    if (!authenticated || !this.#connected) {
+      return;
+    }
+
+    await this.#startDesktopRuntime();
+    if (!this.#connected || this.#clientServices !== null) {
       return;
     }
 
@@ -100,6 +108,7 @@ export class JulOsShell extends HTMLElement {
     try {
       const status = await this.#api.readAuthenticationStatus();
       if (status.setupRequired) {
+        this.#stopDesktopRuntime();
         this.#stopClientServices();
         userLabel.textContent = translate(this.#language, 'setupRequired');
         this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
@@ -108,6 +117,7 @@ export class JulOsShell extends HTMLElement {
       }
 
       if (!status.authenticated || status.user === null) {
+        this.#stopDesktopRuntime();
         this.#stopClientServices();
         userLabel.textContent = translate(this.#language, 'signedOut');
         this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
@@ -147,7 +157,10 @@ export class JulOsShell extends HTMLElement {
       if (failure !== null) {
         this.#showClientFailure(failure);
         const state = mapClientFailure(failure).state;
-        return state !== 'offline' && state !== 'unauthorized';
+        if (state === 'offline' || state === 'unauthorized') {
+          this.#stopDesktopRuntime();
+          return false;
+        }
       }
 
       return true;
@@ -159,8 +172,42 @@ export class JulOsShell extends HTMLElement {
       );
       this.#showClientFailure(error);
       this.#setVersionUnavailable(versionLabel, aboutVersion, aboutComponent);
+      this.#stopDesktopRuntime();
       return false;
     }
+  }
+
+  async #startDesktopRuntime(): Promise<void> {
+    if (this.#desktopRuntime !== null) {
+      return;
+    }
+
+    const runtime = new DesktopRuntime({
+      api: this.#api,
+      elements: {
+        windowLayer: this.#requiredElement<HTMLElement>('window-layer'),
+        launcherEntries: this.#requiredElement<HTMLElement>('application-launcher-entries'),
+        runningApplications: this.#requiredElement<HTMLElement>('running-applications'),
+        emptyState: this.#requiredElement<HTMLElement>('desktop-empty-state'),
+        snapPreview: this.#requiredElement<HTMLElement>('snap-preview'),
+      },
+      language: () => this.#language,
+      onFailure: (error) => this.#showClientFailure(error),
+    });
+    this.#desktopRuntime = runtime;
+
+    try {
+      await runtime.start();
+    } catch (error) {
+      runtime.stop();
+      this.#desktopRuntime = null;
+      this.#showClientFailure(error);
+    }
+  }
+
+  #stopDesktopRuntime(): void {
+    this.#desktopRuntime?.stop();
+    this.#desktopRuntime = null;
   }
 
   #stopClientServices(): void {
@@ -249,7 +296,6 @@ export class JulOsShell extends HTMLElement {
     view.dataset['mode'] = mode;
     view.hidden = false;
     desktop.dataset['mode'] = 'authentication';
-
     title.dataset['message'] = mode === 'setup' ? 'setupTitle' : 'loginTitle';
     description.dataset['message'] = mode === 'setup' ? 'setupDescription' : 'loginDescription';
     submit.dataset['message'] = mode === 'setup' ? 'setupSubmit' : 'loginSubmit';
@@ -300,7 +346,6 @@ export class JulOsShell extends HTMLElement {
       } else {
         await this.#api.login({ userName, password });
       }
-
       this.#hideAuthentication();
       await this.#initialize();
     } catch (error) {
@@ -308,10 +353,9 @@ export class JulOsShell extends HTMLElement {
         error instanceof JulOsApiError
         && error.problem?.code === 'authentication.setup_already_completed'
       ) {
-        await this.#loadSession();
+        await this.#initialize();
         return;
       }
-
       this.#showAuthenticationFailure(error, mode);
     } finally {
       this.#setAuthenticationBusy(false);
@@ -323,7 +367,7 @@ export class JulOsShell extends HTMLElement {
     const userNameValid = userName.length >= 3
       && userName.length <= 128
       && userName === userName.trim()
-      && /^[A-Za-z0-9._@+\-]+$/.test(userName);
+      && /^[A-Za-z0-9._@+\-]+$/u.test(userName);
     if (!userNameValid) {
       this.#setAuthenticationFieldError(
         'authentication-user-name',
@@ -371,7 +415,6 @@ export class JulOsShell extends HTMLElement {
     if (userName.trim().length > 0 && userName.length <= 128 && password.length > 0 && password.length <= 1024) {
       return true;
     }
-
     this.#showAuthenticationGeneralError(translate(this.#language, 'invalidCredentials'));
     return false;
   }
@@ -418,28 +461,15 @@ export class JulOsShell extends HTMLElement {
 
       switch (field.toLowerCase()) {
         case 'username':
-        case 'userName'.toLowerCase():
-          this.#setAuthenticationFieldError(
-            'authentication-user-name',
-            'authentication-user-name-error',
-            message,
-          );
+          this.#setAuthenticationFieldError('authentication-user-name', 'authentication-user-name-error', message);
           applied = true;
           break;
         case 'displayname':
-          this.#setAuthenticationFieldError(
-            'authentication-display-name',
-            'authentication-display-name-error',
-            message,
-          );
+          this.#setAuthenticationFieldError('authentication-display-name', 'authentication-display-name-error', message);
           applied = true;
           break;
         case 'password':
-          this.#setAuthenticationFieldError(
-            'authentication-password',
-            'authentication-password-error',
-            message,
-          );
+          this.#setAuthenticationFieldError('authentication-password', 'authentication-password-error', message);
           applied = true;
           break;
         default:
@@ -577,7 +607,6 @@ export class JulOsShell extends HTMLElement {
     if (element === null || element === undefined) {
       throw new Error(`The JulOS shell is missing its '${id}' element.`);
     }
-
     return element as T;
   }
 
@@ -599,20 +628,17 @@ export class JulOsShell extends HTMLElement {
                 <input id="authentication-user-name" name="userName" type="text" autocomplete="username" inputmode="text" maxlength="128" spellcheck="false" />
                 <small id="authentication-user-name-error" class="field-error" role="alert" hidden></small>
               </label>
-
               <label id="authentication-display-field" class="authentication-field" for="authentication-display-name">
                 <span data-message="displayName"></span>
                 <input id="authentication-display-name" name="displayName" type="text" autocomplete="name" maxlength="256" />
                 <small id="authentication-display-name-error" class="field-error" role="alert" hidden></small>
               </label>
-
               <label class="authentication-field" for="authentication-password">
                 <span data-message="password"></span>
                 <input id="authentication-password" name="password" type="password" autocomplete="current-password" maxlength="1024" />
                 <small id="authentication-password-hint" class="field-hint" data-message="passwordRequirements"></small>
                 <small id="authentication-password-error" class="field-error" role="alert" hidden></small>
               </label>
-
               <div id="authentication-error" class="authentication-error" role="alert" hidden></div>
               <button id="authentication-submit" type="submit" class="primary-button"></button>
             </form>
@@ -621,11 +647,14 @@ export class JulOsShell extends HTMLElement {
 
         <section class="desktop-content" aria-labelledby="desktop-heading">
           <h1 id="desktop-heading" class="visually-hidden" data-message="desktop"></h1>
+          <div id="window-layer" class="window-layer">
+            <div id="snap-preview" class="snap-preview" hidden></div>
+          </div>
           <div id="connection-notice" class="connection-notice" role="alert" hidden>
             <strong id="connection-message"></strong>
             <code id="connection-reference" hidden></code>
           </div>
-          <div class="empty-state" role="status">
+          <div id="desktop-empty-state" class="empty-state" role="status">
             <div class="brand-mark" aria-hidden="true">J</div>
             <h2 data-message="noApplicationsTitle"></h2>
             <p data-message="noApplicationsBody"></p>
@@ -639,12 +668,15 @@ export class JulOsShell extends HTMLElement {
             <strong>JulOS</strong>
             <span data-message="launcher"></span>
           </header>
-          <button type="button" class="launcher-entry" data-label="settings">
-            ${icons.settings}<span data-message="settings"></span>
-          </button>
-          <button id="about-button" type="button" class="launcher-entry" data-label="about">
-            <span class="brand-glyph" aria-hidden="true">J</span><span data-message="about"></span>
-          </button>
+          <div id="application-launcher-entries" class="application-launcher-entries"></div>
+          <div class="launcher-system-entries">
+            <button type="button" class="launcher-entry" data-label="settings">
+              ${icons.settings}<span data-message="settings"></span>
+            </button>
+            <button id="about-button" type="button" class="launcher-entry" data-label="about">
+              <span class="brand-glyph" aria-hidden="true">J</span><span data-message="about"></span>
+            </button>
+          </div>
         </section>
 
         <nav class="taskbar" aria-label="JulOS taskbar">
@@ -655,7 +687,7 @@ export class JulOsShell extends HTMLElement {
             <button id="search-button" type="button" class="taskbar-button search-button" data-label="commandPalette">
               ${icons.search}<span data-message="commandPalette"></span>
             </button>
-            <div class="running-applications" aria-live="polite"></div>
+            <div id="running-applications" class="running-applications" aria-live="polite"></div>
           </div>
           <div class="status-area">
             <button type="button" class="taskbar-button status-button" data-label="notifications">${icons.notification}</button>
