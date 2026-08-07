@@ -126,7 +126,7 @@ jobs:
             --tag "$image" \
             .
 
-      - name: Start and verify alpha Compose stack
+      - name: Start and verify single-service SQLite stack
         shell: bash
         run: |
           set -euo pipefail
@@ -142,41 +142,34 @@ jobs:
             exit 1
           fi
 
-          postgres_password="$(openssl rand -hex 24)"
           primary_key="$(openssl rand -base64 32)"
           cat > "$env_file" <<EOF
-          JULOS_VERSION=${{ needs.validate.outputs.version }}
           JULOS_SERVER_IMAGE=$image
-          JULOS_POSTGRES_PASSWORD=$postgres_password
           JULOS_PRIMARY_KEY=$primary_key
           JULOS_BIND_ADDRESS=127.0.0.1
           JULOS_SERVER_PORT=18080
-          JULOS_POSTGRES_DB=julos
-          JULOS_POSTGRES_USER=julos
           EOF
 
           cleanup() {
-            docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml logs --no-color || true
-            docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml down --volumes --remove-orphans || true
+            docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml logs --no-color || true
+            docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml down --volumes --remove-orphans || true
           }
           trap cleanup EXIT
 
-          compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.yaml)
+          compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml)
           "${compose[@]}" config --quiet
           "${compose[@]}" up --detach --wait --wait-timeout 180
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
-
-          "${compose[@]}" exec -T server sh -c \
-            'test -e /usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2 && key=$(find /var/lib/julos/data-protection -name "key-*.xml" -print -quit) && test -n "$key" && grep -q julosDataProtection "$key"'
+          "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/julos.db && test -d /var/lib/julos/packages'
 
           "${compose[@]}" restart server
           "${compose[@]}" up --detach --wait --wait-timeout 120
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
 
-          logs="$("${compose[@]}" logs --no-color server migrate)"
-          if grep -Eq 'Cannot load library libgssapi_krb5|may not be persisted outside of the container|No XML encryptor configured' <<< "$logs"; then
+          logs="$("${compose[@]}" logs --no-color server)"
+          if grep -Eq 'may not be persisted outside of the container|No XML encryptor configured|package.worker_supervisor_unavailable' <<< "$logs"; then
             echo "$logs" >&2
-            echo "The alpha stack emitted a known runtime dependency or key-persistence warning." >&2
+            echo "The SQLite alpha stack emitted a known persistence or package-worker warning." >&2
             exit 1
           fi
 
@@ -186,8 +179,8 @@ jobs:
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
           mkdir -p release-files
-          cp deploy/alpha/compose.yaml release-files/julos-alpha-compose.yaml
-          cp deploy/alpha/.env.example release-files/julos-alpha.env.example
+          cp deploy/alpha/compose.sqlite.yaml release-files/julos-alpha-compose.yaml
+          cp deploy/alpha/.env.sqlite.example release-files/julos-alpha.env.example
           cp "docs/releases/$version.md" release-files/RELEASE_NOTES.md
           (
             cd release-files
