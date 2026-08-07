@@ -49,14 +49,28 @@
     opacity var(--julos-duration-fast) var(--julos-easing-standard);
 }
 
+.desktop-window:focus-visible {
+  outline: 2px solid var(--julos-color-accent);
+  outline-offset: -2px;
+}
+
 .desktop-window[data-active="true"] {
   border-color: color-mix(in srgb, var(--julos-color-accent) 42%, var(--julos-color-border));
   box-shadow: 0 16px 42px rgb(0 0 0 / 22%);
   opacity: 1;
 }
 
-.desktop-window[data-state="maximized"] {
+.desktop-window[data-state="maximized"],
+.desktop-window[data-state="full-screen"],
+.desktop-window:not([data-presentation="windowed"]) {
   border-radius: 0;
+}
+
+.desktop-window:not([data-presentation="windowed"]) {
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  box-shadow: none;
 }
 
 .window-titlebar {
@@ -107,6 +121,10 @@
 .window-controls button[data-action="close"]:hover {
   background: #c42b1c;
   color: #fff;
+}
+
+.desktop-window:not([data-presentation="windowed"]) .window-controls button[data-action="maximize"] {
+  display: none;
 }
 
 .window-body {
@@ -203,7 +221,8 @@
   cursor: nwse-resize;
 }
 
-.desktop-window:not([data-state="normal"]) .resize-handle {
+.desktop-window:not([data-state="normal"]) .resize-handle,
+.desktop-window:not([data-presentation="windowed"]) .resize-handle {
   display: none;
 }
 
@@ -218,6 +237,49 @@
 
 .snap-preview[hidden] {
   display: none;
+}
+
+.window-switcher {
+  position: absolute;
+  z-index: 1200;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  box-sizing: border-box;
+  max-width: min(760px, calc(100% - 32px));
+  padding: 12px;
+  gap: 8px;
+  overflow: auto;
+  border: 1px solid var(--julos-color-border);
+  border-radius: var(--julos-radius-large);
+  background: var(--julos-color-surface-solid);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 28%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.window-switcher[hidden] {
+  display: none;
+}
+
+.window-switcher-item {
+  display: grid;
+  width: 112px;
+  min-width: 112px;
+  padding: 10px;
+  gap: 8px;
+  justify-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--julos-radius-medium);
+  color: var(--julos-color-text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.window-switcher-item[data-selected="true"] {
+  border-color: var(--julos-color-accent);
+  background: var(--julos-color-surface-hover);
+  color: var(--julos-color-text);
 }
 
 .application-launcher-entries {
@@ -306,6 +368,16 @@
 .running-application[data-active="true"]::after {
   background: var(--julos-color-accent);
   opacity: 1;
+}
+
+.running-application[data-minimized="true"] {
+  opacity: 0.58;
+}
+
+.running-application[data-minimized="true"]::after {
+  right: 13px;
+  left: 13px;
+  opacity: 0.38;
 }
 
 .window-count,
@@ -427,7 +499,8 @@
 }
 
 .core-field input,
-.core-field select {
+.core-field select,
+.package-configuration {
   box-sizing: border-box;
   width: 100%;
   min-height: 36px;
@@ -441,10 +514,36 @@
   font-size: 13px;
 }
 
+.package-configuration {
+  min-height: 92px;
+  padding: 9px 10px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
 .core-field input:focus,
-.core-field select:focus {
+.core-field select:focus,
+.package-configuration:focus {
   border-color: var(--julos-color-accent);
   box-shadow: 0 0 0 1px var(--julos-color-accent);
+}
+
+.package-install {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--julos-color-border);
+  border-radius: var(--julos-radius-medium);
+  background: var(--julos-color-surface);
+}
+
+.package-install summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.package-install-form {
+  margin-top: 14px;
 }
 
 .core-primary-button,
@@ -504,16 +603,12 @@
 
 @media (max-width: 720px) {
   .desktop-window {
-    border-radius: var(--julos-radius-medium);
+    border-radius: 0;
   }
 
   .window-controls button {
-    width: 42px;
-  }
-
-  .resize-handle {
-    min-width: 12px;
-    min-height: 12px;
+    width: 44px;
+    min-width: 44px;
   }
 
   .core-app {
@@ -530,6 +625,7 @@
 @media (forced-colors: active) {
   .desktop-window,
   .desktop-widget,
+  .window-switcher,
   .snap-preview {
     border: 1px solid CanvasText;
   }
