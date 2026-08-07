@@ -47,7 +47,7 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
             .Include(row => row.SupportedViewports)
             .Where(row => row.IsEnabled
                 && enabledPackages.Contains(row.OwningPackageId)
-                && row.SupportedViewports.Any(item => item.Viewport == viewportClass))
+                && row.SupportedViewports.Any(item => item.ViewportClass == viewportClass))
             .OrderBy(row => row.OwningPackageId)
             .ThenBy(row => row.StableKey)
             .ToArrayAsync(cancellationToken)
@@ -83,7 +83,7 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
                 row.DefaultHeight,
                 row.MinimumWidth,
                 row.MinimumHeight,
-                row.SupportedViewports.Select(item => ViewportName(item.Viewport)).Order().ToArray(),
+                row.SupportedViewports.Select(item => ViewportName(item.ViewportClass)).Order().ToArray(),
                 application.ElementName,
                 frontend.Sha256,
                 frontend.ExportedElements.ToArray()));
