@@ -1,4 +1,5 @@
-﻿import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
+﻿import { CoreApplicationCatalog } from './core-applications.js';
+import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
   DesktopLayoutPersistence,
   windowsForPersistence,
@@ -6,6 +7,7 @@ import {
   type DesktopViewport,
   type PersistedDesktopWindow,
 } from './layout-persistence.js';
+import type { NotificationCenterStore } from './notification-center.js';
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
@@ -32,8 +34,10 @@ export interface DesktopRuntimeElements {
 export interface DesktopRuntimeOptions {
   readonly api: ShellApiClient;
   readonly elements: DesktopRuntimeElements;
+  readonly notifications: NotificationCenterStore;
   readonly language: () => SupportedLanguage;
   readonly onFailure: (error: unknown) => void;
+  readonly onProfileChanged: () => void | Promise<void>;
 }
 
 /** Composes the existing launcher, package frontend, persistence and window controllers. */
@@ -50,9 +54,11 @@ export class DesktopRuntime {
   readonly #frontendHost = new PackageFrontendHost();
   readonly #capabilities = new PackageCapabilityClient();
   readonly #layoutPersistence: DesktopLayoutPersistence;
+  readonly #coreApplications: CoreApplicationCatalog;
   readonly #applications = new Map<string, DesktopApplication>();
   readonly #windowElements = new Map<string, HTMLElement>();
-  readonly #packageSurfaces = new Map<string, HTMLElement>();
+  readonly #windowSurfaces = new Map<string, HTMLElement>();
+  readonly #coreSurfaceDisposers = new Map<string, () => void>();
   #launcher: LauncherIndex | null = null;
   #viewport: DesktopViewport = 'desktop';
   #layoutLoaded = false;
@@ -69,6 +75,13 @@ export class DesktopRuntime {
       globalThis.fetch.bind(globalThis),
       { onFailure: (error) => this.#onFailure(error) },
     );
+    this.#coreApplications = new CoreApplicationCatalog({
+      api: options.api,
+      notifications: options.notifications,
+      language: options.language,
+      onFailure: options.onFailure,
+      onProfileChanged: options.onProfileChanged,
+    });
   }
 
   public async start(): Promise<void> {
@@ -78,7 +91,8 @@ export class DesktopRuntime {
 
     this.#ensureStyles();
     this.#viewport = viewportClass(this.#elements.windowLayer.clientWidth);
-    const applications = await this.#api.readApplications(this.#viewport);
+    const packageApplications = await this.#api.readApplications(this.#viewport);
+    const applications = [...this.#coreApplications.applications(), ...packageApplications];
     this.#applications.clear();
     for (const application of applications) {
       this.#applications.set(application.applicationDefinitionId, application);
@@ -88,7 +102,7 @@ export class DesktopRuntime {
       applications: applications.map((application) => ({
         applicationId: application.applicationDefinitionId,
         title: applicationTitle(application),
-        description: application.packageId,
+        description: application.packageId === 'julos.core' ? '' : application.packageId,
         keywords: [application.stableKey, application.packageId],
         instancePolicy: application.instancePolicy,
         defaultBounds: defaultBounds(application, this.#usableArea()),
@@ -144,10 +158,14 @@ export class DesktopRuntime {
       this.#layoutPersistence.dispose();
     }
 
+    for (const dispose of this.#coreSurfaceDisposers.values()) {
+      dispose();
+    }
+    this.#coreSurfaceDisposers.clear();
     this.#store.clear();
     this.#applications.clear();
     this.#windowElements.clear();
-    this.#packageSurfaces.clear();
+    this.#windowSurfaces.clear();
     this.#elements.windowLayer.replaceChildren(this.#elements.snapPreview);
     this.#elements.runningApplications.replaceChildren();
     this.#elements.launcherEntries.replaceChildren();
@@ -194,9 +212,12 @@ export class DesktopRuntime {
       text.className = 'application-entry-text';
       const title = document.createElement('strong');
       title.textContent = result.title;
-      const description = document.createElement('small');
-      description.textContent = result.description;
-      text.append(title, description);
+      text.append(title);
+      if (result.description.trim().length > 0) {
+        const description = document.createElement('small');
+        description.textContent = result.description;
+        text.append(description);
+      }
       button.append(mark, text);
       button.addEventListener('click', () => void this.#launch(result));
       container.append(button);
@@ -217,7 +238,9 @@ export class DesktopRuntime {
       if (application === undefined) {
         throw new Error(`Application '${launch.window.applicationId}' is not available.`);
       }
-      await this.#loadFrontend(application);
+      if (!this.#coreApplications.isCoreApplication(application.applicationDefinitionId)) {
+        await this.#loadFrontend(application);
+      }
       this.#renderWindows(this.#store.windows);
       this.#scheduleLayout();
     } catch (error) {
@@ -248,6 +271,9 @@ export class DesktopRuntime {
   async #loadRestoredFrontends(): Promise<void> {
     const applicationIds = new Set(this.#store.windows.map((window) => window.applicationId));
     for (const applicationId of applicationIds) {
+      if (this.#coreApplications.isCoreApplication(applicationId)) {
+        continue;
+      }
       const application = this.#applications.get(applicationId);
       if (application === undefined) {
         continue;
@@ -265,7 +291,7 @@ export class DesktopRuntime {
     const area = this.#usableArea();
     for (const persisted of [...windows].sort((left, right) => left.zIndex - right.zIndex)) {
       const application = this.#applications.get(persisted.applicationDefinitionId);
-      if (application === undefined) {
+      if (application === undefined || this.#coreApplications.isCoreApplication(persisted.applicationDefinitionId)) {
         continue;
       }
 
@@ -306,7 +332,9 @@ export class DesktopRuntime {
       if (!openIds.has(windowId)) {
         element.remove();
         this.#windowElements.delete(windowId);
-        this.#packageSurfaces.delete(windowId);
+        this.#windowSurfaces.delete(windowId);
+        this.#coreSurfaceDisposers.get(windowId)?.();
+        this.#coreSurfaceDisposers.delete(windowId);
       }
     }
 
@@ -317,11 +345,11 @@ export class DesktopRuntime {
       applyBounds(element, window.bounds);
       element.dataset['state'] = window.state;
       element.dataset['active'] = String(this.#store.frontWindow?.id === window.id);
-      this.#mountPackageSurface(window);
+      this.#mountWindowSurface(window);
     }
 
     this.#renderTaskbar();
-    this.#elements.emptyState.hidden = windows.length > 0 || this.#applications.size > 0;
+    this.#elements.emptyState.hidden = windows.length > 0;
   }
 
   #createWindowElement(window: DesktopWindowSnapshot): HTMLElement {
@@ -476,21 +504,33 @@ export class DesktopRuntime {
     }
   }
 
-  #mountPackageSurface(window: DesktopWindowSnapshot): void {
-    if (this.#packageSurfaces.has(window.id)) {
+  #mountWindowSurface(window: DesktopWindowSnapshot): void {
+    if (this.#windowSurfaces.has(window.id)) {
       return;
     }
     const application = this.#applications.get(window.applicationId);
-    if (application === undefined || !customElements.get(application.elementName)) {
+    if (application === undefined) {
       return;
     }
     const body = this.#windowElements.get(window.id)?.querySelector<HTMLElement>('.window-body');
     if (body === null || body === undefined) {
       return;
     }
+
+    if (this.#coreApplications.isCoreApplication(application.applicationDefinitionId)) {
+      const handle = this.#coreApplications.createSurface(application.applicationDefinitionId);
+      body.replaceChildren(handle.element);
+      this.#windowSurfaces.set(window.id, handle.element);
+      this.#coreSurfaceDisposers.set(window.id, handle.dispose);
+      return;
+    }
+
+    if (!customElements.get(application.elementName)) {
+      return;
+    }
     const surface = this.#frontendHost.createHostElement(application.elementName);
     body.replaceChildren(surface);
-    this.#packageSurfaces.set(window.id, surface);
+    this.#windowSurfaces.set(window.id, surface);
   }
 
   #renderTaskbar(): void {
@@ -525,9 +565,11 @@ export class DesktopRuntime {
     if (!this.#layoutLoaded || this.#restoringLayout) {
       return;
     }
+    const packageWindows = windowsForPersistence(this.#store)
+      .filter((window) => !this.#coreApplications.isCoreApplication(window.applicationDefinitionId));
     this.#layoutPersistence.schedule(
       this.#viewport,
-      windowsForPersistence(this.#store),
+      packageWindows,
       [],
     );
   }
@@ -603,6 +645,9 @@ function clampBounds(
 function applicationTitle(application: DesktopApplication | undefined): string {
   if (application === undefined) {
     return 'Application';
+  }
+  if (application.packageId === 'julos.core') {
+    return application.displayNameKey;
   }
   return application.stableKey
     .split(/[-_.]+/u)
