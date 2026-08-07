@@ -97,12 +97,13 @@ if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
 app.UseJulOsErrorHandling();
 app.UseJulOsAgentProtocol();
 app.UseDefaultFiles();
-app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+app.MapStaticAssets();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
     .AllowAnonymous();
