@@ -80,12 +80,17 @@ public sealed record PackageFrontendManifest(
 /// <summary>Raised when a package manifest violates the public schema or rules.</summary>
 public sealed class PackageManifestException : Exception
 {
+    /// <summary>Creates a manifest validation failure.</summary>
+    /// <param name="code">Stable machine-readable failure code.</param>
+    /// <param name="message">Caller-safe validation detail.</param>
+    /// <param name="innerException">Optional parsing cause.</param>
     public PackageManifestException(string code, string message, Exception? innerException = null)
         : base(message, innerException)
     {
         this.Code = code;
     }
 
+    /// <summary>Gets the stable machine-readable failure code.</summary>
     public string Code { get; }
 }
 
@@ -99,6 +104,9 @@ public static partial class PackageManifestReader
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
+    /// <summary>Reads and validates one manifest stream.</summary>
+    /// <param name="stream">Manifest JSON stream.</param>
+    /// <returns>The validated package manifest.</returns>
     public static PackageManifest Read(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -125,6 +133,8 @@ public static partial class PackageManifestReader
         return manifest;
     }
 
+    /// <summary>Validates one package manifest against the supported schema and package rules.</summary>
+    /// <param name="manifest">Manifest to validate.</param>
     public static void Validate(PackageManifest manifest)
     {
         ArgumentNullException.ThrowIfNull(manifest);
