@@ -6,7 +6,7 @@ This directory installs the testable JulOS alpha from immutable container tags. 
 
 - Docker Engine with Docker Compose
 - OpenSSL for generating the required values
-- access to `ghcr.io/juloc/julos-server:0.3.0-alpha.4`
+- access to `ghcr.io/juloc/julos-server:0.3.0-alpha.5`
 
 ## SQLite single-service stack
 
@@ -15,8 +15,8 @@ This directory installs the testable JulOS alpha from immutable container tags. 
 ```bash
 mkdir -p julos-alpha
 cd julos-alpha
-curl -O https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.4/deploy/alpha/compose.sqlite.yaml
-curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.4/deploy/alpha/.env.sqlite.example
+curl -O https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.5/deploy/alpha/compose.sqlite.yaml
+curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.5/deploy/alpha/.env.sqlite.example
 cp .env.example .env
 openssl rand -base64 32
 ```
@@ -40,8 +40,8 @@ JulOS answers on `http://127.0.0.1:8080` unless the bind address or port was cha
 Use `compose.yaml` when PostgreSQL is preferred. It runs PostgreSQL, a one-shot migration container and the JulOS server.
 
 ```bash
-curl -O https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.4/deploy/alpha/compose.yaml
-curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.4/deploy/alpha/.env.example
+curl -O https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.5/deploy/alpha/compose.yaml
+curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.3.0-alpha.5/deploy/alpha/.env.example
 cp .env.example .env
 ```
 
@@ -100,7 +100,7 @@ Keep the current `JULOS_PRIMARY_KEY` in a protected password store. Losing it ma
 
 Read the target release notes and create a database backup. Keep the same `JULOS_PRIMARY_KEY`, change the exact server image tag, then run the `pull` and `up -d` commands for the selected Compose file. PostgreSQL uses the migration service. For SQLite, follow the target release notes whenever the schema changes.
 
-If an earlier failed alpha created an unusable disposable SQLite evaluation volume, remove that volume before the first alpha.4 start. Do not remove a volume that contains data you need.
+If an earlier failed alpha created an unusable disposable SQLite evaluation volume, remove that volume only when it contains no data you need. Existing usable alpha.4 volumes upgrade in place to alpha.5.
 
 ## Rollback
 
