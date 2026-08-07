@@ -1,0 +1,328 @@
+﻿.window-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.desktop-window {
+  position: absolute;
+  display: flex;
+  min-width: 160px;
+  min-height: 140px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--julos-color-border);
+  border-radius: var(--julos-radius-large);
+  background: var(--julos-color-surface-solid);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
+  opacity: 0.94;
+  pointer-events: auto;
+  transition:
+    border-color var(--julos-duration-fast) var(--julos-easing-standard),
+    box-shadow var(--julos-duration-fast) var(--julos-easing-standard),
+    opacity var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.desktop-window[data-active="true"] {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 42%, var(--julos-color-border));
+  box-shadow: 0 16px 42px rgb(0 0 0 / 22%);
+  opacity: 1;
+}
+
+.desktop-window[data-state="maximized"] {
+  border-radius: 0;
+}
+
+.window-titlebar {
+  display: flex;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 12px;
+  border-bottom: 1px solid var(--julos-color-border);
+  background: var(--julos-color-surface);
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+}
+
+.window-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--julos-color-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-controls {
+  display: flex;
+  align-self: stretch;
+}
+
+.window-controls button {
+  width: 44px;
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+  color: var(--julos-color-text-secondary);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.window-controls button:hover {
+  background: var(--julos-color-surface-hover);
+  color: var(--julos-color-text);
+}
+
+.window-controls button[data-action="close"]:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.window-body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: var(--julos-color-background);
+}
+
+.window-body > section,
+.window-body > [data-julos-package] {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.window-loading {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--julos-color-text-secondary);
+  font-size: 13px;
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 4;
+  touch-action: none;
+}
+
+.resize-top,
+.resize-bottom {
+  right: 7px;
+  left: 7px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.resize-top {
+  top: -2px;
+}
+
+.resize-bottom {
+  bottom: -2px;
+}
+
+.resize-left,
+.resize-right {
+  top: 7px;
+  bottom: 7px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.resize-left {
+  left: -2px;
+}
+
+.resize-right {
+  right: -2px;
+}
+
+.resize-top-left,
+.resize-top-right,
+.resize-bottom-left,
+.resize-bottom-right {
+  width: 12px;
+  height: 12px;
+}
+
+.resize-top-left {
+  top: -2px;
+  left: -2px;
+  cursor: nwse-resize;
+}
+
+.resize-top-right {
+  top: -2px;
+  right: -2px;
+  cursor: nesw-resize;
+}
+
+.resize-bottom-left {
+  bottom: -2px;
+  left: -2px;
+  cursor: nesw-resize;
+}
+
+.resize-bottom-right {
+  right: -2px;
+  bottom: -2px;
+  cursor: nwse-resize;
+}
+
+.desktop-window:not([data-state="normal"]) .resize-handle {
+  display: none;
+}
+
+.snap-preview {
+  position: absolute;
+  z-index: 1000;
+  border: 2px solid color-mix(in srgb, var(--julos-color-accent) 72%, transparent);
+  border-radius: var(--julos-radius-large);
+  background: color-mix(in srgb, var(--julos-color-accent) 16%, transparent);
+  pointer-events: none;
+}
+
+.snap-preview[hidden] {
+  display: none;
+}
+
+.application-launcher-entries {
+  display: grid;
+  max-height: min(52vh, 420px);
+  gap: 2px;
+  overflow: auto;
+}
+
+.launcher-system-entries {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--julos-color-border);
+}
+
+.application-entry {
+  align-items: center;
+}
+
+.application-glyph {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--julos-color-accent);
+  color: var(--julos-color-accent-foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.application-entry-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.application-entry-text strong,
+.application-entry-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-entry-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.application-entry-text small {
+  color: var(--julos-color-text-secondary);
+  font-size: 11px;
+}
+
+.running-applications {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.running-application {
+  position: relative;
+  width: var(--julos-control-height);
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.running-application::after {
+  position: absolute;
+  right: 9px;
+  bottom: 3px;
+  left: 9px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--julos-color-text-secondary);
+  content: '';
+  opacity: 0.55;
+}
+
+.running-application[data-active="true"] {
+  background: var(--julos-color-surface-hover);
+}
+
+.running-application[data-active="true"]::after {
+  background: var(--julos-color-accent);
+  opacity: 1;
+}
+
+.window-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--julos-color-accent);
+  color: var(--julos-color-accent-foreground);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .desktop-window {
+    border-radius: var(--julos-radius-medium);
+  }
+
+  .window-controls button {
+    width: 42px;
+  }
+
+  .resize-handle {
+    min-width: 12px;
+    min-height: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desktop-window {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .desktop-window,
+  .snap-preview {
+    border: 1px solid CanvasText;
+  }
+}
