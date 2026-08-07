@@ -12,12 +12,12 @@ public sealed record TrustedPackagePublisher(string Publisher, string KeyId, str
 /// <param name="Publisher">Verified publisher identity.</param>
 /// <param name="KeyId">Verified signing-key identity.</param>
 /// <param name="DigestSha256">Lowercase SHA-256 artifact digest.</param>
-/// <param name="ManifestLength">Verified artifact byte length.</param>
+/// <param name="ArtifactLength">Verified package archive byte length.</param>
 public sealed record VerifiedPackageArtifact(
     string Publisher,
     string KeyId,
     string DigestSha256,
-    int ManifestLength);
+    int ArtifactLength);
 
 /// <summary>A stable refusal raised before an untrusted package reaches installation.</summary>
 public sealed class PackageArtifactVerificationException : Exception
@@ -37,7 +37,7 @@ public sealed class PackageArtifactVerificationException : Exception
 
 /// <summary>
 /// Verifies the declared SHA-256 digest and an ECDSA P-256 publisher signature.
-/// Trust is explicit and injected; a manifest cannot introduce its own signing key.
+/// Trust is explicit and injected; package contents cannot introduce their own signing key.
 /// </summary>
 public sealed class PackageArtifactVerifier
 {
@@ -65,23 +65,23 @@ public sealed class PackageArtifactVerifier
         this.trustedPublishers = indexed;
     }
 
-    /// <summary>Verifies digest, publisher trust and signature for one immutable package artifact.</summary>
-    /// <param name="manifest">Exact signed artifact bytes.</param>
-    /// <param name="signature">ECDSA signature bytes.</param>
+    /// <summary>Verifies digest, publisher trust and signature for one immutable package archive.</summary>
+    /// <param name="artifact">Exact complete package archive bytes.</param>
+    /// <param name="signature">ECDSA signature bytes over the complete archive.</param>
     /// <param name="expectedDigestSha256">Declared lowercase or uppercase SHA-256 digest.</param>
     /// <param name="publisher">Publisher identity.</param>
     /// <param name="keyId">Signing-key identity.</param>
     /// <returns>The verified immutable artifact identity.</returns>
     public VerifiedPackageArtifact Verify(
-        ReadOnlySpan<byte> manifest,
+        ReadOnlySpan<byte> artifact,
         ReadOnlySpan<byte> signature,
         string expectedDigestSha256,
         string publisher,
         string keyId)
     {
-        if (manifest.IsEmpty)
+        if (artifact.IsEmpty)
         {
-            throw Failure("package.artifact.empty", "The package manifest is empty.");
+            throw Failure("package.artifact.empty", "The package archive is empty.");
         }
 
         if (signature.IsEmpty)
@@ -91,13 +91,13 @@ public sealed class PackageArtifactVerifier
 
         var expectedDigest = ParseDigest(expectedDigestSha256);
         Span<byte> actualDigest = stackalloc byte[SHA256.HashSizeInBytes];
-        SHA256.HashData(manifest, actualDigest);
+        SHA256.HashData(artifact, actualDigest);
 
         if (!CryptographicOperations.FixedTimeEquals(expectedDigest, actualDigest))
         {
             throw Failure(
                 "package.digest.mismatch",
-                "The package artifact content does not match its declared digest.");
+                "The package archive does not match its declared digest.");
         }
 
         if (!this.trustedPublishers.TryGetValue(Identity(publisher, keyId), out var trusted))
@@ -111,11 +111,11 @@ public sealed class PackageArtifactVerifier
         {
             using var verifier = ECDsa.Create();
             verifier.ImportFromPem(trusted.PublicKeyPem);
-            if (!verifier.VerifyData(manifest, signature, HashAlgorithmName.SHA256))
+            if (!verifier.VerifyData(artifact, signature, HashAlgorithmName.SHA256))
             {
                 throw Failure(
                     "package.signature.invalid",
-                    "The package signature does not authenticate the manifest.");
+                    "The package signature does not authenticate the package archive.");
             }
         }
         catch (PackageArtifactVerificationException)
@@ -136,7 +136,7 @@ public sealed class PackageArtifactVerifier
             publisher,
             keyId,
             Convert.ToHexString(actualDigest).ToLowerInvariant(),
-            manifest.Length);
+            artifact.Length);
     }
 
     private static byte[] ParseDigest(string value)
