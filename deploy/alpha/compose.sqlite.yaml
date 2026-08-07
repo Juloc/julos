@@ -5,7 +5,7 @@ name: julos-alpha
 
 services:
   server:
-    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.4}
+    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.5}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
@@ -30,7 +30,7 @@ services:
     ports:
       - "${JULOS_BIND_ADDRESS:-127.0.0.1}:${JULOS_SERVER_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD", "dotnet", "/application/JulOS.Server.dll", "--health-check"]
+      test: ["CMD", "gosu", "1654:1654", "dotnet", "/application/JulOS.Server.dll", "--health-check"]
       interval: 10s
       timeout: 10s
       retries: 12
