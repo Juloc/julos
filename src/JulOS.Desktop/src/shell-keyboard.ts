@@ -22,7 +22,7 @@ export class ShellKeyboardController {
   }
 
   public handleKeyDown(event: KeyboardEvent): boolean {
-    if (event.defaultPrevented || isEditableTarget(event.target)) {
+    if (event.defaultPrevented || isEditableEvent(event)) {
       return false;
     }
 
@@ -132,6 +132,10 @@ export function applyAccessibleDialogState(
     dialog.close();
     focusReturn.restore();
   }
+}
+
+function isEditableEvent(event: KeyboardEvent): boolean {
+  return event.composedPath().some((target) => isEditableTarget(target));
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
