@@ -1,4 +1,5 @@
-﻿import { CoreApplicationCatalog } from './core-applications.js';
+﻿import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
+import { desktopNotificationCenter } from './desktop-observability.js';
 import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
   DesktopLayoutPersistence,
@@ -7,7 +8,7 @@ import {
   type DesktopViewport,
   type PersistedDesktopWindow,
 } from './layout-persistence.js';
-import type { NotificationCenterStore } from './notification-center.js';
+import type { NotificationCenterSnapshot, NotificationCenterStore } from './notification-center.js';
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
@@ -34,16 +35,17 @@ export interface DesktopRuntimeElements {
 export interface DesktopRuntimeOptions {
   readonly api: ShellApiClient;
   readonly elements: DesktopRuntimeElements;
-  readonly notifications: NotificationCenterStore;
+  readonly notifications?: NotificationCenterStore;
   readonly language: () => SupportedLanguage;
   readonly onFailure: (error: unknown) => void;
-  readonly onProfileChanged: () => void | Promise<void>;
+  readonly onProfileChanged?: () => void | Promise<void>;
 }
 
 /** Composes the existing launcher, package frontend, persistence and window controllers. */
 export class DesktopRuntime {
   readonly #api: ShellApiClient;
   readonly #elements: DesktopRuntimeElements;
+  readonly #notifications: NotificationCenterStore;
   readonly #language: () => SupportedLanguage;
   readonly #onFailure: (error: unknown) => void;
   readonly #store = new WindowStore();
@@ -65,10 +67,13 @@ export class DesktopRuntime {
   #restoringLayout = false;
   #unsubscribeWindows: (() => void) | null = null;
   #unsubscribeSnap: (() => void) | null = null;
+  #unsubscribeObservability: (() => void) | null = null;
+  #unbindCoreShellActions: (() => void) | null = null;
 
   public constructor(options: DesktopRuntimeOptions) {
     this.#api = options.api;
     this.#elements = options.elements;
+    this.#notifications = options.notifications ?? desktopNotificationCenter;
     this.#language = options.language;
     this.#onFailure = options.onFailure;
     this.#layoutPersistence = new DesktopLayoutPersistence(
@@ -77,10 +82,10 @@ export class DesktopRuntime {
     );
     this.#coreApplications = new CoreApplicationCatalog({
       api: options.api,
-      notifications: options.notifications,
+      notifications: this.#notifications,
       language: options.language,
       onFailure: options.onFailure,
-      onProfileChanged: options.onProfileChanged,
+      onProfileChanged: options.onProfileChanged ?? (() => globalThis.location.reload()),
     });
   }
 
@@ -130,6 +135,8 @@ export class DesktopRuntime {
     }
 
     this.#renderLauncher('');
+    this.#unbindCoreShellActions = this.#bindCoreShellActions();
+    this.#unsubscribeObservability = this.#notifications.subscribe((snapshot) => this.#renderStatus(snapshot));
     this.#unsubscribeWindows = this.#store.subscribe((windows) => this.#renderWindows(windows));
     this.#unsubscribeSnap = this.#snap.subscribe((preview) => {
       const element = this.#elements.snapPreview;
@@ -147,8 +154,12 @@ export class DesktopRuntime {
   public stop(): void {
     this.#unsubscribeWindows?.();
     this.#unsubscribeSnap?.();
+    this.#unsubscribeObservability?.();
+    this.#unbindCoreShellActions?.();
     this.#unsubscribeWindows = null;
     this.#unsubscribeSnap = null;
+    this.#unsubscribeObservability = null;
+    this.#unbindCoreShellActions = null;
 
     if (this.#layoutLoaded) {
       void this.#layoutPersistence.flush(this.#viewport)
@@ -561,6 +572,42 @@ export class DesktopRuntime {
     }
   }
 
+  #bindCoreShellActions(): () => void {
+    const root = this.#elements.windowLayer.getRootNode();
+    if (!(root instanceof ShadowRoot)) {
+      return () => undefined;
+    }
+
+    const bindings: Array<{ selector: string; applicationId: string }> = [
+      { selector: '[data-label="settings"]', applicationId: CoreApplicationIds.settings },
+      { selector: '[data-label="notifications"]', applicationId: CoreApplicationIds.notifications },
+      { selector: '[data-label="problems"]', applicationId: CoreApplicationIds.problems },
+      { selector: '[data-label="agentStatus"]', applicationId: CoreApplicationIds.agents },
+    ];
+    const cleanup: Array<() => void> = [];
+    for (const binding of bindings) {
+      for (const element of root.querySelectorAll<HTMLElement>(binding.selector)) {
+        const handler = (): void => this.openApplication(binding.applicationId);
+        element.addEventListener('click', handler);
+        cleanup.push(() => element.removeEventListener('click', handler));
+      }
+    }
+    return () => {
+      for (const remove of cleanup) {
+        remove();
+      }
+    };
+  }
+
+  #renderStatus(snapshot: NotificationCenterSnapshot): void {
+    const root = this.#elements.windowLayer.getRootNode();
+    if (!(root instanceof ShadowRoot)) {
+      return;
+    }
+    setStatusCount(root.querySelector<HTMLElement>('[data-label="notifications"]'), snapshot.unreadCount);
+    setStatusCount(root.querySelector<HTMLElement>('[data-label="problems"]'), snapshot.activeProblems.length);
+  }
+
   #scheduleLayout(): void {
     if (!this.#layoutLoaded || this.#restoringLayout) {
       return;
@@ -677,4 +724,18 @@ function applyBounds(element: HTMLElement, bounds: WindowBounds): void {
   element.style.top = `${bounds.y}px`;
   element.style.width = `${bounds.width}px`;
   element.style.height = `${bounds.height}px`;
+}
+
+function setStatusCount(element: HTMLElement | null, count: number): void {
+  if (element === null) {
+    return;
+  }
+  element.querySelector('.core-status-count')?.remove();
+  if (count < 1) {
+    return;
+  }
+  const badge = document.createElement('span');
+  badge.className = 'core-status-count';
+  badge.textContent = count > 99 ? '99+' : String(count);
+  element.append(badge);
 }
