@@ -127,6 +127,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             }
 
             await using var artifact = await BufferArtifactAsync(input.Artifact, cancellationToken).ConfigureAwait(false);
+            var verifiedArtifact = VerifyArtifact(artifact, input);
             using var archive = new ZipArchive(artifact, ZipArchiveMode.Read, leaveOpen: true);
             var manifestEntry = archive.GetEntry("manifest.json")
                 ?? throw Failure("package.manifest_missing", "Package archive has no manifest.json.");
@@ -138,16 +139,6 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 manifestBytes = manifestBuffer.ToArray();
             }
 
-            var observedManifestDigest = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
-            var expectedManifestDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
-                ? observedManifestDigest
-                : input.ExpectedDigest;
-            var verifiedArtifact = this.verifier.Verify(
-                manifestBytes,
-                input.Signature,
-                expectedManifestDigest,
-                input.PublisherId,
-                input.PublisherKeyId);
             PackageManifest manifest;
             using (var manifestStream = new MemoryStream(manifestBytes, writable: false))
             {
@@ -514,6 +505,26 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
         File.Move(temporary, path, overwrite: true);
+    }
+
+    private VerifiedPackageArtifact VerifyArtifact(MemoryStream artifact, PackageInstallInput input)
+    {
+        if (!artifact.TryGetBuffer(out var buffer))
+        {
+            throw Failure("package.artifact_buffer_invalid", "Package archive could not be verified.");
+        }
+
+        var artifactBytes = buffer.AsSpan(0, checked((int)artifact.Length));
+        var observedDigest = Convert.ToHexStringLower(SHA256.HashData(artifactBytes));
+        var expectedDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
+            ? observedDigest
+            : input.ExpectedDigest;
+        return this.verifier.Verify(
+            artifactBytes,
+            input.Signature,
+            expectedDigest,
+            input.PublisherId,
+            input.PublisherKeyId);
     }
 
     private static async Task<MemoryStream> BufferArtifactAsync(Stream source, CancellationToken cancellationToken)
