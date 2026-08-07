@@ -194,6 +194,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                     WorkerHealthy: false,
                     database);
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Installed;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -291,6 +297,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                     cancellationToken).ConfigureAwait(false);
                 metadata = metadata with { WorkerHealthy = true };
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    metadata.Manifest,
+                    enabled: true,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Enabled;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -332,6 +344,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 await this.workers.StopAsync(packageId, cancellationToken).ConfigureAwait(false);
                 metadata = metadata with { WorkerHealthy = false };
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    metadata.Manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Disabled;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -383,6 +401,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             {
                 Directory.Delete(packagePath, recursive: true);
             }
+            await PackageApplicationRegistration.SynchronizeAsync(
+                this.context,
+                metadata.Manifest,
+                enabled: false,
+                this.timeProvider,
+                cancellationToken).ConfigureAwait(false);
             this.context.PackageInstallations.Remove(row);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new PackageInstallationSnapshot(
@@ -413,6 +437,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
     {
         metadata = metadata with { WorkerHealthy = false };
         await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+        await PackageApplicationRegistration.SynchronizeAsync(
+            this.context,
+            metadata.Manifest,
+            enabled: false,
+            this.timeProvider,
+            cancellationToken).ConfigureAwait(false);
         row.State = PackageInstallationState.Faulted;
         row.FaultCode = code;
         row.FaultDetail = SafeDetail(exception);
