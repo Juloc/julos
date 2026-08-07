@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace JulOS.Infrastructure.Packages;
 
-/// <summary>Reads enabled applications and verified frontend modules from installed package state.</summary>
+/// <summary>Reads enabled desktop surfaces and verified frontend modules from installed package state.</summary>
 internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCatalog
 {
     private const int MaximumFrontendBytes = 16 * 1024 * 1024;
@@ -31,12 +31,7 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
         CancellationToken cancellationToken = default)
     {
         var viewportClass = ParseViewport(viewport);
-        var enabledPackages = await this.context.PackageInstallations
-            .AsNoTracking()
-            .Where(row => row.State == PackageInstallationState.Enabled)
-            .Select(row => row.PackageId)
-            .ToArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var enabledPackages = await EnabledPackageIdsAsync(cancellationToken).ConfigureAwait(false);
         if (enabledPackages.Length == 0)
         {
             return [];
@@ -87,6 +82,45 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
                 application.ElementName,
                 frontend.Sha256,
                 frontend.ExportedElements.ToArray()));
+        }
+
+        return result;
+    }
+
+    public async Task<IReadOnlyList<DesktopPackageWidget>> ListWidgetsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var enabledPackages = await EnabledPackageIdsAsync(cancellationToken).ConfigureAwait(false);
+        if (enabledPackages.Length == 0)
+        {
+            return [];
+        }
+
+        var result = new List<DesktopPackageWidget>();
+        foreach (var packageId in enabledPackages.Order(StringComparer.Ordinal))
+        {
+            var installed = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
+            PackageManifestReader.Validate(installed.Manifest);
+            var frontend = installed.Manifest.Frontend;
+            if (frontend is null)
+            {
+                continue;
+            }
+
+            foreach (var widget in installed.Manifest.Widgets.OrderBy(item => item.StableKey, StringComparer.Ordinal))
+            {
+                result.Add(new DesktopPackageWidget(
+                    WidgetKey(packageId, widget.StableKey),
+                    packageId,
+                    installed.Version,
+                    widget.StableKey,
+                    widget.DisplayNameKey,
+                    widget.ElementName,
+                    widget.Sizes.ToArray(),
+                    widget.DefaultSize,
+                    frontend.Sha256,
+                    frontend.ExportedElements.ToArray()));
+            }
         }
 
         return result;
@@ -150,6 +184,12 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
         return new DesktopPackageFrontend(packageId, version, actualDigest, content);
     }
 
+    private Task<string[]> EnabledPackageIdsAsync(CancellationToken cancellationToken) => this.context.PackageInstallations
+        .AsNoTracking()
+        .Where(row => row.State == PackageInstallationState.Enabled)
+        .Select(row => row.PackageId)
+        .ToArrayAsync(cancellationToken);
+
     private async Task<InstalledPackageMetadata> ReadMetadataAsync(
         string packageId,
         CancellationToken cancellationToken)
@@ -167,6 +207,8 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
             cancellationToken).ConfigureAwait(false)
             ?? throw Failure("package.metadata_invalid", "Package metadata is invalid.");
     }
+
+    private static string WidgetKey(string packageId, string stableKey) => $"{packageId}:{stableKey}";
 
     private static ViewportClass ParseViewport(string value) => value switch
     {
