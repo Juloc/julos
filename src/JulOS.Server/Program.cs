@@ -103,7 +103,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapStaticAssets();
+app.MapStaticAssets()
+    .AllowAnonymous();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
     .AllowAnonymous();
