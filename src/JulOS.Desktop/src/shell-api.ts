@@ -36,6 +36,19 @@ export interface UserProfile {
   readonly revision: number;
 }
 
+export interface UpdateProfilePreferencesRequest {
+  readonly preferredLanguage: SupportedLanguage;
+  readonly timeZone: string;
+  readonly theme: ThemeMode;
+  readonly motion: MotionMode;
+  readonly revision: number;
+}
+
+export interface AntiforgeryToken {
+  readonly headerName: string;
+  readonly token: string;
+}
+
 export interface ServerVersion {
   readonly component: string;
   readonly version: string;
@@ -92,6 +105,21 @@ export class ShellApiClient {
 
   public readProfile(): Promise<UserProfile> {
     return this.#api.get<UserProfile>('/api/v1/profile');
+  }
+
+  public async updateProfilePreferences(
+    request: UpdateProfilePreferencesRequest,
+  ): Promise<UserProfile> {
+    const antiforgery = await this.readAntiforgeryToken();
+    return this.#api.requestJson<UserProfile>('/api/v1/profile/preferences', {
+      method: 'PUT',
+      body: request,
+      headers: { [antiforgery.headerName]: antiforgery.token },
+    });
+  }
+
+  public readAntiforgeryToken(): Promise<AntiforgeryToken> {
+    return this.#api.get<AntiforgeryToken>('/api/v1/auth/antiforgery');
   }
 
   public readServerVersion(): Promise<ServerVersion> {
