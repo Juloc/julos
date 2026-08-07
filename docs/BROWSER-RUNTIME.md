@@ -4,6 +4,8 @@
 
 BRW-001 provides one isolated Chromium runtime image for the JulOS Browser package. Runtime creation remains owned by Runtime Manager and session ownership remains on the protocol-neutral REM-004 path. The Browser package does not receive a second container or session subsystem.
 
+BRW-002 adds Browser-owned profile metadata and network policy without moving Chromium state into Core. BRW-003 remains responsible for turning those validated definitions into Runtime Manager allocations and presentation sessions.
+
 ## Image inputs
 
 The image is built from:
@@ -39,6 +41,35 @@ BRW-003 combines the repository version with the digest produced by the publicat
 
 No host port is published. The display proxy reaches port `5900` only through the package runtime network. x11vnc uses an explicit IPv4 listener and disables its optional IPv6 listener so startup and health checks cannot vary with the host's dual-stack socket behavior.
 
+## Browser profile policy
+
+BRW-002 defines three profile modes:
+
+- `Persistent` keeps one named profile for one JulOS user across Browser sessions;
+- `Temporary` exists only for one runtime session and receives no persistent profile volume;
+- `Application` keeps a user-owned profile for one fixed application identity and requires an absolute HTTP or HTTPS start URL.
+
+Every retained Browser profile stores its owning JulOS user ID. Reads and deletes filter by both profile identity and owner identity. A profile belonging to another user therefore cannot be resolved through the Browser profile store.
+
+Only retained profile metadata belongs in the package database. Chromium profile bytes remain in isolated Browser runtime volumes. Persistent volume names are derived from the owner/profile identity and do not contain user names or other display data. Temporary mode is rejected by the persistent store and maps to runtime-local storage that must be removed when the runtime ends.
+
+Browser profile metadata uses the package-owned database supplied by the JulOS package worker supervisor. The implementation supports both the SQLite alpha deployment and PostgreSQL package storage; no Browser-specific database service is introduced.
+
+## Browser network policy
+
+Browser network profiles are package-owned configuration, not arbitrary Docker network input from the frontend.
+
+Each network profile contains:
+
+- a stable Browser-local key;
+- one exact Runtime Manager network from the administrator allowlist;
+- an optional opaque JulOS secret-reference ID for future proxy credentials;
+- an optimistic revision.
+
+`allowedNetworks` is the administrator-configured exact allowlist. `defaultNetwork`, when set, must be a member of that allowlist. Unknown networks fail validation before BRW-003 may request a runtime.
+
+Secret values are never stored in Browser profile metadata. BRW-003 must resolve any configured proxy secret reference through the existing API-008 operation-scoped secret lease and pass only the leased value through Runtime Manager's secret-environment channel.
+
 ## Display credential
 
 The launcher requires exactly eight printable ASCII characters because the VNC password mechanism used by x11vnc has an eight-character protocol limit. The value is supplied through Runtime Manager's secret-environment channel.
@@ -63,7 +94,7 @@ The image fixes:
 - DPI to `96`;
 - a bounded installed font set.
 
-BRW-002 and BRW-004 may expose user-visible profile and viewport choices, but they must map to explicit bounded runtime values rather than mutate host display state.
+BRW-004 may expose user-visible viewport choices, but they must map to explicit bounded runtime values rather than mutate host display state.
 
 ## Process lifecycle
 
