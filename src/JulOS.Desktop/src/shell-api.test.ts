@@ -46,6 +46,52 @@ test('shell API reads authentication, profile and running server version', async
   ]);
 });
 
+test('shell API creates the initial administrator and signs in with same-origin JSON requests', async () => {
+  const requests: Array<{ path: string; method: string; body: unknown }> = [];
+  const fakeFetch: typeof fetch = async (input, init) => {
+    const path = String(input);
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : null;
+    requests.push({ path, method: init?.method ?? 'GET', body });
+
+    return new Response(JSON.stringify({
+      userId: 'user-1',
+      userName: 'admin',
+      displayName: 'Administrator',
+    }), {
+      status: path.endsWith('/setup') ? 201 : 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  const api = new ShellApiClient(fakeFetch);
+  await api.createInitialAdministrator({
+    userName: 'admin',
+    displayName: 'Administrator',
+    password: 'Strong-password-1',
+  });
+  await api.login({ userName: 'admin', password: 'Strong-password-1' });
+
+  assert.deepEqual(requests, [
+    {
+      path: '/api/v1/auth/setup',
+      method: 'POST',
+      body: {
+        userName: 'admin',
+        displayName: 'Administrator',
+        password: 'Strong-password-1',
+      },
+    },
+    {
+      path: '/api/v1/auth/login',
+      method: 'POST',
+      body: {
+        userName: 'admin',
+        password: 'Strong-password-1',
+      },
+    },
+  ]);
+});
+
 test('shell API rejects failed HTTP responses', async () => {
   const fakeFetch: typeof fetch = async () => new Response(null, { status: 401 });
   const api = new ShellApiClient(fakeFetch);
