@@ -168,6 +168,25 @@ jobs:
           "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
 
           container_id="$("${compose[@]}" ps -q server)"
+          if ! docker exec "$container_id" test -s /application/wwwroot/index.html; then
+            echo "The released image does not contain /application/wwwroot/index.html." >&2
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error http://127.0.0.1:18080/index.html >/dev/null; then
+            echo "The released server does not serve /index.html." >&2
+            exit 1
+          fi
+          if ! curl --fail --silent --show-error http://127.0.0.1:18080/scripts/main.js >/dev/null; then
+            echo "The released server does not serve /scripts/main.js." >&2
+            exit 1
+          fi
+
+          root_html="$(curl --fail --silent --show-error http://127.0.0.1:18080/)"
+          if ! grep -Fq '<title>JulOS</title>' <<< "$root_html"; then
+            echo "The released server image did not serve the JulOS Desktop at /." >&2
+            exit 1
+          fi
+
           process_uid="$(docker exec "$container_id" awk '/^Uid:/ { print $2 }' /proc/1/status)"
           if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" = 0 ]]; then
             echo "The JulOS server process must run as non-root, got UID: $process_uid" >&2

@@ -41,6 +41,11 @@ COPY src/JulOS.Application/ src/JulOS.Application/
 COPY src/JulOS.PackageSdk/ src/JulOS.PackageSdk/
 COPY src/JulOS.Infrastructure/ src/JulOS.Infrastructure/
 COPY src/JulOS.Server/ src/JulOS.Server/
+
+# The Desktop is part of the Server web root at publish time. This keeps ASP.NET
+# Core's published static-web-asset view and the runtime filesystem identical.
+COPY --from=desktop-build /desktop/dist/ src/JulOS.Server/wwwroot/
+
 RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
       --configuration Release \
       --no-restore \
@@ -78,7 +83,6 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
 WORKDIR /application
 
 COPY --from=build /application ./
-COPY --from=desktop-build /desktop/dist ./wwwroot/
 COPY src/JulOS.Server/docker-entrypoint.sh /usr/local/bin/julos-entrypoint
 RUN chmod 0555 /usr/local/bin/julos-entrypoint
 

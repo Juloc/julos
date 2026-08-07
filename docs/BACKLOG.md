@@ -12,6 +12,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 1 | Core platform model | Done | Packages, applications, layouts, sessions, observability, permissions and Agents. |
 | Phase 2 | Persistence, authentication and core APIs | Done | PostgreSQL, auth, authorization, profile, errors, operations, secrets, audit and events. |
 | DESK-001..012 | Desktop shell | Done | Shell, windows, pointer interactions, snapping, taskbar, launcher, persistence, responsive modes, observability, widgets and accessibility. |
+| REL-ALPHA-007 | Published Desktop web root | Done | The container publishes Desktop assets through the Server web root and the release smoke test verifies `/` plus the main ES module. |
 | Phase 3 | Desktop shell | Done | Complete Desktop foundation is implemented. |
 | PKG-001 | Package manifest schema | Done | Versioned strict manifest, runtime, permissions, apps, widgets, capabilities, migrations and frontend declarations. |
 | PKG-002 | Artifact verification | Done | Digest and trusted publisher signature verification reject modified or untrusted artifacts. |
