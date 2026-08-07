@@ -27,6 +27,7 @@ export interface CoreApplicationCatalogOptions {
   readonly language: () => SupportedLanguage;
   readonly onFailure: (error: unknown) => void;
   readonly onProfileChanged: () => void | Promise<void>;
+  readonly onPackagesChanged: () => void | Promise<void>;
 }
 
 /** Provides JulOS-owned system utilities as normal windows in the desktop runtime. */
@@ -36,6 +37,7 @@ export class CoreApplicationCatalog {
   readonly #language: () => SupportedLanguage;
   readonly #onFailure: (error: unknown) => void;
   readonly #onProfileChanged: () => void | Promise<void>;
+  readonly #onPackagesChanged: () => void | Promise<void>;
   readonly #applicationIds = new Set<string>(Object.values(CoreApplicationIds));
 
   public constructor(options: CoreApplicationCatalogOptions) {
@@ -44,6 +46,7 @@ export class CoreApplicationCatalog {
     this.#language = options.language;
     this.#onFailure = options.onFailure;
     this.#onProfileChanged = options.onProfileChanged;
+    this.#onPackagesChanged = options.onPackagesChanged;
   }
 
   public applications(): readonly DesktopApplication[] {
@@ -238,9 +241,10 @@ export class CoreApplicationCatalog {
         signature: signatureFile,
         publisherId: publisher.input.value,
         publisherKeyId: publisherKey.input.value,
-      }).then(() => {
+      }).then(async () => {
         form.reset();
         status.textContent = text(language, 'installed');
+        await this.#onPackagesChanged();
       }).catch((error: unknown) => {
         status.className = 'core-status core-status-error';
         status.textContent = errorMessage(error, text(language, 'requestFailed'));
@@ -288,20 +292,28 @@ export class CoreApplicationCatalog {
       card.append(header, state, configuration);
       actions.append(actionButton(text(language, 'configure'), async () => {
         await store.configure(item.packageId, item.revision, parseConfiguration(configuration.value));
+        await this.#onPackagesChanged();
       }, this.#onFailure));
     } else {
       card.append(header, state);
     }
 
     if (item.state === 'enabled') {
-      actions.append(actionButton(text(language, 'disable'), () => store.disable(item.packageId, item.revision), this.#onFailure));
+      actions.append(actionButton(text(language, 'disable'), async () => {
+        await store.disable(item.packageId, item.revision);
+        await this.#onPackagesChanged();
+      }, this.#onFailure));
     } else if (item.state === 'disabled' && !item.configurationRequired) {
-      actions.append(actionButton(text(language, 'enable'), () => store.enable(item.packageId, item.revision), this.#onFailure));
+      actions.append(actionButton(text(language, 'enable'), async () => {
+        await store.enable(item.packageId, item.revision);
+        await this.#onPackagesChanged();
+      }, this.#onFailure));
     }
     if (item.state !== 'removing' && item.state !== 'removed') {
       const remove = actionButton(text(language, 'remove'), async () => {
         if (globalThis.confirm(text(language, 'confirmRemove'))) {
           await store.remove(item.packageId, item.revision, false);
+          await this.#onPackagesChanged();
         }
       }, this.#onFailure);
       remove.classList.add('danger');
