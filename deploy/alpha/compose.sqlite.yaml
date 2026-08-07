@@ -5,7 +5,7 @@ name: julos-alpha
 
 services:
   server:
-    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.6}
+    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.7}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080

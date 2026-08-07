@@ -167,6 +167,13 @@ jobs:
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
           "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
 
+          root_html="$(curl --fail --silent --show-error http://127.0.0.1:18080/)"
+          if ! grep -Fq '<title>JulOS</title>' <<< "$root_html"; then
+            echo "The released server image did not serve the JulOS Desktop at /." >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error http://127.0.0.1:18080/scripts/main.js >/dev/null
+
           container_id="$("${compose[@]}" ps -q server)"
           process_uid="$(docker exec "$container_id" awk '/^Uid:/ { print $2 }' /proc/1/status)"
           if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" = 0 ]]; then
