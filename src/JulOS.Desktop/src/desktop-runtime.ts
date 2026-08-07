@@ -454,22 +454,25 @@ export class DesktopRuntime {
         if (application === undefined) {
           return;
         }
-        if (this.#interactions.beginResize(windowId, pointerSample(event), {
+        this.#interactions.beginResize(windowId, pointerSample(event), {
           usableArea: this.#usableArea(),
           minimumSize: { width: application.minimumWidth, height: application.minimumHeight },
           edge,
-        })) {
-          handle.setPointerCapture(event.pointerId);
-        }
+        });
+        handle.setPointerCapture(event.pointerId);
       });
       handle.addEventListener('pointermove', (event) => void this.#interactions.updatePointer(pointerSample(event)));
       handle.addEventListener('pointerup', (event) => {
-        if (this.#interactions.endPointer(pointerSample(event))) {
-          this.#scheduleLayout();
-        }
+        void this.#finishResize(event);
       });
       handle.addEventListener('pointercancel', (event) => void this.#interactions.cancelPointer(event.pointerId));
       element.append(handle);
+    }
+  }
+
+  async #finishResize(event: PointerEvent): Promise<void> {
+    if (await this.#interactions.endPointer(pointerSample(event))) {
+      this.#scheduleLayout();
     }
   }
 
