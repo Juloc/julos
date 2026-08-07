@@ -30,7 +30,7 @@ public sealed class BrowserProfileStore
         this.connectionString = connectionString;
     }
 
-    /// <summary>Reads the package database identity from the worker process environment.</summary>
+    /// <summary>Reads the package database identity from the worker process environment supplied by the supervisor.</summary>
     public static BrowserProfileStore FromEnvironment()
     {
         var provider = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE_PROVIDER");
@@ -296,10 +296,7 @@ public sealed class BrowserProfileStore
         {
             throw new ArgumentException("Browser profile ID is required.", nameof(profileId));
         }
-        if (revision < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(revision));
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThan(revision, 1);
 
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
