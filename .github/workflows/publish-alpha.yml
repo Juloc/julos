@@ -133,14 +133,8 @@ jobs:
           image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
           smoke_directory="$GITHUB_WORKSPACE/.alpha-smoke"
           env_file="$smoke_directory/.env"
+          volume_name="julos-alpha_julos-data"
           mkdir -p "$smoke_directory"
-
-          container_user="$(docker image inspect --format '{{.Config.User}}' "$image")"
-          container_uid="${container_user%%:*}"
-          if [[ ! "$container_uid" =~ ^[0-9]+$ || "$container_uid" = 0 ]]; then
-            echo "The server image must declare a numeric non-root runtime user, got: $container_user" >&2
-            exit 1
-          fi
 
           primary_key="$(openssl rand -base64 32)"
           cat > "$env_file" <<EOF
@@ -158,16 +152,40 @@ jobs:
 
           compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml)
           "${compose[@]}" config --quiet
+
+          # Reproduce an upgrade from an older JulOS volume whose writable paths
+          # are owned by root. The released image must repair this in-place.
+          docker volume create "$volume_name" >/dev/null
+          docker run --rm \
+            --user 0:0 \
+            --entrypoint /bin/sh \
+            --volume "$volume_name:/var/lib/julos" \
+            "$image" \
+            -c 'mkdir -p /var/lib/julos/data /var/lib/julos/packages /var/lib/julos/data-protection && chown -R 0:0 /var/lib/julos/data /var/lib/julos/packages /var/lib/julos/data-protection && touch /var/lib/julos/.preexisting-volume'
+
           "${compose[@]}" up --detach --wait --wait-timeout 180
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
           "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
+
+          container_id="$("${compose[@]}" ps -q server)"
+          process_uid="$(docker exec "$container_id" sh -c "awk '/^Uid:/ { print \\$2 }' /proc/1/status")"
+          if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" = 0 ]]; then
+            echo "The JulOS server process must run as non-root, got UID: $process_uid" >&2
+            exit 1
+          fi
+
+          data_uid="$(docker exec "$container_id" stat -c '%u' /var/lib/julos/data)"
+          if [ "$data_uid" != "$process_uid" ]; then
+            echo "Persistent data ownership was not repaired: data UID $data_uid, process UID $process_uid" >&2
+            exit 1
+          fi
 
           "${compose[@]}" restart server
           "${compose[@]}" up --detach --wait --wait-timeout 120
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
 
           logs="$("${compose[@]}" logs --no-color server)"
-          if grep -Eq 'may not be persisted outside of the container|No XML encryptor configured|package.worker_supervisor_unavailable' <<< "$logs"; then
+          if grep -Eq 'may not be persisted outside of the container|No XML encryptor configured|package.worker_supervisor_unavailable|unable to open database file' <<< "$logs"; then
             echo "$logs" >&2
             echo "The SQLite alpha stack emitted a known persistence or package-worker warning." >&2
             exit 1
