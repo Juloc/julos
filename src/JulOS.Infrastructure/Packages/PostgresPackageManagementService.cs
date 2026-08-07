@@ -1,4 +1,5 @@
 ﻿using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using JulOS.Application.Concurrency;
@@ -137,10 +138,14 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 manifestBytes = manifestBuffer.ToArray();
             }
 
-            _ = this.verifier.Verify(
+            var observedManifestDigest = Convert.ToHexStringLower(SHA256.HashData(manifestBytes));
+            var expectedManifestDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
+                ? observedManifestDigest
+                : input.ExpectedDigest;
+            var verifiedArtifact = this.verifier.Verify(
                 manifestBytes,
                 input.Signature,
-                input.ExpectedDigest,
+                expectedManifestDigest,
                 input.PublisherId,
                 input.PublisherKeyId);
             PackageManifest manifest;
@@ -185,7 +190,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 var metadata = new InstalledPackageMetadata(
                     manifest.PackageId,
                     manifest.Version,
-                    input.ExpectedDigest,
+                    verifiedArtifact.DigestSha256,
                     input.PublisherId,
                     input.PublisherKeyId,
                     manifest,
@@ -581,7 +586,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         {
             throw Failure("package.operation_key_invalid", "Package operation key is invalid.");
         }
-        var safe = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(operationKey)));
+        var safe = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(operationKey)));
         return Path.Combine(this.packageRoot, ".operations", safe + ".txt");
     }
 
