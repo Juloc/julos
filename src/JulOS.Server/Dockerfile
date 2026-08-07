@@ -60,18 +60,18 @@ LABEL org.opencontainers.image.title="JulOS Server" \
       org.opencontainers.image.version="${JULOS_VERSION}"
 
 # Npgsql loads the system GSSAPI library even when password authentication is
-# used. Persistent JulOS subdirectories are created with the runtime user's
-# ownership before a named Docker volume is populated from the image.
+# used. gosu is used only by the entrypoint to repair ownership of JulOS-owned
+# paths in pre-existing named volumes before dropping to the runtime UID.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends libgssapi-krb5-2 \
+    && apt-get install --yes --no-install-recommends gosu libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -o "$APP_UID" -g "$APP_UID" \
         /var/lib/julos/data \
         /var/lib/julos/packages \
         /var/lib/julos/data-protection
 
-# The image ships no shell utilities for probing. The application answers its own
-# readiness probe through --health-check, so no HTTP client tool is installed.
+# The image ships no HTTP client for probing. The application answers its own
+# readiness probe through --health-check.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0
 
@@ -79,9 +79,12 @@ WORKDIR /application
 
 COPY --from=build /application ./
 COPY --from=desktop-build /desktop/dist ./wwwroot/
+COPY src/JulOS.Server/docker-entrypoint.sh /usr/local/bin/julos-entrypoint
+RUN chmod 0555 /usr/local/bin/julos-entrypoint
 
 EXPOSE 8080
 
-USER $APP_UID
-
-ENTRYPOINT ["dotnet", "/application/JulOS.Server.dll"]
+# The entrypoint starts as root only long enough to repair JulOS volume ownership,
+# then execs the server as APP_UID. The server process itself is never root.
+ENTRYPOINT ["/usr/local/bin/julos-entrypoint"]
+CMD ["dotnet", "/application/JulOS.Server.dll"]
