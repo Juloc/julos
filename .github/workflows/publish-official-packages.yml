@@ -1,0 +1,123 @@
+name: Publish official packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      key_id:
+        description: Trusted JulOS package signing key ID
+        required: true
+        default: official-alpha-2026
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-sign:
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+      PACKAGE_PUBLISHER_ID: juloc
+      PACKAGE_KEY_ID: ${{ inputs.key_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/JulOS.Remote/frontend/package-lock.json
+
+      - name: Validate signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${PACKAGE_SIGNING_KEY}" ]]; then
+            echo "Repository secret JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM is required." >&2
+            exit 1
+          fi
+          if [[ -z "${PACKAGE_KEY_ID}" ]]; then
+            echo "A non-empty package signing key ID is required." >&2
+            exit 1
+          fi
+
+      - name: Build Remote frontend
+        working-directory: packages/JulOS.Remote/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Validate repository
+        run: node tools/validate.mjs
+
+      - name: Build official package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          bash tools/build-package-artifact.sh packages/JulOS.HostMetrics artifacts/JulOS.HostMetrics-1.0.0.zip
+          bash tools/build-package-artifact.sh packages/JulOS.Remote artifacts/JulOS.Remote-1.0.0.zip
+          bash tools/build-package-artifact.sh packages/JulOS.Browser artifacts/JulOS.Browser-1.0.0.zip
+
+      - name: Sign package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_file="$(mktemp)"
+          public_key_file="artifacts/juloc-package-signing-public.pem"
+          cleanup() {
+            rm -f "$key_file"
+          }
+          trap cleanup EXIT
+
+          printf '%s\n' "${PACKAGE_SIGNING_KEY}" > "$key_file"
+          chmod 600 "$key_file"
+          openssl pkey -in "$key_file" -pubout -out "$public_key_file"
+
+          for archive in artifacts/JulOS.*.zip; do
+            openssl dgst -sha256 -sign "$key_file" -out "$archive.sig" "$archive"
+            openssl dgst -sha256 -verify "$public_key_file" -signature "$archive.sig" "$archive"
+          done
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+
+          const publisherId = process.env.PACKAGE_PUBLISHER_ID;
+          const keyId = process.env.PACKAGE_KEY_ID;
+          const archives = fs.readdirSync('artifacts')
+            .filter((name) => /^JulOS\..+\.zip$/u.test(name))
+            .sort();
+
+          for (const archiveName of archives) {
+            const archivePath = path.join('artifacts', archiveName);
+            const sha256 = crypto.createHash('sha256').update(fs.readFileSync(archivePath)).digest('hex');
+            fs.writeFileSync(`${archivePath}.json`, `${JSON.stringify({
+              publisherId,
+              keyId,
+              sha256,
+              signatureFile: `${archiveName}.sig`,
+            }, null, 2)}\n`);
+          }
+          NODE
+
+      - name: Upload signed package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: julos-official-packages
+          path: |
+            artifacts/JulOS.*.zip
+            artifacts/JulOS.*.zip.sig
+            artifacts/JulOS.*.zip.sha256
+            artifacts/JulOS.*.zip.json
+            artifacts/juloc-package-signing-public.pem
+          if-no-files-found: error
+          retention-days: 30
