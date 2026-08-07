@@ -30,7 +30,8 @@
         "desktop",
         "tablet",
         "mobile"
-      ]
+      ],
+      "ElementName": "julos-host-metrics-app"
     }
   ],
   "Widgets": [
