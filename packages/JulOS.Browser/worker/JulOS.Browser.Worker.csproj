@@ -9,4 +9,9 @@
     <ProjectReference Include="..\..\..\src\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
 </Project>
