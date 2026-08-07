@@ -10,7 +10,7 @@ namespace JulOS.Infrastructure.Tests.Packages;
 public sealed class PackageArchiveSignatureTests
 {
     [TestMethod]
-    public void Verify_rejects_worker_change_even_when_manifest_is_unchanged()
+    public void VerifyRejectsWorkerChangeEvenWhenManifestIsUnchanged()
     {
         using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var verifier = new PackageArtifactVerifier([
