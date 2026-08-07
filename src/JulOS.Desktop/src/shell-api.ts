@@ -14,6 +14,11 @@ export interface InitialAdministratorRequest {
   readonly password: string;
 }
 
+export interface LocalLoginRequest {
+  readonly userName: string;
+  readonly password: string;
+}
+
 export interface AuthenticationStatus {
   readonly setupRequired: boolean;
   readonly authenticated: boolean;
@@ -51,6 +56,13 @@ export class ShellApiClient {
     request: InitialAdministratorRequest,
   ): Promise<AuthenticatedUser> {
     return this.#api.requestJson<AuthenticatedUser>('/api/v1/auth/setup', {
+      method: 'POST',
+      body: request,
+    });
+  }
+
+  public login(request: LocalLoginRequest): Promise<AuthenticatedUser> {
+    return this.#api.requestJson<AuthenticatedUser>('/api/v1/auth/login', {
       method: 'POST',
       body: request,
     });
