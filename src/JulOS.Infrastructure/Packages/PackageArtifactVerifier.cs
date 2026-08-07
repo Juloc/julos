@@ -67,7 +67,7 @@ public sealed class PackageArtifactVerifier
 
     /// <summary>Verifies digest, publisher trust and signature for one immutable package archive.</summary>
     /// <param name="artifact">Exact complete package archive bytes.</param>
-    /// <param name="signature">ECDSA signature bytes over the complete archive.</param>
+    /// <param name="signature">ECDSA P-256/SHA-256 signature bytes over the complete archive in IEEE P1363 format.</param>
     /// <param name="expectedDigestSha256">Declared lowercase or uppercase SHA-256 digest.</param>
     /// <param name="publisher">Publisher identity.</param>
     /// <param name="keyId">Signing-key identity.</param>
@@ -111,7 +111,11 @@ public sealed class PackageArtifactVerifier
         {
             using var verifier = ECDsa.Create();
             verifier.ImportFromPem(trusted.PublicKeyPem);
-            if (!verifier.VerifyData(artifact, signature, HashAlgorithmName.SHA256))
+            if (!verifier.VerifyData(
+                    artifact,
+                    signature,
+                    HashAlgorithmName.SHA256,
+                    DSASignatureFormat.IeeeP1363FixedFieldConcatenation))
             {
                 throw Failure(
                     "package.signature.invalid",
