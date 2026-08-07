@@ -30,7 +30,8 @@
         "desktop",
         "tablet",
         "mobile"
-      ]
+      ],
+      "ElementName": "julos-remote-app"
     }
   ],
   "Widgets": [
