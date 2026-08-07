@@ -2,12 +2,14 @@
 
 namespace JulOS.Browser.Worker;
 
-/// <summary>Registers isolated Browser sessions as unrestricted application instances.</summary>
+/// <summary>Registers isolated Browser sessions and owns Browser profile policy.</summary>
 public sealed class BrowserWorker : IJulOsPackageWorker
 {
     private const string PackageId = "de.juloc.julos.browser";
     private readonly TimeProvider timeProvider;
     private PackageWorkerContext? context;
+    private BrowserProfilePolicy? profilePolicy;
+    private BrowserProfileStore? profileStore;
     private bool running;
 
     /// <summary>Creates the Browser worker.</summary>
@@ -24,7 +26,9 @@ public sealed class BrowserWorker : IJulOsPackageWorker
     {
         ArgumentNullException.ThrowIfNull(configuration);
         cancellationToken.ThrowIfCancellationRequested();
-        var allowed = new HashSet<string>(["idleTimeoutMinutes", "allowDownloads"], StringComparer.Ordinal);
+        var allowed = new HashSet<string>(
+            ["idleTimeoutMinutes", "allowDownloads", "allowedNetworks", "defaultNetwork"],
+            StringComparer.Ordinal);
         var issues = configuration.Keys
             .Where(key => !allowed.Contains(key))
             .Select(key => new PackageValidationIssue(
@@ -51,6 +55,20 @@ public sealed class BrowserWorker : IJulOsPackageWorker
                 "allowDownloads",
                 Blocking: true));
         }
+
+        try
+        {
+            _ = BrowserProfilePolicy.FromConfiguration(configuration);
+        }
+        catch (ArgumentException exception)
+        {
+            issues.Add(new PackageValidationIssue(
+                "browser.configuration.network",
+                exception.Message,
+                "allowedNetworks",
+                Blocking: true));
+        }
+
         return Task.FromResult(new PackageValidationResult(issues.Count == 0, issues));
     }
 
@@ -63,7 +81,9 @@ public sealed class BrowserWorker : IJulOsPackageWorker
         {
             throw new InvalidOperationException("Browser worker package identity is invalid.");
         }
+
         this.context = context;
+        this.profilePolicy = BrowserProfilePolicy.FromConfiguration(context.Configuration);
         return Task.CompletedTask;
     }
 
@@ -98,15 +118,17 @@ public sealed class BrowserWorker : IJulOsPackageWorker
     }
 
     /// <inheritdoc />
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (this.context is null)
+        if (this.context is null || this.profilePolicy is null)
         {
             throw new InvalidOperationException("Browser must be configured before start.");
         }
+
+        this.profileStore = CreateProfileStore();
+        await this.profileStore.InitializeAsync(cancellationToken).ConfigureAwait(false);
         this.running = true;
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -114,6 +136,7 @@ public sealed class BrowserWorker : IJulOsPackageWorker
     {
         cancellationToken.ThrowIfCancellationRequested();
         this.running = false;
+        this.profileStore = null;
         return Task.CompletedTask;
     }
 
@@ -125,6 +148,27 @@ public sealed class BrowserWorker : IJulOsPackageWorker
             this.running ? "healthy" : "stopped",
             this.timeProvider.GetUtcNow(),
             this.running ? null : "Browser worker is stopped.",
-            new Dictionary<string, decimal?>(StringComparer.Ordinal)));
+            new Dictionary<string, decimal?>(StringComparer.Ordinal)
+            {
+                ["allowedNetworkCount"] = this.profilePolicy?.AllowedNetworkCount,
+            }));
+    }
+
+    private static BrowserProfileStore CreateProfileStore()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("Browser package database environment is unavailable.");
+        }
+
+        var provider = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE_PROVIDER");
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            var schema = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE_SCHEMA");
+            provider = string.Equals(schema, "main", StringComparison.Ordinal) ? "sqlite" : "postgresql";
+        }
+
+        return new BrowserProfileStore(provider, connectionString);
     }
 }
