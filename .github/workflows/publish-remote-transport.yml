@@ -1,12 +1,11 @@
-# Publishes the shared Remote transport package only from the validated
-# JulOS integration branch. Pull requests never receive package write access.
+# Publishes the shared Remote transport package only from validated main pushes.
 
 name: Publish Remote Transport
 
 on:
   push:
     branches:
-      - agent/complete-julos-work-breakdown
+      - main
     paths:
       - VERSION
       - packages/JulOS.Remote/shared/JulOS.Remote.Transport/**
