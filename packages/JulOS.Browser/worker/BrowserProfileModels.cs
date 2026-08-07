@@ -126,7 +126,7 @@ public sealed class BrowserProfilePolicy
     }
 
     /// <summary>Creates validated profile metadata. Temporary profiles are intentionally not persisted by the store.</summary>
-    public BrowserProfile CreateProfile(
+    public static BrowserProfile CreateProfile(
         Guid ownerUserId,
         string displayName,
         BrowserProfileMode mode,
@@ -157,7 +157,7 @@ public sealed class BrowserProfilePolicy
     }
 
     /// <summary>Returns package-owned runtime storage without ever persisting temporary profile data.</summary>
-    public BrowserRuntimeStorage RuntimeStorage(BrowserProfile profile)
+    public static BrowserRuntimeStorage RuntimeStorage(BrowserProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (profile.Mode == BrowserProfileMode.Temporary)
