@@ -27,6 +27,13 @@ export interface PackageInstallationView {
   readonly artifactDigest: string;
 }
 
+export interface PackageInstallRequest {
+  readonly artifact: File;
+  readonly signature: File;
+  readonly publisherId: string;
+  readonly publisherKeyId: string;
+}
+
 export interface PackageManagerSnapshot {
   readonly packages: readonly PackageInstallationView[];
   readonly loading: boolean;
@@ -82,6 +89,29 @@ export class PackageManagerStore {
       ) {
         this.#activePackageId = null;
       }
+    });
+  }
+
+  public async install(request: PackageInstallRequest): Promise<void> {
+    validateInstallRequest(request);
+    await this.#run(async () => {
+      const antiforgery = await this.#readAntiforgery();
+      const digest = await sha256(request.artifact);
+      const form = new FormData();
+      form.set('Artifact', request.artifact, request.artifact.name);
+      form.set('Signature', request.signature, request.signature.name);
+      form.set('ExpectedDigest', digest);
+      form.set('PublisherId', request.publisherId.trim());
+      form.set('PublisherKeyId', request.publisherKeyId.trim());
+      form.set('OperationKey', globalThis.crypto.randomUUID());
+      const installed = await this.#api.requestJson<PackageInstallationView>('/api/v1/packages/install', {
+        method: 'POST',
+        formData: form,
+        headers: { [antiforgery.headerName]: antiforgery.token },
+      });
+      this.#packages = [...this.#packages.filter((item) => item.packageId !== installed.packageId), installed]
+        .sort((left, right) => left.packageId.localeCompare(right.packageId));
+      this.#activePackageId = installed.packageId;
     });
   }
 
@@ -197,4 +227,20 @@ export class PackageManagerError extends Error {
     this.name = 'PackageManagerError';
     this.code = code;
   }
+}
+
+function validateInstallRequest(request: PackageInstallRequest): void {
+  if (request.artifact.size < 1 || request.signature.size < 1) {
+    throw new PackageManagerError('package.upload_invalid', 'Package and signature files are required.');
+  }
+  if (request.publisherId.trim().length === 0 || request.publisherKeyId.trim().length === 0) {
+    throw new PackageManagerError('package.publisher_missing', 'Publisher and publisher key are required.');
+  }
+}
+
+async function sha256(file: File): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
 }
