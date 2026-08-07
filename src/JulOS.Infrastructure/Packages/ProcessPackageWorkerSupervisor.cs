@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 
 using JulOS.Application.Packages;
+using JulOS.Infrastructure.Persistence.Core;
 using JulOS.PackageSdk;
 
 using Npgsql;
@@ -16,11 +17,13 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
     private readonly ConcurrentDictionary<string, WorkerSession> sessions = new(StringComparer.Ordinal);
     private readonly string packageRoot;
     private readonly Uri serverEndpoint;
+    private readonly CoreDatabaseProvider databaseProvider;
     private readonly string administrativeConnectionString;
 
     internal ProcessPackageWorkerSupervisor(
         string packageRoot,
         Uri serverEndpoint,
+        CoreDatabaseProvider databaseProvider,
         string administrativeConnectionString)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageRoot);
@@ -28,6 +31,7 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         ArgumentException.ThrowIfNullOrWhiteSpace(administrativeConnectionString);
         this.packageRoot = Path.GetFullPath(packageRoot);
         this.serverEndpoint = serverEndpoint;
+        this.databaseProvider = databaseProvider;
         this.administrativeConnectionString = administrativeConnectionString;
     }
 
@@ -157,7 +161,7 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         start.Environment["JULOS_PACKAGE_VERSION"] = manifest.Version;
         if (database is not null)
         {
-            start.Environment["JULOS_PACKAGE_DATABASE"] = RestrictedConnectionString(database);
+            start.Environment["JULOS_PACKAGE_DATABASE"] = PackageConnectionString(database);
             start.Environment["JULOS_PACKAGE_DATABASE_SCHEMA"] = database.Schema;
         }
 
@@ -202,8 +206,18 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         return entryPoint;
     }
 
-    private string RestrictedConnectionString(PackageDatabaseIdentity database)
+    private string PackageConnectionString(PackageDatabaseIdentity database)
     {
+        if (this.databaseProvider == CoreDatabaseProvider.Sqlite)
+        {
+            if (!string.Equals(database.Provider, "sqlite", StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(database.ConnectionString))
+            {
+                throw Failure("package.database_identity_invalid", "SQLite package database identity is invalid.");
+            }
+            return database.ConnectionString;
+        }
+
         var builder = new NpgsqlConnectionStringBuilder(this.administrativeConnectionString)
         {
             Username = database.Role,
