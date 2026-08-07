@@ -52,7 +52,7 @@ internal static class PackageApplicationRegistration
                     row.SupportedViewports.Add(new ApplicationViewportRow
                     {
                         ApplicationDefinitionId = id,
-                        Viewport = MapViewport(viewport),
+                        ViewportClass = MapViewport(viewport),
                     });
                 }
                 context.ApplicationDefinitions.Add(row);
@@ -61,7 +61,7 @@ internal static class PackageApplicationRegistration
 
             var desiredPolicy = MapPolicy(application.InstancePolicy);
             var desiredViewports = application.Viewports.Select(MapViewport).ToHashSet();
-            var currentViewports = row.SupportedViewports.Select(item => item.Viewport).ToHashSet();
+            var currentViewports = row.SupportedViewports.Select(item => item.ViewportClass).ToHashSet();
             var changed = !string.Equals(row.DisplayNameKey, application.DisplayNameKey, StringComparison.Ordinal)
                 || row.InstancePolicy != desiredPolicy
                 || row.DefaultWidth != application.DefaultWidth
@@ -92,7 +92,7 @@ internal static class PackageApplicationRegistration
                     row.SupportedViewports.Add(new ApplicationViewportRow
                     {
                         ApplicationDefinitionId = row.Id,
-                        Viewport = viewport,
+                        ViewportClass = viewport,
                     });
                 }
             }
