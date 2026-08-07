@@ -92,6 +92,42 @@ test('shell API creates the initial administrator and signs in with same-origin 
   ]);
 });
 
+test('shell API reads the launchable application catalog for the selected viewport', async () => {
+  let requestedPath = '';
+  const fakeFetch: typeof fetch = async (input) => {
+    requestedPath = String(input);
+    return new Response(JSON.stringify([{
+      applicationDefinitionId: '11111111-1111-1111-1111-111111111111',
+      packageId: 'de.juloc.julos.reference',
+      packageVersion: '1.0.0',
+      stableKey: 'reference',
+      displayNameKey: 'app.reference.name',
+      instancePolicy: 'single-instance-per-user',
+      defaultWidth: 720,
+      defaultHeight: 520,
+      minimumWidth: 360,
+      minimumHeight: 280,
+      viewports: ['desktop'],
+      elementName: 'julos-reference-app',
+      frontend: {
+        moduleUrl: '/api/v1/packages/de.juloc.julos.reference/frontend/1.0.0',
+        sha256: '0'.repeat(64),
+        exportedElements: ['julos-reference-app'],
+      },
+    }]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  const api = new ShellApiClient(fakeFetch);
+  const applications = await api.readApplications('desktop');
+
+  assert.equal(requestedPath, '/api/v1/applications?viewport=desktop');
+  assert.equal(applications.length, 1);
+  assert.equal(applications[0]?.elementName, 'julos-reference-app');
+});
+
 test('shell API rejects failed HTTP responses', async () => {
   const fakeFetch: typeof fetch = async () => new Response(null, { status: 401 });
   const api = new ShellApiClient(fakeFetch);
