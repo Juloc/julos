@@ -13,11 +13,18 @@ import type { NotificationCenterSnapshot, NotificationCenterStore } from './noti
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
+import { classifyViewport, deriveResponsiveDesktop } from './responsive-desktop.js';
+import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
 import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
-import { TaskbarWindowModel, WindowLaunchCoordinator } from './window-taskbar.js';
+import {
+  AltTabWindowSwitcher,
+  TaskbarWindowModel,
+  WindowLaunchCoordinator,
+  type WindowSwitcherSnapshot,
+} from './window-taskbar.js';
 import {
   WindowStore,
   type DesktopWindowSnapshot,
@@ -53,6 +60,7 @@ export class DesktopRuntime {
   readonly #store = new WindowStore();
   readonly #launcherCoordinator = new WindowLaunchCoordinator(this.#store);
   readonly #taskbar = new TaskbarWindowModel(this.#store);
+  readonly #windowSwitcher = new AltTabWindowSwitcher(this.#store);
   readonly #interactions = new WindowInteractionController(this.#store);
   readonly #snap = new WindowSnapController(this.#store);
   readonly #frontendHost = new PackageFrontendHost();
@@ -60,13 +68,18 @@ export class DesktopRuntime {
   readonly #widgetHost = new WidgetHostStore();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
+  readonly #keyboard: ShellKeyboardController;
   readonly #applications = new Map<string, DesktopApplication>();
   readonly #widgets = new Map<string, DesktopWidget>();
   readonly #windowElements = new Map<string, HTMLElement>();
   readonly #windowSurfaces = new Map<string, HTMLElement>();
   readonly #coreSurfaceDisposers = new Map<string, () => void>();
   readonly #registeredWidgetIds = new Map<string, string>();
+  readonly #keyDownHandler = (event: KeyboardEvent): void => this.#handleKeyDown(event);
+  readonly #keyUpHandler = (event: KeyboardEvent): void => { this.#keyboard.handleKeyUp(event); };
+  readonly #resizeHandler = (): void => this.#renderWindows(this.#store.windows);
   #widgetLayer: HTMLElement | null = null;
+  #switcherLayer: HTMLElement | null = null;
   #widgetPlacements: readonly PersistedWidgetPlacement[] = [];
   #launcher: LauncherIndex | null = null;
   #launcherQuery = '';
@@ -96,6 +109,26 @@ export class DesktopRuntime {
       onProfileChanged: options.onProfileChanged ?? (() => undefined),
       onPackagesChanged: () => this.#refreshPackageCatalog(),
     });
+    this.#keyboard = new ShellKeyboardController({
+      openLauncher: () => this.#openLauncher(),
+      openCommandPalette: () => this.#openLauncher(),
+      openNotifications: () => this.openApplication(CoreApplicationIds.notifications),
+      openProblems: () => this.openApplication(CoreApplicationIds.problems),
+      beginWindowSwitcher: () => this.#renderWindowSwitcher(this.#windowSwitcher.begin()),
+      nextWindow: () => this.#renderWindowSwitcher(this.#windowSwitcher.next()),
+      previousWindow: () => this.#renderWindowSwitcher(this.#windowSwitcher.previous()),
+      commitWindowSwitcher: () => {
+        this.#windowSwitcher.commit(this.#usableArea());
+        this.#hideWindowSwitcher();
+        this.#scheduleLayout();
+      },
+      cancelWindowSwitcher: () => {
+        this.#windowSwitcher.cancel();
+        this.#hideWindowSwitcher();
+      },
+      closeActiveWindow: () => this.#closeActiveWindow(),
+      restoreFocus: () => this.#focusActiveWindow(),
+    });
   }
 
   public async start(): Promise<void> {
@@ -104,7 +137,7 @@ export class DesktopRuntime {
     }
 
     this.#ensureStyles();
-    this.#viewport = viewportClass(this.#elements.windowLayer.clientWidth);
+    this.#viewport = classifyViewport(Math.max(this.#elements.windowLayer.clientWidth, 320));
     const [packageApplications, widgets] = await this.#readPackageCatalog();
     this.#replaceCatalog(packageApplications, widgets);
 
@@ -127,6 +160,7 @@ export class DesktopRuntime {
     }
 
     this.#renderLauncher(this.#launcherQuery);
+    this.#applyShortcutLabels();
     this.#unbindCoreShellActions = this.#bindCoreShellActions();
     this.#unsubscribeObservability = this.#notifications.subscribe((snapshot) => this.#renderStatus(snapshot));
     this.#unsubscribeWindows = this.#store.subscribe((windows) => this.#renderWindows(windows));
@@ -139,6 +173,9 @@ export class DesktopRuntime {
       element.hidden = false;
       applyBounds(element, preview.bounds);
     });
+    globalThis.addEventListener('keydown', this.#keyDownHandler, true);
+    globalThis.addEventListener('keyup', this.#keyUpHandler, true);
+    globalThis.addEventListener('resize', this.#resizeHandler);
 
     await Promise.all([this.#loadRestoredFrontends(), this.#renderWidgets()]);
   }
@@ -152,6 +189,11 @@ export class DesktopRuntime {
     this.#unsubscribeSnap = null;
     this.#unsubscribeObservability = null;
     this.#unbindCoreShellActions = null;
+    globalThis.removeEventListener('keydown', this.#keyDownHandler, true);
+    globalThis.removeEventListener('keyup', this.#keyUpHandler, true);
+    globalThis.removeEventListener('resize', this.#resizeHandler);
+    this.#windowSwitcher.cancel();
+    this.#hideWindowSwitcher();
 
     if (this.#layoutLoaded) {
       void this.#layoutPersistence.flush(this.#viewport)
@@ -173,6 +215,7 @@ export class DesktopRuntime {
     this.#windowSurfaces.clear();
     this.#widgetPlacements = [];
     this.#widgetLayer = null;
+    this.#switcherLayer = null;
     this.#elements.windowLayer.replaceChildren(this.#elements.snapPreview);
     this.#elements.runningApplications.replaceChildren();
     this.#elements.launcherEntries.replaceChildren();
@@ -308,7 +351,9 @@ export class DesktopRuntime {
       if (!this.#coreApplications.isCoreApplication(application.applicationDefinitionId)) {
         await this.#loadFrontend(application);
       }
+      this.#closeLauncher();
       this.#renderWindows(this.#store.windows);
+      this.#focusActiveWindow();
       this.#scheduleLayout();
     } catch (error) {
       if (launchedWindowId !== null && this.#store.windows.some((window) => window.id === launchedWindowId)) {
@@ -465,7 +510,15 @@ export class DesktopRuntime {
   }
 
   #renderWindows(windows: readonly DesktopWindowSnapshot[]): void {
+    const responsive = deriveResponsiveDesktop(
+      Math.max(this.#elements.windowLayer.clientWidth, 320),
+      windows,
+      this.#store.frontWindow?.id ?? null,
+    );
+    const visibleWindowIds = new Set(responsive.visibleWindows.map((window) => window.id));
+    const area = this.#usableArea();
     const openIds = new Set(windows.map((window) => window.id));
+
     for (const [windowId, element] of this.#windowElements) {
       if (!openIds.has(windowId)) {
         element.remove();
@@ -478,11 +531,12 @@ export class DesktopRuntime {
 
     for (const window of windows) {
       const element = this.#windowElements.get(window.id) ?? this.#createWindowElement(window);
-      element.hidden = window.state === 'minimized';
+      element.hidden = window.state === 'minimized' || !visibleWindowIds.has(window.id);
       element.style.zIndex = String(window.zIndex + 1);
-      applyBounds(element, window.bounds);
       element.dataset['state'] = window.state;
       element.dataset['active'] = String(this.#store.frontWindow?.id === window.id);
+      element.dataset['presentation'] = responsive.presentation;
+      applyBounds(element, responsive.presentation === 'windowed' ? window.bounds : area);
       this.#mountWindowSurface(window);
     }
 
@@ -494,12 +548,14 @@ export class DesktopRuntime {
     const element = document.createElement('article');
     element.className = 'desktop-window';
     element.dataset['windowId'] = window.id;
+    element.tabIndex = -1;
     element.innerHTML = `
       <header class="window-titlebar">
         <span class="window-title"></span>
         <div class="window-controls">
           <button type="button" data-action="minimize" aria-label="Minimize">−</button>
           <button type="button" data-action="maximize" aria-label="Maximize">□</button>
+          <button type="button" data-action="fullscreen" aria-label="Full screen">◇</button>
           <button type="button" data-action="close" aria-label="Close">×</button>
         </div>
       </header>
@@ -520,7 +576,7 @@ export class DesktopRuntime {
     });
     const titlebar = element.querySelector<HTMLElement>('.window-titlebar')!;
     titlebar.addEventListener('dblclick', (event) => {
-      if ((event.target as HTMLElement).closest('button') !== null) {
+      if ((event.target as HTMLElement).closest('button') !== null || !this.#isWindowedPresentation()) {
         return;
       }
       const window = this.#requireWindow(windowId);
@@ -532,7 +588,11 @@ export class DesktopRuntime {
       this.#scheduleLayout();
     });
     titlebar.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || (event.target as HTMLElement).closest('button') !== null) {
+      if (
+        event.button !== 0
+        || (event.target as HTMLElement).closest('button') !== null
+        || !this.#isWindowedPresentation()
+      ) {
         return;
       }
       const current = this.#requireWindow(windowId);
@@ -574,6 +634,9 @@ export class DesktopRuntime {
       });
     element.querySelector<HTMLButtonElement>('[data-action="maximize"]')!
       .addEventListener('click', () => {
+        if (!this.#isWindowedPresentation()) {
+          return;
+        }
         const current = this.#requireWindow(windowId);
         if (current.state === 'maximized') {
           this.#store.restore(windowId, this.#usableArea());
@@ -582,6 +645,19 @@ export class DesktopRuntime {
             this.#store.restore(windowId, this.#usableArea());
           }
           this.#store.maximize(windowId, this.#usableArea());
+        }
+        this.#scheduleLayout();
+      });
+    element.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!
+      .addEventListener('click', () => {
+        const current = this.#requireWindow(windowId);
+        if (current.state === 'full-screen') {
+          this.#store.restore(windowId, this.#usableArea());
+        } else {
+          if (current.state !== 'normal') {
+            this.#store.restore(windowId, this.#usableArea());
+          }
+          this.#store.applyFixedState(windowId, 'full-screen', this.#usableArea());
         }
         this.#scheduleLayout();
       });
@@ -613,7 +689,11 @@ export class DesktopRuntime {
       handle.className = `resize-handle resize-${edge}`;
       handle.dataset['edge'] = edge;
       handle.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0 || this.#requireWindow(windowId).state !== 'normal') {
+        if (
+          event.button !== 0
+          || this.#requireWindow(windowId).state !== 'normal'
+          || !this.#isWindowedPresentation()
+        ) {
           return;
         }
         const application = this.#applications.get(this.#requireWindow(windowId).applicationId);
@@ -693,6 +773,7 @@ export class DesktopRuntime {
         const windowId = group.windowIds[0];
         if (windowId !== undefined) {
           this.#taskbar.activateWindow(windowId, this.#usableArea());
+          this.#focusActiveWindow();
           this.#scheduleLayout();
         }
       });
@@ -700,9 +781,106 @@ export class DesktopRuntime {
     }
   }
 
+  #handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.#closeLauncher()) {
+      event.preventDefault();
+      return;
+    }
+    this.#keyboard.handleKeyDown(event);
+  }
+
+  #openLauncher(): void {
+    const root = this.#shellRoot();
+    const button = root?.getElementById('launcher-button');
+    const panel = root?.getElementById('launcher-panel');
+    if (!(button instanceof HTMLButtonElement) || panel === null || panel === undefined) {
+      return;
+    }
+    button.setAttribute('aria-expanded', 'true');
+    panel.hidden = false;
+    panel.focus({ preventScroll: true });
+  }
+
+  #closeLauncher(): boolean {
+    const root = this.#shellRoot();
+    const button = root?.getElementById('launcher-button');
+    const panel = root?.getElementById('launcher-panel');
+    if (!(button instanceof HTMLButtonElement) || panel === null || panel === undefined || panel.hidden) {
+      return false;
+    }
+    button.setAttribute('aria-expanded', 'false');
+    panel.hidden = true;
+    button.focus({ preventScroll: true });
+    return true;
+  }
+
+  #closeActiveWindow(): void {
+    const active = this.#store.frontWindow;
+    if (active === null) {
+      return;
+    }
+    this.#store.close(active.id);
+    this.#scheduleLayout();
+  }
+
+  #focusActiveWindow(): void {
+    const active = this.#store.frontWindow;
+    if (active === null) {
+      return;
+    }
+    this.#windowElements.get(active.id)?.focus({ preventScroll: true });
+  }
+
+  #renderWindowSwitcher(snapshot: WindowSwitcherSnapshot | null): void {
+    if (snapshot === null) {
+      this.#hideWindowSwitcher();
+      return;
+    }
+    const layer = this.#ensureSwitcherLayer();
+    layer.replaceChildren();
+    for (const windowId of snapshot.windowIds) {
+      const window = this.#store.windows.find((candidate) => candidate.id === windowId);
+      if (window === undefined) {
+        continue;
+      }
+      const item = document.createElement('div');
+      item.className = 'window-switcher-item';
+      item.dataset['selected'] = String(windowId === snapshot.selectedWindowId);
+      const glyph = document.createElement('span');
+      glyph.className = 'application-glyph';
+      glyph.textContent = window.title.slice(0, 1).toLocaleUpperCase();
+      const title = document.createElement('span');
+      title.textContent = window.title;
+      item.append(glyph, title);
+      layer.append(item);
+    }
+    layer.hidden = false;
+  }
+
+  #ensureSwitcherLayer(): HTMLElement {
+    if (this.#switcherLayer !== null) {
+      return this.#switcherLayer;
+    }
+    const layer = document.createElement('div');
+    layer.className = 'window-switcher';
+    layer.setAttribute('role', 'listbox');
+    layer.setAttribute('aria-label', 'Open windows');
+    layer.hidden = true;
+    this.#elements.windowLayer.append(layer);
+    this.#switcherLayer = layer;
+    return layer;
+  }
+
+  #hideWindowSwitcher(): void {
+    if (this.#switcherLayer !== null) {
+      this.#switcherLayer.hidden = true;
+      this.#switcherLayer.replaceChildren();
+    }
+  }
+
   #bindCoreShellActions(): () => void {
-    const root = this.#elements.windowLayer.getRootNode();
-    if (!(root instanceof ShadowRoot)) {
+    const root = this.#shellRoot();
+    if (root === null) {
       return () => undefined;
     }
 
@@ -728,12 +906,32 @@ export class DesktopRuntime {
   }
 
   #renderStatus(snapshot: NotificationCenterSnapshot): void {
-    const root = this.#elements.windowLayer.getRootNode();
-    if (!(root instanceof ShadowRoot)) {
+    const root = this.#shellRoot();
+    if (root === null) {
       return;
     }
     setStatusCount(root.querySelector<HTMLElement>('[data-label="notifications"]'), snapshot.unreadCount);
     setStatusCount(root.querySelector<HTMLElement>('[data-label="problems"]'), snapshot.activeProblems.length);
+  }
+
+  #applyShortcutLabels(): void {
+    const root = this.#shellRoot();
+    const search = root?.getElementById('search-button');
+    if (!(search instanceof HTMLButtonElement)) {
+      return;
+    }
+    const shortcut = `${isApplePlatform() ? '⌘' : 'Ctrl+'}K`;
+    const title = search.getAttribute('title') ?? 'Search and commands';
+    search.setAttribute('title', `${title} (${shortcut})`);
+  }
+
+  #shellRoot(): ShadowRoot | null {
+    const root = this.#elements.windowLayer.getRootNode();
+    return root instanceof ShadowRoot ? root : null;
+  }
+
+  #isWindowedPresentation(): boolean {
+    return classifyViewport(Math.max(this.#elements.windowLayer.clientWidth, 320)) === 'desktop';
   }
 
   #scheduleLayout(): void {
@@ -750,8 +948,8 @@ export class DesktopRuntime {
   }
 
   #ensureStyles(): void {
-    const root = this.#elements.windowLayer.getRootNode();
-    if (!(root instanceof ShadowRoot) || root.querySelector('link[data-julos-desktop-runtime]') !== null) {
+    const root = this.#shellRoot();
+    if (root === null || root.querySelector('link[data-julos-desktop-runtime]') !== null) {
       return;
     }
     const link = document.createElement('link');
@@ -831,10 +1029,6 @@ function applicationTitle(application: DesktopApplication | undefined): string {
     .join(' ');
 }
 
-function viewportClass(width: number): DesktopViewport {
-  return width < 600 ? 'mobile' : width < 1024 ? 'tablet' : 'desktop';
-}
-
 function resolvedTheme(): 'light' | 'dark' {
   const mode = document.documentElement.dataset['theme'];
   if (mode === 'dark' || mode === 'light') {
@@ -876,4 +1070,8 @@ function setStatusCount(element: HTMLElement | null, count: number): void {
   badge.className = 'core-status-count';
   badge.textContent = count > 99 ? '99+' : String(count);
   element.append(badge);
+}
+
+function isApplePlatform(): boolean {
+  return /Mac|iPhone|iPad/u.test(globalThis.navigator?.platform ?? '');
 }
