@@ -46,7 +46,7 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
         var row = await RequireRowAsync(packageId, cancellationToken).ConfigureAwait(false);
         EnsureRevision(row, input.Revision);
         var current = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
-        var candidate = await ReadCandidateAsync(input, cancellationToken).ConfigureAwait(false);
+        using var candidate = await ReadCandidateAsync(input, cancellationToken).ConfigureAwait(false);
         EnsureIdentity(current, candidate.Manifest, packageId);
         return Preview(current, candidate.Manifest);
     }
@@ -72,7 +72,7 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
             }
 
             var current = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
-            var candidate = await ReadCandidateAsync(input, cancellationToken).ConfigureAwait(false);
+            using var candidate = await ReadCandidateAsync(input, cancellationToken).ConfigureAwait(false);
             EnsureIdentity(current, candidate.Manifest, packageId);
             var preview = Preview(current, candidate.Manifest);
             if (preview.RequiresExplicitApproval && !input.AllowIrreversibleMigrations)
@@ -94,6 +94,12 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
             row.FaultDetail = null;
             row.FaultedAtUtc = null;
             row.Revision = checked(row.Revision + 1);
+            await PackageApplicationRegistration.SynchronizeAsync(
+                this.context,
+                current.Manifest,
+                enabled: false,
+                this.timeProvider,
+                cancellationToken).ConfigureAwait(false);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
             var targetRoot = VersionRoot(packageId, candidate.Manifest.Version);
@@ -126,6 +132,12 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
                     WorkerHealthy = false,
                 };
                 await WriteMetadataAsync(updated, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    updated.Manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
 
                 row.State = PackageInstallationState.Installed;
                 row.Revision = checked(row.Revision + 1);
@@ -150,6 +162,12 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
                         cancellationToken).ConfigureAwait(false);
                     updated = updated with { WorkerHealthy = true };
                     await WriteMetadataAsync(updated, cancellationToken).ConfigureAwait(false);
+                    await PackageApplicationRegistration.SynchronizeAsync(
+                        this.context,
+                        updated.Manifest,
+                        enabled: true,
+                        this.timeProvider,
+                        cancellationToken).ConfigureAwait(false);
                     row.State = PackageInstallationState.Enabled;
                     row.Revision = checked(row.Revision + 1);
                     await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -168,6 +186,12 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
                 if (preview.IrreversibleMigrations.Count == 0)
                 {
                     await WriteMetadataAsync(current, cancellationToken).ConfigureAwait(false);
+                    await PackageApplicationRegistration.SynchronizeAsync(
+                        this.context,
+                        current.Manifest,
+                        enabled: false,
+                        this.timeProvider,
+                        cancellationToken).ConfigureAwait(false);
                     row.State = previousState == PackageInstallationState.Faulted
                         ? PackageInstallationState.Installed
                         : previousState;
@@ -183,10 +207,23 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
                             current.Configuration,
                             current.Database,
                             cancellationToken).ConfigureAwait(false);
+                        await PackageApplicationRegistration.SynchronizeAsync(
+                            this.context,
+                            current.Manifest,
+                            enabled: true,
+                            this.timeProvider,
+                            cancellationToken).ConfigureAwait(false);
+                        await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     }
                 }
                 else
                 {
+                    await PackageApplicationRegistration.SynchronizeAsync(
+                        this.context,
+                        candidate.Manifest,
+                        enabled: false,
+                        this.timeProvider,
+                        cancellationToken).ConfigureAwait(false);
                     row.State = PackageInstallationState.Faulted;
                     row.FaultCode = "package.update_failed_after_irreversible_migration";
                     row.FaultDetail = SafeDetail(exception);
