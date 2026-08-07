@@ -80,7 +80,7 @@ while [ ! -S "/tmp/.X11-unix/X${DISPLAY#:}" ]; do
     sleep 0.1
 done
 
-openbox --display "$DISPLAY" >"$log_directory/openbox.log" 2>&1 &
+openbox >"$log_directory/openbox.log" 2>&1 &
 echo $! >"$window_manager_pid_file"
 
 x11vnc \
