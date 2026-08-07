@@ -168,7 +168,7 @@ jobs:
           "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
 
           container_id="$("${compose[@]}" ps -q server)"
-          process_uid="$(docker exec "$container_id" sh -c "awk '/^Uid:/ { print \\$2 }' /proc/1/status")"
+          process_uid="$(docker exec "$container_id" awk '/^Uid:/ { print $2 }' /proc/1/status)"
           if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" = 0 ]]; then
             echo "The JulOS server process must run as non-root, got UID: $process_uid" >&2
             exit 1
@@ -215,7 +215,7 @@ jobs:
 
   publish:
     name: Publish image and prerelease
-    if: github.event_name == 'push' && github.repository == 'Juloc/julos'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.repository == 'Juloc/julos'
     needs:
       - validate
       - smoke
