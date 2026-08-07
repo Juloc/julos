@@ -76,6 +76,20 @@ export interface DesktopApplication {
   readonly frontend: DesktopApplicationFrontend;
 }
 
+export type DesktopWidgetSize = 'small' | 'medium' | 'wide' | 'large';
+
+export interface DesktopWidget {
+  readonly widgetKey: string;
+  readonly packageId: string;
+  readonly packageVersion: string;
+  readonly stableKey: string;
+  readonly displayNameKey: string;
+  readonly elementName: string;
+  readonly sizes: readonly DesktopWidgetSize[];
+  readonly defaultSize: DesktopWidgetSize;
+  readonly frontend: DesktopApplicationFrontend;
+}
+
 export class ShellApiClient {
   readonly #api: JulOsApiClient;
 
@@ -130,5 +144,9 @@ export class ShellApiClient {
     return this.#api.get<readonly DesktopApplication[]>(
       `/api/v1/applications?viewport=${encodeURIComponent(viewport)}`,
     );
+  }
+
+  public readWidgets(): Promise<readonly DesktopWidget[]> {
+    return this.#api.get<readonly DesktopWidget[]>('/api/v1/widgets');
   }
 }
