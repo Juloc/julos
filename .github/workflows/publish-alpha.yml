@@ -160,7 +160,7 @@ jobs:
           "${compose[@]}" config --quiet
           "${compose[@]}" up --detach --wait --wait-timeout 180
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
-          "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/julos.db && test -d /var/lib/julos/packages'
+          "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
 
           "${compose[@]}" restart server
           "${compose[@]}" up --detach --wait --wait-timeout 120
