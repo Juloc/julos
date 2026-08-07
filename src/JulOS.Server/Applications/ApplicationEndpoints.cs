@@ -22,6 +22,17 @@ internal sealed record DesktopApplicationResponse(
     string ElementName,
     DesktopApplicationFrontendResponse Frontend);
 
+internal sealed record DesktopWidgetResponse(
+    string WidgetKey,
+    string PackageId,
+    string PackageVersion,
+    string StableKey,
+    string DisplayNameKey,
+    string ElementName,
+    IReadOnlyList<string> Sizes,
+    string DefaultSize,
+    DesktopApplicationFrontendResponse Frontend);
+
 internal static class ApplicationEndpoints
 {
     internal static IEndpointRouteBuilder MapJulOsApplications(this IEndpointRouteBuilder endpoints)
@@ -29,6 +40,9 @@ internal static class ApplicationEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapGet("/api/v1/applications", ListAsync)
+            .WithTags("Applications")
+            .RequireAuthorization();
+        endpoints.MapGet("/api/v1/widgets", ListWidgetsAsync)
             .WithTags("Applications")
             .RequireAuthorization();
         endpoints.MapGet("/api/v1/packages/{packageId}/frontend/{version}", FrontendAsync)
@@ -46,6 +60,21 @@ internal static class ApplicationEndpoints
         {
             var applications = await catalog.ListAsync(viewport ?? "desktop", cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(applications.Select(ToResponse).ToArray());
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
+    }
+
+    private static async Task<IResult> ListWidgetsAsync(
+        IDesktopApplicationCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var widgets = await catalog.ListWidgetsAsync(cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(widgets.Select(ToResponse).ToArray());
         }
         catch (PackageManagementException exception)
         {
@@ -83,10 +112,27 @@ internal static class ApplicationEndpoints
         application.MinimumHeight,
         application.Viewports,
         application.ElementName,
-        new DesktopApplicationFrontendResponse(
-            $"/api/v1/packages/{application.PackageId}/frontend/{application.PackageVersion}",
-            application.FrontendSha256,
-            application.FrontendExportedElements));
+        Frontend(application.PackageId, application.PackageVersion, application.FrontendSha256, application.FrontendExportedElements));
+
+    private static DesktopWidgetResponse ToResponse(DesktopPackageWidget widget) => new(
+        widget.WidgetKey,
+        widget.PackageId,
+        widget.PackageVersion,
+        widget.StableKey,
+        widget.DisplayNameKey,
+        widget.ElementName,
+        widget.Sizes,
+        widget.DefaultSize,
+        Frontend(widget.PackageId, widget.PackageVersion, widget.FrontendSha256, widget.FrontendExportedElements));
+
+    private static DesktopApplicationFrontendResponse Frontend(
+        string packageId,
+        string version,
+        string sha256,
+        IReadOnlyList<string> exportedElements) => new(
+        $"/api/v1/packages/{packageId}/frontend/{version}",
+        sha256,
+        exportedElements);
 
     private static IResult Failure(PackageManagementException exception)
     {
