@@ -7,12 +7,14 @@ import {
   type DesktopLayoutDocument,
   type DesktopViewport,
   type PersistedDesktopWindow,
+  type PersistedWidgetPlacement,
 } from './layout-persistence.js';
 import type { NotificationCenterSnapshot, NotificationCenterStore } from './notification-center.js';
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
-import type { DesktopApplication, ShellApiClient } from './shell-api.js';
+import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
+import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
 import { TaskbarWindowModel, WindowLaunchCoordinator } from './window-taskbar.js';
@@ -41,7 +43,7 @@ export interface DesktopRuntimeOptions {
   readonly onProfileChanged?: () => void | Promise<void>;
 }
 
-/** Composes the existing launcher, package frontend, persistence and window controllers. */
+/** Composes the existing launcher, package frontend, persistence, widget and window controllers. */
 export class DesktopRuntime {
   readonly #api: ShellApiClient;
   readonly #elements: DesktopRuntimeElements;
@@ -55,12 +57,17 @@ export class DesktopRuntime {
   readonly #snap = new WindowSnapController(this.#store);
   readonly #frontendHost = new PackageFrontendHost();
   readonly #capabilities = new PackageCapabilityClient();
+  readonly #widgetHost = new WidgetHostStore();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
   readonly #applications = new Map<string, DesktopApplication>();
+  readonly #widgets = new Map<string, DesktopWidget>();
   readonly #windowElements = new Map<string, HTMLElement>();
   readonly #windowSurfaces = new Map<string, HTMLElement>();
   readonly #coreSurfaceDisposers = new Map<string, () => void>();
+  readonly #registeredWidgetIds = new Map<string, string>();
+  #widgetLayer: HTMLElement | null = null;
+  #widgetPlacements: readonly PersistedWidgetPlacement[] = [];
   #launcher: LauncherIndex | null = null;
   #viewport: DesktopViewport = 'desktop';
   #layoutLoaded = false;
@@ -85,7 +92,7 @@ export class DesktopRuntime {
       notifications: this.#notifications,
       language: options.language,
       onFailure: options.onFailure,
-      onProfileChanged: options.onProfileChanged ?? (() => globalThis.location.reload()),
+      onProfileChanged: options.onProfileChanged ?? (() => undefined),
     });
   }
 
@@ -96,11 +103,18 @@ export class DesktopRuntime {
 
     this.#ensureStyles();
     this.#viewport = viewportClass(this.#elements.windowLayer.clientWidth);
-    const packageApplications = await this.#api.readApplications(this.#viewport);
+    const [packageApplications, widgets] = await Promise.all([
+      this.#api.readApplications(this.#viewport),
+      this.#viewport === 'mobile' ? Promise.resolve([] as readonly DesktopWidget[]) : this.#api.readWidgets(),
+    ]);
     const applications = [...this.#coreApplications.applications(), ...packageApplications];
     this.#applications.clear();
+    this.#widgets.clear();
     for (const application of applications) {
       this.#applications.set(application.applicationDefinitionId, application);
+    }
+    for (const widget of widgets) {
+      this.#widgets.set(widget.widgetKey, widget);
     }
 
     this.#launcher = new LauncherIndex({
@@ -126,6 +140,7 @@ export class DesktopRuntime {
     }
 
     if (layout !== null) {
+      this.#widgetPlacements = layout.widgets.map((placement) => ({ ...placement }));
       this.#restoringLayout = true;
       try {
         this.#restoreLayout(layout.windows);
@@ -148,7 +163,7 @@ export class DesktopRuntime {
       applyBounds(element, preview.bounds);
     });
 
-    await this.#loadRestoredFrontends();
+    await Promise.all([this.#loadRestoredFrontends(), this.#renderWidgets()]);
   }
 
   public stop(): void {
@@ -173,10 +188,17 @@ export class DesktopRuntime {
       dispose();
     }
     this.#coreSurfaceDisposers.clear();
+    for (const [widgetId, packageId] of this.#registeredWidgetIds) {
+      this.#widgetHost.remove(packageId, widgetId);
+    }
+    this.#registeredWidgetIds.clear();
     this.#store.clear();
     this.#applications.clear();
+    this.#widgets.clear();
     this.#windowElements.clear();
     this.#windowSurfaces.clear();
+    this.#widgetPlacements = [];
+    this.#widgetLayer = null;
     this.#elements.windowLayer.replaceChildren(this.#elements.snapPreview);
     this.#elements.runningApplications.replaceChildren();
     this.#elements.launcherEntries.replaceChildren();
@@ -209,7 +231,7 @@ export class DesktopRuntime {
     }
 
     for (const result of launcher.search(query)) {
-      if (result.kind !== 'application') {
+      if (result.kind !== 'application' || result.applicationId === CoreApplicationIds.settings) {
         continue;
       }
       const button = document.createElement('button');
@@ -263,18 +285,30 @@ export class DesktopRuntime {
   }
 
   async #loadFrontend(application: DesktopApplication): Promise<void> {
+    await this.#loadPackageFrontend(
+      application.packageId,
+      application.packageVersion,
+      application.frontend,
+    );
+  }
+
+  async #loadPackageFrontend(
+    packageId: string,
+    packageVersion: string,
+    frontend: DesktopApplication['frontend'],
+  ): Promise<void> {
     await this.#frontendHost.load({
-      packageId: application.packageId,
-      version: application.packageVersion,
-      moduleUrl: application.frontend.moduleUrl,
-      sha256: application.frontend.sha256,
-      exportedElements: application.frontend.exportedElements,
+      packageId,
+      version: packageVersion,
+      moduleUrl: frontend.moduleUrl,
+      sha256: frontend.sha256,
+      exportedElements: frontend.exportedElements,
     }, {
-      packageId: application.packageId,
+      packageId,
       language: this.#language(),
       theme: resolvedTheme(),
       invokeCapability: (name, operation, payload) =>
-        this.#capabilities.invoke(application.packageId, name, operation, payload),
+        this.#capabilities.invoke(packageId, name, operation, payload),
       openApplication: (applicationId) => this.openApplication(applicationId),
     });
   }
@@ -296,6 +330,57 @@ export class DesktopRuntime {
       }
     }
     this.#renderWindows(this.#store.windows);
+  }
+
+  async #renderWidgets(): Promise<void> {
+    const layer = this.#ensureWidgetLayer();
+    layer.replaceChildren();
+    if (this.#viewport === 'mobile') {
+      return;
+    }
+
+    for (const placement of this.#widgetPlacements) {
+      const widget = this.#widgets.get(placement.widgetKey);
+      if (widget === undefined) {
+        continue;
+      }
+
+      try {
+        await this.#loadPackageFrontend(widget.packageId, widget.packageVersion, widget.frontend);
+        if (!customElements.get(widget.elementName)) {
+          throw new Error(`Widget element '${widget.elementName}' was not registered.`);
+        }
+        this.#widgetHost.register({
+          widgetId: placement.widgetPlacementId,
+          packageId: widget.packageId,
+          size: widget.defaultSize,
+        });
+        this.#registeredWidgetIds.set(placement.widgetPlacementId, widget.packageId);
+
+        const frame = document.createElement('article');
+        frame.className = 'desktop-widget';
+        frame.dataset['widgetKey'] = widget.widgetKey;
+        frame.dataset['size'] = widget.defaultSize;
+        applyWidgetPlacement(frame, placement);
+        const surface = this.#frontendHost.createHostElement(widget.elementName);
+        frame.append(surface);
+        layer.append(frame);
+      } catch (error) {
+        this.#onFailure(error);
+      }
+    }
+  }
+
+  #ensureWidgetLayer(): HTMLElement {
+    if (this.#widgetLayer !== null) {
+      return this.#widgetLayer;
+    }
+    const layer = document.createElement('section');
+    layer.className = 'desktop-widget-layer';
+    layer.setAttribute('aria-label', 'Desktop widgets');
+    this.#elements.windowLayer.prepend(layer);
+    this.#widgetLayer = layer;
+    return layer;
   }
 
   #restoreLayout(windows: readonly PersistedDesktopWindow[]): void {
@@ -360,7 +445,7 @@ export class DesktopRuntime {
     }
 
     this.#renderTaskbar();
-    this.#elements.emptyState.hidden = windows.length > 0;
+    this.#elements.emptyState.hidden = this.#applications.size > 0;
   }
 
   #createWindowElement(window: DesktopWindowSnapshot): HTMLElement {
@@ -617,7 +702,7 @@ export class DesktopRuntime {
     this.#layoutPersistence.schedule(
       this.#viewport,
       packageWindows,
-      [],
+      this.#widgetPlacements,
     );
   }
 
@@ -724,6 +809,16 @@ function applyBounds(element: HTMLElement, bounds: WindowBounds): void {
   element.style.top = `${bounds.y}px`;
   element.style.width = `${bounds.width}px`;
   element.style.height = `${bounds.height}px`;
+}
+
+function applyWidgetPlacement(element: HTMLElement, placement: PersistedWidgetPlacement): void {
+  const unit = 88;
+  const gap = 8;
+  const inset = 16;
+  element.style.left = `${inset + placement.gridColumn * unit}px`;
+  element.style.top = `${inset + placement.gridRow * unit}px`;
+  element.style.width = `${Math.max(unit - gap, placement.widthUnits * unit - gap)}px`;
+  element.style.height = `${Math.max(unit - gap, placement.heightUnits * unit - gap)}px`;
 }
 
 function setStatusCount(element: HTMLElement | null, count: number): void {
