@@ -41,6 +41,28 @@ export interface ServerVersion {
   readonly version: string;
 }
 
+export interface DesktopApplicationFrontend {
+  readonly moduleUrl: string;
+  readonly sha256: string;
+  readonly exportedElements: readonly string[];
+}
+
+export interface DesktopApplication {
+  readonly applicationDefinitionId: string;
+  readonly packageId: string;
+  readonly packageVersion: string;
+  readonly stableKey: string;
+  readonly displayNameKey: string;
+  readonly instancePolicy: 'single-instance-per-user' | 'single-instance-per-target' | 'multiple-instances';
+  readonly defaultWidth: number;
+  readonly defaultHeight: number;
+  readonly minimumWidth: number;
+  readonly minimumHeight: number;
+  readonly viewports: readonly ('desktop' | 'tablet' | 'mobile')[];
+  readonly elementName: string;
+  readonly frontend: DesktopApplicationFrontend;
+}
+
 export class ShellApiClient {
   readonly #api: JulOsApiClient;
 
@@ -74,5 +96,11 @@ export class ShellApiClient {
 
   public readServerVersion(): Promise<ServerVersion> {
     return this.#api.get<ServerVersion>('/api/v1/system/version');
+  }
+
+  public readApplications(viewport: 'desktop' | 'tablet' | 'mobile'): Promise<readonly DesktopApplication[]> {
+    return this.#api.get<readonly DesktopApplication[]>(
+      `/api/v1/applications?viewport=${encodeURIComponent(viewport)}`,
+    );
   }
 }
