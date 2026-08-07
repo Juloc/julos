@@ -96,11 +96,9 @@ export class PackageManagerStore {
     validateInstallRequest(request);
     await this.#run(async () => {
       const antiforgery = await this.#readAntiforgery();
-      const digest = await sha256(request.artifact);
       const form = new FormData();
       form.set('Artifact', request.artifact, request.artifact.name);
       form.set('Signature', request.signature, request.signature.name);
-      form.set('ExpectedDigest', digest);
       form.set('PublisherId', request.publisherId.trim());
       form.set('PublisherKeyId', request.publisherKeyId.trim());
       form.set('OperationKey', globalThis.crypto.randomUUID());
@@ -236,11 +234,4 @@ function validateInstallRequest(request: PackageInstallRequest): void {
   if (request.publisherId.trim().length === 0 || request.publisherKeyId.trim().length === 0) {
     throw new PackageManagerError('package.publisher_missing', 'Publisher and publisher key are required.');
   }
-}
-
-async function sha256(file: File): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return [...new Uint8Array(digest)]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('');
 }
