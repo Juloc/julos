@@ -14,30 +14,6 @@ public sealed record PackageInstallationSnapshot(
     bool WorkerHealthy,
     string ArtifactDigest);
 
-/// <summary>One enabled package application exposed to the Desktop shell.</summary>
-public sealed record PackageDesktopApplicationSnapshot(
-    Guid ApplicationDefinitionId,
-    string PackageId,
-    string PackageVersion,
-    string StableKey,
-    string DisplayNameKey,
-    string InstancePolicy,
-    int DefaultWidth,
-    int DefaultHeight,
-    int MinimumWidth,
-    int MinimumHeight,
-    IReadOnlyList<string> Viewports,
-    string ElementName,
-    string FrontendSha256,
-    IReadOnlyList<string> FrontendExportedElements);
-
-/// <summary>Verified installed package frontend bytes served only through the authenticated Server.</summary>
-public sealed record PackageFrontendModuleSnapshot(
-    string PackageId,
-    string Version,
-    string Sha256,
-    byte[] Content);
-
 /// <summary>Verified package installation input.</summary>
 public sealed record PackageInstallInput(
     Stream Artifact,
@@ -61,15 +37,6 @@ public sealed record PackageRemovalInput(
 public interface IPackageManagementService
 {
     Task<IReadOnlyList<PackageInstallationSnapshot>> ListAsync(
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<PackageDesktopApplicationSnapshot>> ListDesktopApplicationsAsync(
-        string viewport,
-        CancellationToken cancellationToken = default);
-
-    Task<PackageFrontendModuleSnapshot> ReadFrontendModuleAsync(
-        string packageId,
-        string version,
         CancellationToken cancellationToken = default);
 
     Task<PackageInstallationSnapshot> InstallAsync(
