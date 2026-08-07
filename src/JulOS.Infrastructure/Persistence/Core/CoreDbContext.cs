@@ -6,6 +6,7 @@ using JulOS.Infrastructure.Authentication;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 /// <summary>Persistence boundary for JulOS-owned Core state.</summary>
 public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid>
@@ -101,6 +102,10 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
 
     private static void ConfigureSqliteModel(ModelBuilder builder)
     {
+        var utcDateTimeOffsetConverter = new ValueConverter<DateTimeOffset, DateTime>(
+            value => value.UtcDateTime,
+            value => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)));
+
         foreach (var entityType in builder.Model.GetEntityTypes())
         {
             entityType.SetSchema(null);
@@ -110,6 +115,12 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
                 if (string.Equals(property.GetColumnType(), "jsonb", StringComparison.OrdinalIgnoreCase))
                 {
                     property.SetColumnType("TEXT");
+                }
+
+                if (property.ClrType == typeof(DateTimeOffset)
+                    || property.ClrType == typeof(DateTimeOffset?))
+                {
+                    property.SetValueConverter(utcDateTimeOffsetConverter);
                 }
             }
 
