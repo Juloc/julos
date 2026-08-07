@@ -9,6 +9,7 @@ export const shellMessageKeys = [
   'component',
   'desktop',
   'displayName',
+  'displayNameRequired',
   'invalidCredentials',
   'launcher',
   'loading',
@@ -35,6 +36,7 @@ export const shellMessageKeys = [
   'setupTitle',
   'signedOut',
   'userName',
+  'userNameRequirements',
   'version',
 ] as const;
 
@@ -52,6 +54,7 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     component: 'Component',
     desktop: 'Desktop',
     displayName: 'Display name',
+    displayNameRequired: 'Enter a display name without leading or trailing spaces.',
     invalidCredentials: 'The username or password is incorrect.',
     launcher: 'Open launcher',
     loading: 'Loading',
@@ -78,6 +81,7 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     setupTitle: 'Set up JulOS',
     signedOut: 'Sign in required',
     userName: 'Username',
+    userNameRequirements: 'Use 3–128 letters, numbers or . - _ @ + with no spaces.',
     version: 'Version',
   },
   de: {
@@ -89,6 +93,7 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     component: 'Komponente',
     desktop: 'Desktop',
     displayName: 'Anzeigename',
+    displayNameRequired: 'Gib einen Anzeigenamen ohne Leerzeichen am Anfang oder Ende ein.',
     invalidCredentials: 'Benutzername oder Passwort ist falsch.',
     launcher: 'Launcher öffnen',
     loading: 'Wird geladen',
@@ -115,6 +120,7 @@ export const shellMessages: Readonly<Record<SupportedLanguage, ShellMessages>> =
     setupTitle: 'JulOS einrichten',
     signedOut: 'Anmeldung erforderlich',
     userName: 'Benutzername',
+    userNameRequirements: 'Nutze 3–128 Buchstaben, Zahlen oder . - _ @ + ohne Leerzeichen.',
     version: 'Version',
   },
 };
