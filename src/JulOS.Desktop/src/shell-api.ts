@@ -8,6 +8,12 @@ export interface AuthenticatedUser {
   readonly displayName: string;
 }
 
+export interface InitialAdministratorRequest {
+  readonly userName: string;
+  readonly displayName: string;
+  readonly password: string;
+}
+
 export interface AuthenticationStatus {
   readonly setupRequired: boolean;
   readonly authenticated: boolean;
@@ -39,6 +45,15 @@ export class ShellApiClient {
 
   public readAuthenticationStatus(): Promise<AuthenticationStatus> {
     return this.#api.get<AuthenticationStatus>('/api/v1/auth/status');
+  }
+
+  public createInitialAdministrator(
+    request: InitialAdministratorRequest,
+  ): Promise<AuthenticatedUser> {
+    return this.#api.requestJson<AuthenticatedUser>('/api/v1/auth/setup', {
+      method: 'POST',
+      body: request,
+    });
   }
 
   public readProfile(): Promise<UserProfile> {
