@@ -126,7 +126,7 @@ public sealed class BrowserWorker : IJulOsPackageWorker
             throw new InvalidOperationException("Browser must be configured before start.");
         }
 
-        this.profileStore = CreateProfileStore();
+        this.profileStore = BrowserProfileStore.FromEnvironment();
         await this.profileStore.InitializeAsync(cancellationToken).ConfigureAwait(false);
         this.running = true;
     }
@@ -152,23 +152,5 @@ public sealed class BrowserWorker : IJulOsPackageWorker
             {
                 ["allowedNetworkCount"] = this.profilePolicy?.AllowedNetworkCount,
             }));
-    }
-
-    private static BrowserProfileStore CreateProfileStore()
-    {
-        var connectionString = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            throw new InvalidOperationException("Browser package database environment is unavailable.");
-        }
-
-        var provider = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE_PROVIDER");
-        if (string.IsNullOrWhiteSpace(provider))
-        {
-            var schema = Environment.GetEnvironmentVariable("JULOS_PACKAGE_DATABASE_SCHEMA");
-            provider = string.Equals(schema, "main", StringComparison.Ordinal) ? "sqlite" : "postgresql";
-        }
-
-        return new BrowserProfileStore(provider, connectionString);
     }
 }
