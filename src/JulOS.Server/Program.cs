@@ -97,6 +97,7 @@ if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
 app.UseJulOsErrorHandling();
 app.UseJulOsAgentProtocol();
 app.UseDefaultFiles();
+app.UseRouting();
 app.UseRateLimiter();
 app.UseWebSockets();
 app.UseAuthentication();
