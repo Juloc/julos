@@ -60,6 +60,7 @@ export function validatePackageManifest(value, source = 'manifest') {
   validateCapabilities(value.Capabilities, source, errors);
   validateMigrations(value.Migrations, source, errors);
   validateFrontend(value.Frontend, source, errors);
+  validateFrontendBindings(value, source, errors);
   return errors;
 }
 
@@ -103,13 +104,14 @@ function validateApplications(value, source, errors) {
     const field = `Applications[${index}]`;
     checkExactFields(
       application,
-      ['StableKey', 'DisplayNameKey', 'InstancePolicy', 'DefaultWidth', 'DefaultHeight', 'MinimumWidth', 'MinimumHeight', 'Viewports'],
+      ['StableKey', 'DisplayNameKey', 'InstancePolicy', 'DefaultWidth', 'DefaultHeight', 'MinimumWidth', 'MinimumHeight', 'Viewports', 'ElementName'],
       field,
       source,
       errors,
     );
     checkString(application.StableKey, `${field}.StableKey`, source, errors, stableKey, 64);
     checkString(application.DisplayNameKey, `${field}.DisplayNameKey`, source, errors, resourceKey, 128);
+    checkString(application.ElementName, `${field}.ElementName`, source, errors, customElement, 200);
     if (!['single-instance-per-user', 'single-instance-per-target', 'multiple-instances'].includes(application.InstancePolicy)) {
       errors.push(`${source}: ${field}.InstancePolicy is invalid`);
     }
@@ -190,6 +192,36 @@ function validateFrontend(value, source, errors) {
   }
   checkString(value.Sha256, 'Frontend.Sha256', source, errors, sha256, 64);
   validateUniqueStrings(value.ExportedElements, 'Frontend.ExportedElements', source, errors, customElement, true);
+}
+
+function validateFrontendBindings(value, source, errors) {
+  const applications = Array.isArray(value.Applications) ? value.Applications : [];
+  const widgets = Array.isArray(value.Widgets) ? value.Widgets : [];
+  const surfaceElements = [
+    ...applications.map((item) => item?.ElementName).filter((item) => typeof item === 'string'),
+    ...widgets.map((item) => item?.ElementName).filter((item) => typeof item === 'string'),
+  ];
+  const seen = new Set();
+  for (const element of surfaceElements) {
+    if (seen.has(element)) {
+      errors.push(`${source}: application and widget surfaces contain duplicate element '${element}'`);
+    }
+    seen.add(element);
+  }
+
+  if (surfaceElements.length === 0) {
+    return;
+  }
+  if (!isRecord(value.Frontend)) {
+    errors.push(`${source}: Frontend is required when applications or widgets are declared`);
+    return;
+  }
+  const exported = Array.isArray(value.Frontend.ExportedElements) ? value.Frontend.ExportedElements : [];
+  for (const element of surfaceElements) {
+    if (!exported.includes(element)) {
+      errors.push(`${source}: Frontend.ExportedElements does not include declared surface '${element}'`);
+    }
+  }
 }
 
 function validateObjectArray(value, field, source, errors, validateItem, identityField) {
