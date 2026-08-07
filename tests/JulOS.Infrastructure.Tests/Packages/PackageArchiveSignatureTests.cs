@@ -6,9 +6,10 @@ using JulOS.Infrastructure.Packages;
 
 namespace JulOS.Infrastructure.Tests.Packages;
 
+[TestClass]
 public sealed class PackageArchiveSignatureTests
 {
-    [Fact]
+    [TestMethod]
     public void Verify_rejects_worker_change_even_when_manifest_is_unchanged()
     {
         using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -17,13 +18,16 @@ public sealed class PackageArchiveSignatureTests
         ]);
         var original = CreatePackageArchive("original-worker");
         var modified = CreatePackageArchive("modified-worker");
-        var signature = signingKey.SignData(original, HashAlgorithmName.SHA256);
+        var signature = signingKey.SignData(
+            original,
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         var modifiedDigest = Convert.ToHexStringLower(SHA256.HashData(modified));
 
-        var exception = Assert.Throws<PackageArtifactVerificationException>(() =>
+        var exception = Assert.ThrowsExactly<PackageArtifactVerificationException>(() =>
             verifier.Verify(modified, signature, modifiedDigest, "juloc", "test-key"));
 
-        Assert.Equal("package.signature.invalid", exception.Code);
+        Assert.AreEqual("package.signature.invalid", exception.Code);
     }
 
     private static byte[] CreatePackageArchive(string workerContent)
