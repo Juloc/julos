@@ -1,4 +1,11 @@
 ﻿import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
+import {
+  DesktopLayoutPersistence,
+  windowsForPersistence,
+  type DesktopLayoutDocument,
+  type DesktopViewport,
+  type PersistedDesktopWindow,
+} from './layout-persistence.js';
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
@@ -6,7 +13,13 @@ import type { DesktopApplication, ShellApiClient } from './shell-api.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
 import { TaskbarWindowModel, WindowLaunchCoordinator } from './window-taskbar.js';
-import { WindowStore, type DesktopWindowSnapshot, type UsableArea } from './window-store.js';
+import {
+  WindowStore,
+  type DesktopWindowSnapshot,
+  type FixedWindowState,
+  type UsableArea,
+  type WindowBounds,
+} from './window-store.js';
 
 export interface DesktopRuntimeElements {
   readonly windowLayer: HTMLElement;
@@ -23,7 +36,7 @@ export interface DesktopRuntimeOptions {
   readonly onFailure: (error: unknown) => void;
 }
 
-/** Composes the existing launcher, package frontend and window controllers into the production shell. */
+/** Composes the existing launcher, package frontend, persistence and window controllers. */
 export class DesktopRuntime {
   readonly #api: ShellApiClient;
   readonly #elements: DesktopRuntimeElements;
@@ -36,10 +49,14 @@ export class DesktopRuntime {
   readonly #snap = new WindowSnapController(this.#store);
   readonly #frontendHost = new PackageFrontendHost();
   readonly #capabilities = new PackageCapabilityClient();
+  readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #applications = new Map<string, DesktopApplication>();
   readonly #windowElements = new Map<string, HTMLElement>();
   readonly #packageSurfaces = new Map<string, HTMLElement>();
   #launcher: LauncherIndex | null = null;
+  #viewport: DesktopViewport = 'desktop';
+  #layoutLoaded = false;
+  #restoringLayout = false;
   #unsubscribeWindows: (() => void) | null = null;
   #unsubscribeSnap: (() => void) | null = null;
 
@@ -48,6 +65,10 @@ export class DesktopRuntime {
     this.#elements = options.elements;
     this.#language = options.language;
     this.#onFailure = options.onFailure;
+    this.#layoutPersistence = new DesktopLayoutPersistence(
+      globalThis.fetch.bind(globalThis),
+      { onFailure: (error) => this.#onFailure(error) },
+    );
   }
 
   public async start(): Promise<void> {
@@ -55,8 +76,9 @@ export class DesktopRuntime {
       return;
     }
 
-    const viewport = viewportClass(this.#elements.windowLayer.clientWidth);
-    const applications = await this.#api.readApplications(viewport);
+    this.#ensureStyles();
+    this.#viewport = viewportClass(this.#elements.windowLayer.clientWidth);
+    const applications = await this.#api.readApplications(this.#viewport);
     this.#applications.clear();
     for (const application of applications) {
       this.#applications.set(application.applicationDefinitionId, application);
@@ -76,6 +98,23 @@ export class DesktopRuntime {
       commands: [],
     }, []);
 
+    let layout: DesktopLayoutDocument | null = null;
+    try {
+      layout = await this.#layoutPersistence.load(this.#viewport);
+      this.#layoutLoaded = true;
+    } catch (error) {
+      this.#onFailure(error);
+    }
+
+    if (layout !== null) {
+      this.#restoringLayout = true;
+      try {
+        this.#restoreLayout(layout.windows);
+      } finally {
+        this.#restoringLayout = false;
+      }
+    }
+
     this.#renderLauncher('');
     this.#unsubscribeWindows = this.#store.subscribe((windows) => this.#renderWindows(windows));
     this.#unsubscribeSnap = this.#snap.subscribe((preview) => {
@@ -87,6 +126,8 @@ export class DesktopRuntime {
       element.hidden = false;
       applyBounds(element, preview.bounds);
     });
+
+    await this.#loadRestoredFrontends();
   }
 
   public stop(): void {
@@ -94,6 +135,15 @@ export class DesktopRuntime {
     this.#unsubscribeSnap?.();
     this.#unsubscribeWindows = null;
     this.#unsubscribeSnap = null;
+
+    if (this.#layoutLoaded) {
+      void this.#layoutPersistence.flush(this.#viewport)
+        .catch((error: unknown) => this.#onFailure(error))
+        .finally(() => this.#layoutPersistence.dispose());
+    } else {
+      this.#layoutPersistence.dispose();
+    }
+
     this.#store.clear();
     this.#applications.clear();
     this.#windowElements.clear();
@@ -159,15 +209,21 @@ export class DesktopRuntime {
       return;
     }
 
+    let launchedWindowId: string | null = null;
     try {
       const launch = launcher.launch(result, this.#launcherCoordinator, this.#usableArea());
+      launchedWindowId = launch.window.id;
       const application = this.#applications.get(launch.window.applicationId);
       if (application === undefined) {
         throw new Error(`Application '${launch.window.applicationId}' is not available.`);
       }
       await this.#loadFrontend(application);
       this.#renderWindows(this.#store.windows);
+      this.#scheduleLayout();
     } catch (error) {
+      if (launchedWindowId !== null && this.#store.windows.some((window) => window.id === launchedWindowId)) {
+        this.#store.close(launchedWindowId);
+      }
       this.#onFailure(error);
     }
   }
@@ -187,6 +243,61 @@ export class DesktopRuntime {
         this.#capabilities.invoke(application.packageId, name, operation, payload),
       openApplication: (applicationId) => this.openApplication(applicationId),
     });
+  }
+
+  async #loadRestoredFrontends(): Promise<void> {
+    const applicationIds = new Set(this.#store.windows.map((window) => window.applicationId));
+    for (const applicationId of applicationIds) {
+      const application = this.#applications.get(applicationId);
+      if (application === undefined) {
+        continue;
+      }
+      try {
+        await this.#loadFrontend(application);
+      } catch (error) {
+        this.#onFailure(error);
+      }
+    }
+    this.#renderWindows(this.#store.windows);
+  }
+
+  #restoreLayout(windows: readonly PersistedDesktopWindow[]): void {
+    const area = this.#usableArea();
+    for (const persisted of [...windows].sort((left, right) => left.zIndex - right.zIndex)) {
+      const application = this.#applications.get(persisted.applicationDefinitionId);
+      if (application === undefined) {
+        continue;
+      }
+
+      const restoreBounds = clampBounds({
+        x: persisted.restoreX,
+        y: persisted.restoreY,
+        width: persisted.restoreWidth,
+        height: persisted.restoreHeight,
+      }, area, application.minimumWidth, application.minimumHeight);
+      const normalBounds = persisted.state === 'normal'
+        ? clampBounds({
+            x: persisted.x,
+            y: persisted.y,
+            width: persisted.width,
+            height: persisted.height,
+          }, area, application.minimumWidth, application.minimumHeight)
+        : restoreBounds;
+
+      this.#store.open({
+        id: persisted.windowId,
+        applicationId: persisted.applicationDefinitionId,
+        launchTargetId: persisted.launchTargetId,
+        title: applicationTitle(application),
+        bounds: normalBounds,
+      });
+
+      if (isFixedState(persisted.state)) {
+        this.#store.applyFixedState(persisted.windowId, persisted.state, area);
+      } else if (persisted.state === 'minimized') {
+        this.#store.minimize(persisted.windowId);
+      }
+    }
   }
 
   #renderWindows(windows: readonly DesktopWindowSnapshot[]): void {
@@ -237,7 +348,10 @@ export class DesktopRuntime {
   }
 
   #bindWindowActions(element: HTMLElement, windowId: string): void {
-    element.addEventListener('pointerdown', () => this.#store.focus(windowId));
+    element.addEventListener('pointerdown', () => {
+      this.#store.focus(windowId);
+      this.#scheduleLayout();
+    });
     const titlebar = element.querySelector<HTMLElement>('.window-titlebar')!;
     titlebar.addEventListener('dblclick', (event) => {
       if ((event.target as HTMLElement).closest('button') !== null) {
@@ -249,6 +363,7 @@ export class DesktopRuntime {
       } else if (window.state === 'normal') {
         this.#store.maximize(windowId, this.#usableArea());
       }
+      this.#scheduleLayout();
     });
     titlebar.addEventListener('pointerdown', (event) => {
       if (event.button !== 0 || (event.target as HTMLElement).closest('button') !== null) {
@@ -287,7 +402,10 @@ export class DesktopRuntime {
     });
 
     element.querySelector<HTMLButtonElement>('[data-action="minimize"]')!
-      .addEventListener('click', () => this.#store.minimize(windowId));
+      .addEventListener('click', () => {
+        this.#store.minimize(windowId);
+        this.#scheduleLayout();
+      });
     element.querySelector<HTMLButtonElement>('[data-action="maximize"]')!
       .addEventListener('click', () => {
         const current = this.#requireWindow(windowId);
@@ -299,9 +417,13 @@ export class DesktopRuntime {
           }
           this.#store.maximize(windowId, this.#usableArea());
         }
+        this.#scheduleLayout();
       });
     element.querySelector<HTMLButtonElement>('[data-action="close"]')!
-      .addEventListener('click', () => this.#store.close(windowId));
+      .addEventListener('click', () => {
+        this.#store.close(windowId);
+        this.#scheduleLayout();
+      });
   }
 
   async #finishMove(windowId: string, event: PointerEvent): Promise<void> {
@@ -311,6 +433,7 @@ export class DesktopRuntime {
         { x: event.clientX, y: event.clientY },
         this.#usableArea(),
       );
+      this.#scheduleLayout();
     }
   }
 
@@ -331,15 +454,20 @@ export class DesktopRuntime {
         if (application === undefined) {
           return;
         }
-        this.#interactions.beginResize(windowId, pointerSample(event), {
+        if (this.#interactions.beginResize(windowId, pointerSample(event), {
           usableArea: this.#usableArea(),
           minimumSize: { width: application.minimumWidth, height: application.minimumHeight },
           edge,
-        });
-        handle.setPointerCapture(event.pointerId);
+        })) {
+          handle.setPointerCapture(event.pointerId);
+        }
       });
       handle.addEventListener('pointermove', (event) => void this.#interactions.updatePointer(pointerSample(event)));
-      handle.addEventListener('pointerup', (event) => void this.#interactions.endPointer(pointerSample(event)));
+      handle.addEventListener('pointerup', (event) => {
+        if (this.#interactions.endPointer(pointerSample(event))) {
+          this.#scheduleLayout();
+        }
+      });
       handle.addEventListener('pointercancel', (event) => void this.#interactions.cancelPointer(event.pointerId));
       element.append(handle);
     }
@@ -383,10 +511,34 @@ export class DesktopRuntime {
         const windowId = group.windowIds[0];
         if (windowId !== undefined) {
           this.#taskbar.activateWindow(windowId, this.#usableArea());
+          this.#scheduleLayout();
         }
       });
       container.append(button);
     }
+  }
+
+  #scheduleLayout(): void {
+    if (!this.#layoutLoaded || this.#restoringLayout) {
+      return;
+    }
+    this.#layoutPersistence.schedule(
+      this.#viewport,
+      windowsForPersistence(this.#store),
+      [],
+    );
+  }
+
+  #ensureStyles(): void {
+    const root = this.#elements.windowLayer.getRootNode();
+    if (!(root instanceof ShadowRoot) || root.querySelector('link[data-julos-desktop-runtime]') !== null) {
+      return;
+    }
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './styles/desktop-runtime.css';
+    link.dataset['julosDesktopRuntime'] = 'true';
+    root.prepend(link);
   }
 
   #requireWindow(windowId: string): DesktopWindowSnapshot {
@@ -416,12 +568,30 @@ function pointerSample(event: PointerEvent) {
   };
 }
 
-function defaultBounds(application: DesktopApplication, area: UsableArea) {
+function defaultBounds(application: DesktopApplication, area: UsableArea): WindowBounds {
   const width = Math.min(application.defaultWidth, area.width);
   const height = Math.min(application.defaultHeight, area.height);
   return {
     x: Math.max(0, Math.floor((area.width - width) / 2)),
     y: Math.max(0, Math.floor((area.height - height) / 2)),
+    width,
+    height,
+  };
+}
+
+function clampBounds(
+  bounds: WindowBounds,
+  area: UsableArea,
+  minimumWidth: number,
+  minimumHeight: number,
+): WindowBounds {
+  const width = Math.min(Math.max(bounds.width, Math.min(minimumWidth, area.width)), area.width);
+  const height = Math.min(Math.max(bounds.height, Math.min(minimumHeight, area.height)), area.height);
+  const maximumX = area.x + area.width - width;
+  const maximumY = area.y + area.height - height;
+  return {
+    x: Math.min(Math.max(bounds.x, area.x), maximumX),
+    y: Math.min(Math.max(bounds.y, area.y), maximumY),
     width,
     height,
   };
@@ -438,7 +608,7 @@ function applicationTitle(application: DesktopApplication | undefined): string {
     .join(' ');
 }
 
-function viewportClass(width: number): 'desktop' | 'tablet' | 'mobile' {
+function viewportClass(width: number): DesktopViewport {
   return width < 600 ? 'mobile' : width < 1024 ? 'tablet' : 'desktop';
 }
 
@@ -450,7 +620,11 @@ function resolvedTheme(): 'light' | 'dark' {
   return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches === true ? 'dark' : 'light';
 }
 
-function applyBounds(element: HTMLElement, bounds: { x: number; y: number; width: number; height: number }): void {
+function isFixedState(state: PersistedDesktopWindow['state']): state is FixedWindowState {
+  return state !== 'normal' && state !== 'minimized';
+}
+
+function applyBounds(element: HTMLElement, bounds: WindowBounds): void {
   element.style.left = `${bounds.x}px`;
   element.style.top = `${bounds.y}px`;
   element.style.width = `${bounds.width}px`;
