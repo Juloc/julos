@@ -5,13 +5,14 @@ name: julos-alpha
 
 services:
   server:
-    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.3}
+    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.4}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
       Database__Provider: sqlite
-      ConnectionStrings__CoreDatabase: Data Source=/var/lib/julos/julos.db;Cache=Shared
+      ConnectionStrings__CoreDatabase: Data Source=/var/lib/julos/data/julos.db;Cache=Shared
       Packages__Root: /var/lib/julos/packages
+      DataProtection__KeyRingPath: /var/lib/julos/data-protection
       Secrets__ActiveKeyId: primary
       Secrets__KeyRingPath: /run/julos-secret-keys
       Secrets__LeaseLifetimeSeconds: 300
