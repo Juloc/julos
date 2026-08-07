@@ -4,6 +4,15 @@ JulOS 1.0 must feel like a real desktop environment rather than a web page that 
 
 This gate is completed before feature packages become the main implementation focus.
 
+## Current implementation status
+
+- **DESK-013 — implemented:** fresh deployments provide browser-native administrator setup and normal local sign-in.
+- **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, Agent status, notifications/problems and persisted package widgets. Package lifecycle changes refresh the desktop catalog without a page reload.
+- **DESK-015 — in progress:** the production runtime now uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller and existing Alt-Tab switcher. Repository validation and deployed Windows/macOS/touch acceptance remain required.
+- **DESK-016 — planned:** final appearance and personalization completion follows the interaction pass.
+
+The implementation status above does not replace the deployed acceptance gate at the end of this document.
+
 ## Product target
 
 JulOS keeps Fluent 2 Web as its visual foundation without becoming a Windows clone. Interaction patterns must be immediately understandable to both Windows and macOS users.
@@ -34,10 +43,12 @@ The production entry point must compose the already implemented Desktop building
 - drag, resize and snapping are active in the production shell;
 - saved layout and window state restore after reload/login where allowed;
 - Package Manager, Settings, notifications, problems and Agent status are reachable from the shell;
-- widgets render through the existing widget host;
+- Package Manager can install a signed package, apply configuration and control package enable/disable/removal lifecycle;
+- package lifecycle changes refresh launcher/window/widget availability without a page reload;
+- widgets render through the existing widget host from persisted placements;
 - empty-state content appears only when there are genuinely no launchable applications.
 
-No duplicate window store, launcher index, taskbar state or package frontend host may be introduced.
+No duplicate window store, launcher index, taskbar state, widget state or package frontend host may be introduced.
 
 ## DESK-015: Cross-platform desktop interaction pass
 
