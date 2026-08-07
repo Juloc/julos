@@ -69,6 +69,7 @@ export class DesktopRuntime {
   #widgetLayer: HTMLElement | null = null;
   #widgetPlacements: readonly PersistedWidgetPlacement[] = [];
   #launcher: LauncherIndex | null = null;
+  #launcherQuery = '';
   #viewport: DesktopViewport = 'desktop';
   #layoutLoaded = false;
   #restoringLayout = false;
@@ -93,6 +94,7 @@ export class DesktopRuntime {
       language: options.language,
       onFailure: options.onFailure,
       onProfileChanged: options.onProfileChanged ?? (() => undefined),
+      onPackagesChanged: () => this.#refreshPackageCatalog(),
     });
   }
 
@@ -103,33 +105,8 @@ export class DesktopRuntime {
 
     this.#ensureStyles();
     this.#viewport = viewportClass(this.#elements.windowLayer.clientWidth);
-    const [packageApplications, widgets] = await Promise.all([
-      this.#api.readApplications(this.#viewport),
-      this.#viewport === 'mobile' ? Promise.resolve([] as readonly DesktopWidget[]) : this.#api.readWidgets(),
-    ]);
-    const applications = [...this.#coreApplications.applications(), ...packageApplications];
-    this.#applications.clear();
-    this.#widgets.clear();
-    for (const application of applications) {
-      this.#applications.set(application.applicationDefinitionId, application);
-    }
-    for (const widget of widgets) {
-      this.#widgets.set(widget.widgetKey, widget);
-    }
-
-    this.#launcher = new LauncherIndex({
-      applications: applications.map((application) => ({
-        applicationId: application.applicationDefinitionId,
-        title: applicationTitle(application),
-        description: application.packageId === 'julos.core' ? '' : application.packageId,
-        keywords: [application.stableKey, application.packageId],
-        instancePolicy: application.instancePolicy,
-        defaultBounds: defaultBounds(application, this.#usableArea()),
-        requiredPermissions: [],
-      })),
-      targets: [],
-      commands: [],
-    }, []);
+    const [packageApplications, widgets] = await this.#readPackageCatalog();
+    this.#replaceCatalog(packageApplications, widgets);
 
     let layout: DesktopLayoutDocument | null = null;
     try {
@@ -149,7 +126,7 @@ export class DesktopRuntime {
       }
     }
 
-    this.#renderLauncher('');
+    this.#renderLauncher(this.#launcherQuery);
     this.#unbindCoreShellActions = this.#bindCoreShellActions();
     this.#unsubscribeObservability = this.#notifications.subscribe((snapshot) => this.#renderStatus(snapshot));
     this.#unsubscribeWindows = this.#store.subscribe((windows) => this.#renderWindows(windows));
@@ -188,10 +165,7 @@ export class DesktopRuntime {
       dispose();
     }
     this.#coreSurfaceDisposers.clear();
-    for (const [widgetId, packageId] of this.#registeredWidgetIds) {
-      this.#widgetHost.remove(packageId, widgetId);
-    }
-    this.#registeredWidgetIds.clear();
+    this.#clearRenderedWidgets();
     this.#store.clear();
     this.#applications.clear();
     this.#widgets.clear();
@@ -203,9 +177,11 @@ export class DesktopRuntime {
     this.#elements.runningApplications.replaceChildren();
     this.#elements.launcherEntries.replaceChildren();
     this.#launcher = null;
+    this.#launcherQuery = '';
   }
 
   public search(query: string): void {
+    this.#launcherQuery = query;
     this.#renderLauncher(query);
   }
 
@@ -220,6 +196,64 @@ export class DesktopRuntime {
     if (result !== undefined) {
       void this.#launch(result);
     }
+  }
+
+  async #readPackageCatalog(): Promise<readonly [readonly DesktopApplication[], readonly DesktopWidget[]]> {
+    const [applications, widgets] = await Promise.all([
+      this.#api.readApplications(this.#viewport),
+      this.#viewport === 'mobile'
+        ? Promise.resolve([] as readonly DesktopWidget[])
+        : this.#api.readWidgets(),
+    ]);
+    return [applications, widgets];
+  }
+
+  #replaceCatalog(
+    packageApplications: readonly DesktopApplication[],
+    widgets: readonly DesktopWidget[],
+  ): void {
+    const applications = [...this.#coreApplications.applications(), ...packageApplications];
+    this.#applications.clear();
+    this.#widgets.clear();
+    for (const application of applications) {
+      this.#applications.set(application.applicationDefinitionId, application);
+    }
+    for (const widget of widgets) {
+      this.#widgets.set(widget.widgetKey, widget);
+    }
+    this.#launcher = this.#createLauncher(applications);
+  }
+
+  #createLauncher(applications: readonly DesktopApplication[]): LauncherIndex {
+    return new LauncherIndex({
+      applications: applications.map((application) => ({
+        applicationId: application.applicationDefinitionId,
+        title: applicationTitle(application),
+        description: application.packageId === 'julos.core' ? '' : application.packageId,
+        keywords: [application.stableKey, application.packageId],
+        instancePolicy: application.instancePolicy,
+        defaultBounds: defaultBounds(application, this.#usableArea()),
+        requiredPermissions: [],
+      })),
+      targets: [],
+      commands: [],
+    }, []);
+  }
+
+  async #refreshPackageCatalog(): Promise<void> {
+    const [packageApplications, widgets] = await this.#readPackageCatalog();
+    this.#replaceCatalog(packageApplications, widgets);
+
+    const availableApplications = new Set(this.#applications.keys());
+    for (const window of [...this.#store.windows]) {
+      if (!availableApplications.has(window.applicationId)) {
+        this.#store.close(window.id);
+      }
+    }
+
+    this.#renderLauncher(this.#launcherQuery);
+    await this.#renderWidgets();
+    this.#scheduleLayout();
   }
 
   #renderLauncher(query: string): void {
@@ -333,8 +367,8 @@ export class DesktopRuntime {
   }
 
   async #renderWidgets(): Promise<void> {
+    this.#clearRenderedWidgets();
     const layer = this.#ensureWidgetLayer();
-    layer.replaceChildren();
     if (this.#viewport === 'mobile') {
       return;
     }
@@ -369,6 +403,14 @@ export class DesktopRuntime {
         this.#onFailure(error);
       }
     }
+  }
+
+  #clearRenderedWidgets(): void {
+    for (const [widgetId, packageId] of this.#registeredWidgetIds) {
+      this.#widgetHost.remove(packageId, widgetId);
+    }
+    this.#registeredWidgetIds.clear();
+    this.#widgetLayer?.replaceChildren();
   }
 
   #ensureWidgetLayer(): HTMLElement {
@@ -638,6 +680,7 @@ export class DesktopRuntime {
       button.type = 'button';
       button.className = 'taskbar-button running-application';
       button.dataset['active'] = String(group.activeWindowId !== null);
+      button.dataset['minimized'] = String(group.minimizedCount === group.count);
       button.title = group.title;
       button.textContent = applicationTitle(application).slice(0, 1).toLocaleUpperCase();
       if (group.count > 1) {
