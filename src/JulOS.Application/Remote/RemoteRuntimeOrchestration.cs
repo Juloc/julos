@@ -20,7 +20,7 @@ public sealed record RemoteProviderRuntimeDefinition(
 /// <param name="NetworkProfileId">Stable profile identity.</param>
 /// <param name="Default">Whether this profile is selected when a request omits an identity.</param>
 /// <param name="RuntimeNetworks">Exact Runtime Manager network allowlist entries.</param>
-/// <param name="AllowedTargetPatterns">Exact hosts or <c>*.suffix</c> patterns.</param>
+/// <param name="AllowedTargetPatterns">Exact hosts, <c>*.suffix</c> patterns or narrow <c>label-*</c> runtime prefixes.</param>
 /// <param name="AllowedPorts">Explicit target TCP ports.</param>
 public sealed record RemoteNetworkProfileDefinition(
     Guid NetworkProfileId,
