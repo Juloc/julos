@@ -66,16 +66,20 @@ public sealed class InitialAdministratorProvisioner
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
                 .ConfigureAwait(false);
 
-            var setup = await this.context.AuthenticationSetup
-                .FromSqlRaw(
-                    """
-                    SELECT id, administrator_user_id, completed_at_utc
-                    FROM core.authentication_setup
-                    WHERE id = 1
-                    FOR UPDATE
-                    """)
-                .SingleAsync(cancellationToken)
-                .ConfigureAwait(false);
+            var setup = this.context.Database.IsSqlite()
+                ? await this.context.AuthenticationSetup
+                    .SingleAsync(row => row.Id == SetupRowId, cancellationToken)
+                    .ConfigureAwait(false)
+                : await this.context.AuthenticationSetup
+                    .FromSqlRaw(
+                        """
+                        SELECT id, administrator_user_id, completed_at_utc
+                        FROM core.authentication_setup
+                        WHERE id = 1
+                        FOR UPDATE
+                        """)
+                    .SingleAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
             if (setup.CompletedAtUtc is not null)
             {

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -233,6 +234,63 @@ public sealed class LocalAuthenticationTests
         Assert.AreEqual(CookieSecurePolicy.Always, applicationCookie.Cookie.SecurePolicy);
         Assert.AreEqual(SameSiteMode.Strict, applicationCookie.Cookie.SameSite);
         Assert.IsTrue(applicationCookie.Cookie.HttpOnly);
+    }
+
+    [TestMethod]
+    public async Task InitialSetupCreatesAdministratorOnSqlite()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "julos-integration-tests",
+            "sqlite-setup",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var connectionString = $"Data Source={Path.Combine(directory, "julos.db")};Pooling=False";
+
+        try
+        {
+            await CoreDatabaseMigrator.MigrateAsync(
+                new CoreDatabaseConfiguration(CoreDatabaseProvider.Sqlite, connectionString))
+                .ConfigureAwait(false);
+
+            using var host = new ServerHost(
+                connectionString,
+                new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" });
+            using var client = host.CreateClient(ClientOptions);
+
+            using var setup = await client
+                .PostAsJsonAsync("/api/v1/auth/setup", ValidAdministrator())
+                .ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.Created, setup.StatusCode);
+
+            using var authenticatedVersion = await client
+                .GetAsync("/api/v1/system/version")
+                .ConfigureAwait(false);
+            Assert.AreEqual(HttpStatusCode.OK, authenticatedVersion.StatusCode);
+
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync().ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT u.user_name, u.display_name, r.name, r.is_system_role, s.completed_at_utc
+                FROM users u
+                INNER JOIN user_roles ur ON ur.user_id = u.id
+                INNER JOIN roles r ON r.id = ur.role_id
+                INNER JOIN authentication_setup s ON s.administrator_user_id = u.id
+                """;
+            await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+
+            Assert.IsTrue(await reader.ReadAsync().ConfigureAwait(false));
+            Assert.AreEqual("admin", reader.GetString(0));
+            Assert.AreEqual("Administrator", reader.GetString(1));
+            Assert.AreEqual(LocalIdentityNames.AdministratorRole, reader.GetString(2));
+            Assert.IsFalse(reader.IsDBNull(4));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static InitialAdministratorRequest ValidAdministrator()
