@@ -9,6 +9,15 @@ public sealed record RuntimeResourceLimits(
     decimal CpuLimit,
     int PidsLimit);
 
+/// <summary>One package-owned named-volume mount.</summary>
+/// <param name="Name">Package-owned volume name.</param>
+/// <param name="Target">Absolute container target path.</param>
+/// <param name="ReadOnly">Whether the mount is read-only.</param>
+public sealed record PackageRuntimeVolume(
+    string Name,
+    string Target,
+    bool ReadOnly);
+
 /// <summary>Requests creation of one package-owned runtime.</summary>
 /// <param name="PackageId">Stable package identity.</param>
 /// <param name="PackageVersion">Installed package version.</param>
@@ -26,6 +35,9 @@ public sealed record CreatePackageRuntimeRequest(
     IReadOnlyDictionary<string, string> Environment,
     IReadOnlyList<string> Networks)
 {
+    /// <summary>Gets package-owned named-volume mounts validated by Runtime Manager.</summary>
+    public IReadOnlyList<PackageRuntimeVolume> Volumes { get; init; } = [];
+
     /// <summary>
     /// Gets short-lived runtime-only secret values. Runtime Manager transports these through a
     /// temporary environment file and never includes their values in logs or process arguments.
