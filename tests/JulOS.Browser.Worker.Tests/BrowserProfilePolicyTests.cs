@@ -180,7 +180,7 @@ public sealed class BrowserProfilePolicyTests
         Assert.IsFalse(first.DeleteOnTermination);
         Assert.IsNotNull(first.VolumeName);
         Assert.AreEqual(first.VolumeName, second.VolumeName);
-        Assert.IsTrue(first.VolumeName!.StartsWith("julos-browser-profile-", StringComparison.Ordinal));
+        Assert.IsTrue(first.VolumeName!.StartsWith("julos-de-juloc-julos-browser-profile-", StringComparison.Ordinal));
     }
 
     [TestMethod]

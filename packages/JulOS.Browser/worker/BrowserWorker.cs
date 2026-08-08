@@ -1,11 +1,22 @@
-﻿using JulOS.PackageSdk;
+﻿using System.Security.Cryptography;
+using System.Text.Json;
+
+using JulOS.Contracts.Remote;
+using JulOS.Contracts.Runtime;
+using JulOS.PackageSdk;
 
 namespace JulOS.Browser.Worker;
 
-/// <summary>Registers isolated Browser sessions and owns Browser profile policy.</summary>
-public sealed class BrowserWorker : IJulOsPackageWorker
+/// <summary>Registers isolated Browser sessions and owns Browser profile and runtime policy.</summary>
+public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHandler
 {
     private const string PackageId = "de.juloc.julos.browser";
+    private const string PersistentProfileTarget = "/var/lib/julos-browser/profile";
+    private const int DefaultIdleTimeoutMinutes = 30;
+    private const int MaximumSessionSeconds = 86400;
+    private const int VncPort = 5900;
+    private static readonly RuntimeResourceLimits RuntimeLimits = new(1024, 2m, 256);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider timeProvider;
     private PackageWorkerContext? context;
     private BrowserProfilePolicy? profilePolicy;
@@ -27,7 +38,7 @@ public sealed class BrowserWorker : IJulOsPackageWorker
         ArgumentNullException.ThrowIfNull(configuration);
         cancellationToken.ThrowIfCancellationRequested();
         var allowed = new HashSet<string>(
-            ["idleTimeoutMinutes", "allowDownloads", "allowedNetworks", "defaultNetwork"],
+            ["idleTimeoutMinutes", "allowDownloads", "allowedNetworks", "defaultNetwork", "runtimeImage"],
             StringComparer.Ordinal);
         var issues = configuration.Keys
             .Where(key => !allowed.Contains(key))
@@ -53,6 +64,16 @@ public sealed class BrowserWorker : IJulOsPackageWorker
                 "browser.configuration.downloads",
                 "allowDownloads must be true or false.",
                 "allowDownloads",
+                Blocking: true));
+        }
+        if (configuration.TryGetValue("runtimeImage", out var image)
+            && !string.IsNullOrWhiteSpace(image)
+            && !IsDigestPinnedImage(image.Trim()))
+        {
+            issues.Add(new PackageValidationIssue(
+                "browser.configuration.runtime_image",
+                "runtimeImage must be an immutable lowercase sha256 image reference.",
+                "runtimeImage",
                 Blocking: true));
         }
 
@@ -153,4 +174,232 @@ public sealed class BrowserWorker : IJulOsPackageWorker
                 ["allowedNetworkCount"] = this.profilePolicy?.AllowedNetworkCount,
             }));
     }
+
+    /// <inheritdoc />
+    public async Task<PackageWorkerCommandResult> InvokeCommandAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (!this.running
+            || this.context is null
+            || this.profilePolicy is null
+            || this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!string.Equals(command.Name, InteractiveSessionWorkerCommands.ResolvePlan, StringComparison.Ordinal))
+        {
+            return Failure("browser.command_unsupported", "Browser worker command is not supported.");
+        }
+
+        ResolveInteractiveSessionPlanRequest? input;
+        BrowserSessionRequest? browserRequest;
+        try
+        {
+            input = command.Payload.Deserialize<ResolveInteractiveSessionPlanRequest>(JsonOptions);
+            browserRequest = input?.Request.Request.Deserialize<BrowserSessionRequest>(JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return Failure("browser.request_invalid", "Browser session request is invalid.");
+        }
+        if (input is null
+            || input.OwnerUserId == Guid.Empty
+            || browserRequest is null)
+        {
+            return Failure("browser.request_invalid", "Browser session request is invalid.");
+        }
+
+        if (!TryReadHttpUrl(browserRequest.InitialUrl, out var requestedUrl))
+        {
+            return Failure("browser.url_invalid", "Browser URL must use HTTP or HTTPS.");
+        }
+
+        var runtimeImage = ReadRuntimeImage(this.context.Configuration);
+        if (runtimeImage is null)
+        {
+            return Failure("browser.runtime_not_configured", "Browser runtime image is not configured.");
+        }
+
+        var idleTimeoutSeconds = ReadIdleTimeoutSeconds(this.context.Configuration);
+        if (string.Equals(browserRequest.ProfileMode, BrowserSessionProfileModes.Temporary, StringComparison.Ordinal))
+        {
+            if (browserRequest.ProfileId is not null || this.profilePolicy.DefaultNetwork is null)
+            {
+                return Failure(
+                    "browser.profile_invalid",
+                    "Temporary Browser session requires no profile and a configured default network.");
+            }
+            return Success(CreateRuntimePlan(
+                this.context.PackageVersion,
+                runtimeImage,
+                requestedUrl,
+                this.profilePolicy.DefaultNetwork,
+                volumeName: null,
+                idleTimeoutSeconds));
+        }
+
+        if (browserRequest.ProfileId is not Guid profileId || profileId == Guid.Empty)
+        {
+            return Failure("browser.profile_invalid", "Retained Browser session requires a profile.");
+        }
+
+        var profile = await this.profileStore
+            .ReadProfileAsync(input.OwnerUserId, profileId, cancellationToken)
+            .ConfigureAwait(false);
+        if (profile is null)
+        {
+            return Failure("browser.profile_not_found", "Browser profile was not found.");
+        }
+
+        var expectedMode = profile.Mode switch
+        {
+            BrowserProfileMode.Persistent => BrowserSessionProfileModes.Persistent,
+            BrowserProfileMode.Application => BrowserSessionProfileModes.Application,
+            _ => string.Empty,
+        };
+        if (!string.Equals(browserRequest.ProfileMode, expectedMode, StringComparison.Ordinal))
+        {
+            return Failure("browser.profile_mode_mismatch", "Browser profile mode does not match the stored profile.");
+        }
+
+        var networks = await this.profileStore.ListNetworkProfilesAsync(cancellationToken).ConfigureAwait(false);
+        var network = networks.SingleOrDefault(item =>
+            string.Equals(item.Key, profile.NetworkProfileKey, StringComparison.Ordinal));
+        if (network is null)
+        {
+            return Failure("browser.network_not_found", "Browser network profile was not found.");
+        }
+        try
+        {
+            _ = this.profilePolicy.CreateNetworkProfile(
+                network.Key,
+                network.RuntimeNetwork,
+                network.ProxySecretReferenceId);
+        }
+        catch (InvalidOperationException)
+        {
+            return Failure("browser.network_denied", "Browser profile network is no longer allowed.");
+        }
+
+        var startUrl = profile.Mode == BrowserProfileMode.Application
+            ? profile.StartUrl
+            : requestedUrl;
+        if (startUrl is null || !TryReadHttpUrl(startUrl.AbsoluteUri, out var validatedUrl))
+        {
+            return Failure("browser.url_invalid", "Browser profile URL is invalid.");
+        }
+
+        var storage = BrowserProfilePolicy.RuntimeStorage(profile);
+        return Success(CreateRuntimePlan(
+            this.context.PackageVersion,
+            runtimeImage,
+            validatedUrl,
+            network.RuntimeNetwork,
+            storage.VolumeName,
+            idleTimeoutSeconds));
+    }
+
+    private static InteractiveSessionRuntimePlan CreateRuntimePlan(
+        string packageVersion,
+        string runtimeImage,
+        Uri startUrl,
+        string runtimeNetwork,
+        string? volumeName,
+        int idleTimeoutSeconds)
+    {
+        var environment = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["JULOS_START_URL"] = startUrl.AbsoluteUri,
+        };
+        IReadOnlyList<PackageRuntimeVolume> volumes = [];
+        if (volumeName is not null)
+        {
+            environment["JULOS_PROFILE_DIRECTORY"] = PersistentProfileTarget;
+            volumes = [new PackageRuntimeVolume(volumeName, PersistentProfileTarget, ReadOnly: false)];
+        }
+
+        return new InteractiveSessionRuntimePlan(
+            packageVersion,
+            runtimeImage,
+            RuntimeLimits,
+            environment,
+            runtimeNetwork,
+            volumes,
+            "vnc",
+            VncPort,
+            new InteractiveSessionCredential("JULOS_VNC_PASSWORD", CreateVncPassword()),
+            new RemoteViewportContract(1280, 800, 1m),
+            idleTimeoutSeconds,
+            MaximumSessionSeconds);
+    }
+
+    private static string? ReadRuntimeImage(IReadOnlyDictionary<string, string> configuration)
+    {
+        if (!configuration.TryGetValue("runtimeImage", out var value)
+            || string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var image = value.Trim();
+        return IsDigestPinnedImage(image) ? image : null;
+    }
+
+    private static bool IsDigestPinnedImage(string image)
+    {
+        const string marker = "@sha256:";
+        var index = image.LastIndexOf(marker, StringComparison.Ordinal);
+        if (index < 1)
+        {
+            return false;
+        }
+        var digest = image[(index + marker.Length)..];
+        return digest.Length == 64
+            && digest.All(character => char.IsAsciiHexDigit(character) && !char.IsAsciiLetterUpper(character));
+    }
+
+    private static int ReadIdleTimeoutSeconds(IReadOnlyDictionary<string, string> configuration)
+    {
+        var minutes = configuration.TryGetValue("idleTimeoutMinutes", out var configured)
+            && int.TryParse(configured, out var parsed)
+            ? parsed
+            : DefaultIdleTimeoutMinutes;
+        return checked(minutes * 60);
+    }
+
+    private static bool TryReadHttpUrl(string value, out Uri uri)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var parsed)
+            && (string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            && string.IsNullOrEmpty(parsed.UserInfo))
+        {
+            uri = parsed;
+            return true;
+        }
+
+        uri = null!;
+        return false;
+    }
+
+    private static string CreateVncPassword()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(6);
+        try
+        {
+            return Convert.ToBase64String(bytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
+    }
+
+    private static PackageWorkerCommandResult Success<T>(T payload) =>
+        new(true, null, null, JsonSerializer.SerializeToElement(payload, JsonOptions));
+
+    private static PackageWorkerCommandResult Failure(string code, string detail) =>
+        new(false, code, detail, JsonSerializer.SerializeToElement(new { }, JsonOptions));
 }

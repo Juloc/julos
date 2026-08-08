@@ -1,11 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>Behavior tests for the JulOS Browser package worker profile and network policy.</Description>
+    <Description>Behavior tests for the JulOS Browser package worker profile, network policy and session command handling.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\packages\JulOS.Browser\worker\JulOS.Browser.Worker.csproj" />
+    <ProjectReference Include="..\..\src\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
   </ItemGroup>
 
   <ItemGroup>

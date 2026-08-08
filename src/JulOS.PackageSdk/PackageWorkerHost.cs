@@ -118,6 +118,7 @@ public static class PackageWorkerHost
                 "health" => JsonSerializer.SerializeToElement(
                     await worker.ReadHealthAsync(deadline.Token).ConfigureAwait(false),
                     JsonOptions),
+                "command" => await InvokeCommandAsync(worker, request.Payload, deadline.Token).ConfigureAwait(false),
                 "shutdown" => await RunAsync(worker.StopAsync, deadline.Token).ConfigureAwait(false),
                 _ => throw new WorkerProtocolException("worker.method_unknown", "Worker method is not supported."),
             };
@@ -146,6 +147,25 @@ public static class PackageWorkerHost
         await worker.ConfigureAsync(Deserialize<PackageWorkerContext>(payload), cancellationToken)
             .ConfigureAwait(false);
         return EmptyPayload();
+    }
+
+    private static async Task<JsonElement> InvokeCommandAsync(
+        IJulOsPackageWorker worker,
+        JsonElement payload,
+        CancellationToken cancellationToken)
+    {
+        if (worker is not IJulOsPackageCommandHandler commands)
+        {
+            throw new WorkerProtocolException(
+                "worker.command_unsupported",
+                "Package worker does not support private commands.");
+        }
+
+        return JsonSerializer.SerializeToElement(
+            await commands.InvokeCommandAsync(
+                Deserialize<PackageWorkerCommand>(payload),
+                cancellationToken).ConfigureAwait(false),
+            JsonOptions);
     }
 
     private static async Task<JsonElement> RunAsync(

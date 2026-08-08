@@ -37,7 +37,7 @@
   "Widgets": [],
   "Capabilities": [
     {
-      "Name": "browser.session",
+      "Name": "interactive.session",
       "Direction": "requires",
       "ContractVersion": "1.0.0",
       "Required": true
@@ -46,7 +46,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/browser.js",
-    "Sha256": "683b4ced45578eb7b4adf3db4616075106ce3fbc58c69789fcb3f5c6bbe71eb1",
+    "Sha256": "d21a2a8a987a6b7995c08b5fb0177d2b44edcc74df1ba68a8f4c429fbaba8a29",
     "ExportedElements": [
       "julos-browser-app"
     ]

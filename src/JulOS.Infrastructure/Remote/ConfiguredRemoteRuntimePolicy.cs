@@ -209,11 +209,25 @@ public sealed partial class ConfiguredRemoteRuntimePolicy : IRemoteRuntimePolicy
         {
             return false;
         }
+
+        if (pattern.EndsWith("-*", StringComparison.Ordinal))
+        {
+            if (pattern.Count(character => character == '*') != 1)
+            {
+                return false;
+            }
+            var labelPrefix = pattern[..^2];
+            return labelPrefix.Length is > 0 and <= 63
+                && Uri.CheckHostName(labelPrefix) == UriHostNameType.Dns
+                && !labelPrefix.Contains('.');
+        }
+
         var candidate = pattern.StartsWith("*.", StringComparison.Ordinal)
             ? pattern[2..]
             : pattern;
-        return IPAddress.TryParse(candidate, out _)
-            || Uri.CheckHostName(candidate) == UriHostNameType.Dns;
+        return !candidate.Contains('*')
+            && (IPAddress.TryParse(candidate, out _)
+                || Uri.CheckHostName(candidate) == UriHostNameType.Dns);
     }
 
     private static bool TargetMatches(string pattern, string host)
@@ -223,6 +237,12 @@ public sealed partial class ConfiguredRemoteRuntimePolicy : IRemoteRuntimePolicy
             var suffix = pattern[1..];
             return host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
                 && host.Length > suffix.Length;
+        }
+        if (pattern.EndsWith("-*", StringComparison.Ordinal))
+        {
+            var prefix = pattern[..^1];
+            return host.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && host.Length > prefix.Length;
         }
         return string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase);
     }

@@ -11,7 +11,10 @@ using Npgsql;
 namespace JulOS.Infrastructure.Packages;
 
 /// <summary>Starts signed package process workers and supervises their bounded lifecycle protocol.</summary>
-internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor, IAsyncDisposable
+internal sealed class ProcessPackageWorkerSupervisor :
+    IPackageWorkerSupervisor,
+    IPackageWorkerCommandDispatcher,
+    IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ConcurrentDictionary<string, WorkerSession> sessions = new(StringComparer.Ordinal);
@@ -131,6 +134,25 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         }
     }
 
+    public async Task<PackageWorkerCommandResult> InvokeAsync(
+        string packageId,
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        ArgumentNullException.ThrowIfNull(command);
+        if (!this.sessions.TryGetValue(packageId, out var session))
+        {
+            throw Failure("package.worker_not_running", "Package worker is not running.");
+        }
+
+        return await session.RequestAsync<PackageWorkerCommandResult>(
+            "command",
+            command,
+            TimeSpan.FromSeconds(30),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         var active = this.sessions.ToArray();
@@ -198,7 +220,9 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
             manifest.PackageId,
             "versions",
             manifest.Version));
-        var entryPoint = Path.GetFullPath(Path.Combine(versionRoot, declared.Replace('/', Path.DirectorySeparatorChar)));
+        var entryPoint = Path.GetFullPath(Path.Combine(
+            versionRoot,
+            declared.Replace('/', Path.DirectorySeparatorChar)));
         if (!entryPoint.StartsWith(versionRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
             || !File.Exists(entryPoint))
         {
@@ -251,15 +275,25 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
     private static void VerifyRegistration(PackageManifest manifest, PackageRegistration registration)
     {
         ArgumentNullException.ThrowIfNull(registration);
-        var declaredApplications = manifest.Applications.Select(application => application.StableKey).ToHashSet(StringComparer.Ordinal);
-        var registeredApplications = registration.Applications.Select(application => application.StableKey).ToHashSet(StringComparer.Ordinal);
-        var declaredWidgets = manifest.Widgets.Select(widget => widget.StableKey).ToHashSet(StringComparer.Ordinal);
-        var registeredWidgets = registration.Widgets.Select(widget => widget.StableKey).ToHashSet(StringComparer.Ordinal);
+        var declaredApplications = manifest.Applications
+            .Select(application => application.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
+        var registeredApplications = registration.Applications
+            .Select(application => application.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
+        var declaredWidgets = manifest.Widgets
+            .Select(widget => widget.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
+        var registeredWidgets = registration.Widgets
+            .Select(widget => widget.StableKey)
+            .ToHashSet(StringComparer.Ordinal);
         var declaredCapabilities = manifest.Capabilities
             .Where(capability => capability.Direction == "provides")
             .Select(capability => capability.Name)
             .ToHashSet(StringComparer.Ordinal);
-        var registeredCapabilities = registration.Capabilities.Select(capability => capability.Name).ToHashSet(StringComparer.Ordinal);
+        var registeredCapabilities = registration.Capabilities
+            .Select(capability => capability.Name)
+            .ToHashSet(StringComparer.Ordinal);
         if (!declaredApplications.SetEquals(registeredApplications)
             || !declaredWidgets.SetEquals(registeredWidgets)
             || !declaredCapabilities.SetEquals(registeredCapabilities))
@@ -281,7 +315,10 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         }
     }
 
-    private static PackageManagementException Failure(string code, string message, Exception? inner = null) =>
+    private static PackageManagementException Failure(
+        string code,
+        string message,
+        Exception? inner = null) =>
         new(code, message, inner);
 
     private sealed class WorkerSession : IAsyncDisposable
@@ -381,7 +418,8 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
                     method,
                     JsonSerializer.SerializeToElement(payload, JsonOptions),
                     checked((int)Math.Clamp(timeout.TotalMilliseconds, 1, 300_000)));
-                await this.process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request, JsonOptions))
+                await this.process.StandardInput
+                    .WriteLineAsync(JsonSerializer.Serialize(request, JsonOptions))
                     .ConfigureAwait(false);
                 await this.process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
@@ -396,7 +434,9 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
                     ?? throw Failure("package.worker_response_invalid", "Package worker response is invalid.");
                 if (!string.Equals(response.Id, requestId, StringComparison.Ordinal))
                 {
-                    throw Failure("package.worker_response_mismatch", "Package worker response identifier does not match.");
+                    throw Failure(
+                        "package.worker_response_mismatch",
+                        "Package worker response identifier does not match.");
                 }
                 if (!response.Succeeded)
                 {

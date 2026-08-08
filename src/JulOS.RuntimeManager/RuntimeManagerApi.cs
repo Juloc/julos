@@ -160,6 +160,7 @@ public static class RuntimeManagerEndpoints
         ArgumentNullException.ThrowIfNull(request.Environment);
         ArgumentNullException.ThrowIfNull(request.SecretEnvironment);
         ArgumentNullException.ThrowIfNull(request.Networks);
+        ArgumentNullException.ThrowIfNull(request.Volumes);
         return new RuntimeCreateRequest(
             request.InstanceId,
             request.PackageId,
@@ -170,7 +171,9 @@ public static class RuntimeManagerEndpoints
             request.Limits.MemoryMegabytes,
             request.Limits.PidsLimit,
             request.Networks,
-            Volumes: [],
+            request.Volumes
+                .Select(volume => new RuntimeVolumeRequest(volume.Name, volume.Target, volume.ReadOnly))
+                .ToArray(),
             request.Environment)
         {
             SecretEnvironment = request.SecretEnvironment,

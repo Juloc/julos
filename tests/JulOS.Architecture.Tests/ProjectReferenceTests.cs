@@ -35,6 +35,7 @@ public sealed class ProjectReferenceTests
         ],
         ["tests/JulOS.Browser.Worker.Tests/JulOS.Browser.Worker.Tests.csproj"] = [
             "packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj",
+            PlatformProjects.PackageSdk,
         ],
     };
 
