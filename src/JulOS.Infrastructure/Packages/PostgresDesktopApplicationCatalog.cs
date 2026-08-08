@@ -51,7 +51,7 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
             .ConfigureAwait(false);
 
         var applicationIds = rows.Select(row => row.Id).ToArray();
-        var targetRows = applicationIds.Length == 0
+        LaunchTargetRow[] targetRows = applicationIds.Length == 0
             ? []
             : await this.context.LaunchTargets
                 .AsNoTracking()
