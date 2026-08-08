@@ -16,7 +16,7 @@ public sealed record BrowserRuntimeOptions(string? Image)
             ?? Environment.GetEnvironmentVariable("JULOS_BROWSER_RUNTIME_IMAGE");
         if (string.IsNullOrWhiteSpace(image))
         {
-            return new BrowserRuntimeOptions(null);
+            return new BrowserRuntimeOptions((string?)null);
         }
 
         image = image.Trim();
