@@ -17,10 +17,9 @@ using Microsoft.EntityFrameworkCore;
 namespace JulOS.Infrastructure.Browser;
 
 /// <summary>Creates isolated Chromium runtimes and reuses Remote VNC presentation sessions.</summary>
-public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
+internal sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
 {
-    /// <summary>Core-owned provider identity used by the capability broker.</summary>
-    public const string ProviderPackageId = "julos.core.browser";
+    internal const string ProviderPackageId = "julos.core.browser";
 
     private const string BrowserPackageId = "de.juloc.julos.browser";
     private const string VncSecretPurpose = "remote.browser.vnc";
@@ -42,8 +41,7 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
     private readonly ISecretReferenceService secrets;
     private readonly TimeProvider timeProvider;
 
-    /// <summary>Creates the Browser session capability provider.</summary>
-    public BrowserSessionCapabilityProvider(
+    internal BrowserSessionCapabilityProvider(
         CoreDbContext context,
         IPackageWorkerCommandDispatcher workers,
         BrowserRuntimeOptions runtimeOptions,
@@ -69,7 +67,6 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
-    /// <inheritdoc />
     public CapabilityProviderDescriptor Descriptor { get; } = new(
         ProviderPackageId,
         BrowserSessionCapabilityContract.Name,
@@ -77,7 +74,6 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
         Priority: 1000,
         Healthy: true);
 
-    /// <inheritdoc />
     public async Task<CapabilityResponse> InvokeAsync(
         CapabilityRequest request,
         CancellationToken cancellationToken = default)
@@ -510,7 +506,7 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
             throw new JsonException("Browser operation key is invalid.");
         }
         if (!Uri.TryCreate(request.InitialUrl, UriKind.Absolute, out var url)
-            || url.Scheme is not (Uri.UriSchemeHttp or Uri.UriSchemeHttps)
+            || !IsHttpUrl(url)
             || !string.IsNullOrEmpty(url.UserInfo))
         {
             throw new JsonException("Browser URL is invalid.");
@@ -538,7 +534,7 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
             || string.IsNullOrWhiteSpace(plan.RuntimeNetwork)
             || plan.IdleTimeoutSeconds is < 60 or > MaximumSessionSeconds
             || !Uri.TryCreate(plan.InitialUrl, UriKind.Absolute, out var url)
-            || url.Scheme is not (Uri.UriSchemeHttp or Uri.UriSchemeHttps))
+            || !IsHttpUrl(url))
         {
             throw new JsonException("Browser worker returned an invalid runtime plan.");
         }
@@ -549,6 +545,10 @@ public sealed class BrowserSessionCapabilityProvider : ICapabilityProvider
             throw new JsonException("Browser worker returned invalid profile storage.");
         }
     }
+
+    private static bool IsHttpUrl(Uri url) =>
+        string.Equals(url.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(url.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 
     private static string RuntimeId(Guid ownerUserId, CreateBrowserSessionRequest request)
     {
