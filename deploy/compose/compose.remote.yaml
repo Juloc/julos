@@ -1,0 +1,33 @@
+# Adds Remote (RDP/VNC/SSH) provider and network-profile configuration on top
+# of compose.yaml. Layer it in explicitly so these keys only exist when
+# Remote is actually configured:
+#
+#   docker compose -f compose.yaml -f compose.remote.yaml --profile remote up --build
+#
+# ConfiguredRemoteRuntimePolicy.Read validates every Remote:Providers and
+# Remote:NetworkProfiles entry whose keys are present at all, regardless of
+# value, eagerly at startup. Setting these in the base compose.yaml (even
+# with empty defaults) would crash the stack for anyone not using Remote.
+
+x-remote-environment: &remote-environment
+  Remote__Providers__0__Protocol: ${JULOS_REMOTE_PROVIDER_0_PROTOCOL:-ssh}
+  Remote__Providers__0__ProviderPackageId: ${JULOS_REMOTE_PROVIDER_0_PACKAGE_ID:-de.juloc.julos.remote-provider}
+  Remote__Providers__0__PackageVersion: ${JULOS_REMOTE_PROVIDER_0_PACKAGE_VERSION:-1.0.0}
+  Remote__Providers__0__Image: ${JULOS_REMOTE_PROVIDER_0_IMAGE:?Set JULOS_REMOTE_PROVIDER_0_IMAGE (a digest-pinned repository@sha256:... reference) in deploy/compose/.env}
+  Remote__Providers__0__MemoryMegabytes: ${JULOS_REMOTE_PROVIDER_0_MEMORY_MB:-512}
+  Remote__Providers__0__CpuLimit: ${JULOS_REMOTE_PROVIDER_0_CPU_LIMIT:-1}
+  Remote__Providers__0__PidsLimit: ${JULOS_REMOTE_PROVIDER_0_PIDS_LIMIT:-256}
+  Remote__NetworkProfiles__0__NetworkProfileId: ${JULOS_REMOTE_NETWORK_PROFILE_ID:?Set JULOS_REMOTE_NETWORK_PROFILE_ID (a random GUID) in deploy/compose/.env}
+  Remote__NetworkProfiles__0__Default: "true"
+  Remote__NetworkProfiles__0__RuntimeNetworks__0: ${JULOS_REMOTE_RUNTIME_NETWORK:-julos-remote}
+  Remote__NetworkProfiles__0__AllowedTargetPatterns__0: ${JULOS_REMOTE_ALLOWED_TARGET_PATTERN:?Set JULOS_REMOTE_ALLOWED_TARGET_PATTERN in deploy/compose/.env}
+  Remote__NetworkProfiles__0__AllowedPorts__0: ${JULOS_REMOTE_ALLOWED_PORT:?Set JULOS_REMOTE_ALLOWED_PORT in deploy/compose/.env}
+
+services:
+  migrate:
+    environment:
+      <<: *remote-environment
+
+  server:
+    environment:
+      <<: *remote-environment

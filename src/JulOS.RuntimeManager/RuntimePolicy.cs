@@ -207,7 +207,8 @@ public sealed class RuntimePolicy
         return value.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
             || value.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
             || value.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase);
+            || value.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase);
     }
 
     private static RuntimeManagerException Failure(string code, string message) => new(code, message);

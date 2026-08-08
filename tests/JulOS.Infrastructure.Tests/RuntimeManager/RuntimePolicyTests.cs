@@ -81,6 +81,7 @@ public sealed class RuntimePolicyTests
             SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["JULOS_REMOTE_CALLBACK_TOKEN"] = "scoped-expiring-provider-token",
+                ["JULOS_REMOTE_TARGET_CREDENTIAL"] = "base64-encoded-target-credential",
             },
         };
 

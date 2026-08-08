@@ -4,8 +4,20 @@
 #   cp .env.example .env      # then set a password
 #   docker compose up --build
 #
-# This file is for development. Runtime Manager, package workers and session
-# runtimes join the stack with the work items that implement them.
+# This file is for development. Package workers and package-owned session
+# runtimes (Browser, Remote provider) join the stack with the work items
+# that implement them; only Runtime Manager and its own container network
+# are wired here.
+#
+# Remote (RDP/VNC/SSH) requires the runtime-manager service, a shared
+# runtime network, and compose.remote.yaml layered on top:
+#   docker compose -f compose.yaml -f compose.remote.yaml --profile remote up --build
+# Remote__Providers and Remote__NetworkProfiles are NOT set here even to
+# empty defaults: ConfiguredRemoteRuntimePolicy.Read validates every entry
+# whose keys are present at all (regardless of value) eagerly at startup, so
+# a blank Remote__Providers__0__* would crash the whole stack for anyone who
+# is not using Remote. compose.remote.yaml only adds those keys when the
+# operator explicitly layers it in.
 
 name: julos-dev
 
@@ -21,11 +33,17 @@ x-server-image: &server-image
     Secrets__ActiveKeyId: primary
     Secrets__KeyRingPath: /run/julos-secret-keys
     Secrets__LeaseLifetimeSeconds: 300
+    Packages__Root: /var/lib/julos/packages
     Remote__Display__ProviderEndpointTemplate: ${JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE:-}
     Remote__Display__PublicOrigin: ${JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN:-}
     Remote__Display__GrantLifetimeSeconds: ${JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS:-60}
+    Remote__RuntimeManager__Endpoint: ${JULOS_REMOTE_RUNTIME_MANAGER_ENDPOINT:-}
+    Remote__RuntimeManager__ApiKey: ${JULOS_RUNTIME_MANAGER_KEY:-}
+    Remote__ProviderCallback__Endpoint: ${JULOS_REMOTE_PROVIDER_CALLBACK_ENDPOINT:-}
+    Remote__ProviderCallback__SigningKey: ${JULOS_REMOTE_PROVIDER_CALLBACK_KEY:-}
   volumes:
     - ${JULOS_SECRET_KEY_RING_PATH:?Set JULOS_SECRET_KEY_RING_PATH in deploy/compose/.env}:/run/julos-secret-keys:ro
+    - packages-data:/var/lib/julos/packages
 
 services:
   postgres:
@@ -49,7 +67,7 @@ services:
 
   migrate:
     <<: *server-image
-    command: ["--migrate-database"]
+    command: ["dotnet", "/application/JulOS.Server.dll", "--migrate-database"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,7 +87,42 @@ services:
       timeout: 10s
       retries: 6
       start_period: 20s
+    networks:
+      - default
+      - julos-remote
     restart: unless-stopped
+
+  # Runtime Manager needs the host's Docker socket to create the narrow,
+  # labeled containers it owns (Browser sessions, Remote provider runtimes).
+  # It is optional: the stack runs without it, and Remote sessions simply
+  # fail closed until Remote__RuntimeManager__Endpoint is configured above.
+  runtime-manager:
+    build:
+      context: ../..
+      dockerfile: src/JulOS.RuntimeManager/Dockerfile
+    environment:
+      # Required only when the remote profile actually runs; RuntimeManagerOptions.Read
+      # refuses to start without it, and Compose parses this file even when the
+      # remote profile is not selected, so this cannot use the required (":?") form.
+      RuntimeManager__ApiKey: ${JULOS_RUNTIME_MANAGER_KEY:-}
+      RuntimeManager__AllowedNetworks__0: ${JULOS_REMOTE_RUNTIME_NETWORK:-julos-remote}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+    restart: unless-stopped
+    profiles:
+      - remote
 
 volumes:
   postgres-data:
+  packages-data:
+
+networks:
+  default:
+  # Shared with every Runtime-Manager-launched Remote provider container and
+  # with whatever Remote targets the operator's network profile allows. Not
+  # marked external so `docker compose up` creates it; an operator pointing
+  # Remote at an existing network can override RuntimeNetworks and manage the
+  # network outside Compose instead.
+  julos-remote:

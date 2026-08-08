@@ -70,6 +70,21 @@ No database port is published. The database is reachable only from the stack net
 docker compose exec postgres psql --username julos --dbname julos
 ```
 
+## Remote (RDP/VNC/SSH)
+
+The `runtime-manager` service and the `Remote__*` variables in `.env.example` are optional and disabled by default; Remote sessions fail closed with no configured provider until you set them. To enable Remote:
+
+1. Install the signed `de.juloc.julos.remote` package through the running server (`POST /api/v1/packages/install`).
+2. Build and publish (or build locally and reference by digest) the provider runtime image from `packages/JulOS.Remote/runtime/Dockerfile`; see `docs/REMOTE-PROVIDER-RUNTIME.md`.
+3. Fill in the Remote variables in `.env` (`openssl rand -hex 32` for both key values), pointing `JULOS_REMOTE_PROVIDER_0_IMAGE` at that digest-pinned image.
+4. Start the stack with the `remote` profile so `runtime-manager` also runs:
+
+```bash
+docker compose --profile remote up --build
+```
+
+`runtime-manager` needs the host's Docker socket to create the narrow, labeled containers it owns, so it is not part of the default profile.
+
 ## Scope
 
-Runtime Manager, package workers, Browser runtimes and Remote runtimes are not part of this stack. They are added by the work items that implement them.
+Package workers and Browser session runtimes are not part of this stack. They are added by the work items that implement them.

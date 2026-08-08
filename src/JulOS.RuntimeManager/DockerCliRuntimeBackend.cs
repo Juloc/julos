@@ -13,6 +13,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
     private const string ManagedLabel = "com.juloc.julos.managed=true";
     private const string PackageVersionLabelName = "com.juloc.julos.package-version";
     private const string InstanceLabelName = "com.juloc.julos.instance";
+    private const string ImageLabelName = "com.juloc.julos.image";
     private const int MaximumOutputLength = 65536;
     private readonly RuntimePolicy policy;
     private readonly string dockerExecutable;
@@ -94,9 +95,10 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
                 "--filter",
                 $"label={RuntimePolicy.RuntimeLabel(runtimeId)}",
                 "--format",
-                "{{.ID}}\t{{.State}}\t{{.Image}}\t{{.Label \"com.juloc.julos.package\"}}"
+                "{{.ID}}\t{{.State}}\t{{.Label \"com.juloc.julos.package\"}}"
                 + $"\t{{{{.Label \"{PackageVersionLabelName}\"}}}}"
-                + $"\t{{{{.Label \"{InstanceLabelName}\"}}}}",
+                + $"\t{{{{.Label \"{InstanceLabelName}\"}}}}"
+                + $"\t{{{{.Label \"{ImageLabelName}\"}}}}",
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -115,6 +117,7 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
 
         var columns = lines[0].Split('\t');
         if (columns.Length != 6
+            || string.IsNullOrWhiteSpace(columns[2])
             || string.IsNullOrWhiteSpace(columns[3])
             || string.IsNullOrWhiteSpace(columns[4])
             || string.IsNullOrWhiteSpace(columns[5]))
@@ -124,12 +127,12 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
 
         return new RuntimeResource(
             runtimeId,
+            columns[2],
             columns[3],
             columns[4],
-            columns[5],
             columns[0],
             columns[1],
-            columns[2]);
+            columns[5]);
     }
 
     /// <inheritdoc />
@@ -178,6 +181,8 @@ public sealed class DockerCliRuntimeBackend : IRuntimeBackend
             $"{PackageVersionLabelName}={request.PackageVersion}",
             "--label",
             $"{InstanceLabelName}={request.InstanceId}",
+            "--label",
+            $"{ImageLabelName}={request.Image}",
             "--cpus",
             request.CpuLimit.ToString(CultureInfo.InvariantCulture),
             "--memory",
