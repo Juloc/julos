@@ -127,6 +127,7 @@ export class JulOsShell extends HTMLElement {
 
       this.#hideAuthentication();
       userLabel.textContent = status.user.displayName;
+      delete userLabel.dataset['message'];
       const [profileResult, versionResult] = await Promise.allSettled([
         this.#api.readProfile(),
         this.#api.readServerVersion(),
@@ -141,6 +142,7 @@ export class JulOsShell extends HTMLElement {
           applyAppearance(document.documentElement, profile.theme, profile.motion);
         }
         userLabel.textContent = profile.displayName;
+        delete userLabel.dataset['message'];
         this.#applyLanguage();
         this.#updateClock();
       } else {
