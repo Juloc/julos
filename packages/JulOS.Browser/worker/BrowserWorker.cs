@@ -289,7 +289,8 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
     private static bool TryReadHttpUrl(string value, out Uri uri)
     {
         if (Uri.TryCreate(value, UriKind.Absolute, out var parsed)
-            && parsed.Scheme is Uri.UriSchemeHttp or Uri.UriSchemeHttps
+            && (string.Equals(parsed.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parsed.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             && string.IsNullOrEmpty(parsed.UserInfo))
         {
             uri = parsed;
