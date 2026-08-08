@@ -81,7 +81,8 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IDesktopApplicationCatalog>(provider => new PostgresDesktopApplicationCatalog(
             provider.GetRequiredService<CoreDbContext>(),
-            packageRoot));
+            packageRoot,
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IPackageUpdateService>(provider => new PostgresPackageUpdateService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
