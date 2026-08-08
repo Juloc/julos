@@ -81,7 +81,7 @@ export interface DesktopApplication {
   readonly viewports: readonly ('desktop' | 'tablet' | 'mobile')[];
   readonly elementName: string;
   readonly frontend: DesktopApplicationFrontend;
-  readonly launchTargets: readonly DesktopLaunchTarget[];
+  readonly launchTargets?: readonly DesktopLaunchTarget[];
 }
 
 export type DesktopWidgetSize = 'small' | 'medium' | 'wide' | 'large';
