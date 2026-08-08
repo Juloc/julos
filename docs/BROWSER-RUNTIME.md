@@ -4,7 +4,7 @@
 
 BRW-001 provides one isolated Chromium runtime image for the JulOS Browser package. Runtime creation remains owned by Runtime Manager and session ownership remains on the protocol-neutral REM-004 path. The Browser package does not receive a second container or session subsystem.
 
-BRW-002 adds Browser-owned profile metadata and network policy without moving Chromium state into Core. BRW-003 remains responsible for turning those validated definitions into Runtime Manager allocations and presentation sessions.
+BRW-002 adds Browser-owned profile metadata and network policy without moving Chromium state into Core. BRW-003 converts those validated definitions into Runtime Manager allocations and reuses the existing Remote VNC presentation path.
 
 ## Image inputs
 
@@ -37,9 +37,9 @@ It declares:
 - `JULOS_VNC_PASSWORD` as required secret environment;
 - `JULOS_START_URL=about:blank` as the non-secret default.
 
-BRW-003 combines the repository version with the digest produced by the publication workflow. Runtime Manager accepts only the resulting digest-pinned image reference. It applies the declared CPU, memory and PID limits, the exact configured network, dropped capabilities and `no-new-privileges`.
+The deployed Server receives the immutable Browser runtime image through `Browser:Runtime:Image` or `JULOS_BROWSER_RUNTIME_IMAGE`. The value must be a lowercase `repository@sha256:digest` reference. A missing value does not prevent Server startup; Browser session creation instead fails closed with `browser.runtime_not_configured`.
 
-No host port is published. The display proxy reaches port `5900` only through the package runtime network. x11vnc uses an explicit IPv4 listener and disables its optional IPv6 listener so startup and health checks cannot vary with the host's dual-stack socket behavior.
+Runtime Manager applies the declared CPU, memory and PID limits, the exact configured network, dropped capabilities and `no-new-privileges`. No host port is published. The display proxy reaches port `5900` only through the configured runtime network. x11vnc uses an explicit IPv4 listener and disables its optional IPv6 listener so startup and health checks cannot vary with the host's dual-stack socket behavior.
 
 ## Browser profile policy
 
@@ -51,7 +51,7 @@ BRW-002 defines three profile modes:
 
 Every retained Browser profile stores its owning JulOS user ID. Reads and deletes filter by both profile identity and owner identity. A profile belonging to another user therefore cannot be resolved through the Browser profile store.
 
-Only retained profile metadata belongs in the package database. Chromium profile bytes remain in isolated Browser runtime volumes. Persistent volume names are derived from the owner/profile identity and do not contain user names or other display data. Temporary mode is rejected by the persistent store and maps to runtime-local storage that must be removed when the runtime ends.
+Only retained profile metadata belongs in the package database. Chromium profile bytes remain in isolated Browser runtime volumes. Persistent volume names are derived from the owner/profile identity and do not contain user names or other display data. Runtime Manager accepts only package-owned volume names and mounts retained Browser profiles at `/var/lib/julos-browser/profile`. Temporary mode is rejected by the persistent store and uses only `/tmp/julos-browser/profile`, which disappears with the runtime.
 
 Browser profile metadata uses the package-owned database supplied by the JulOS package worker supervisor. The implementation supports both the SQLite alpha deployment and PostgreSQL package storage; no Browser-specific database service is introduced.
 
@@ -68,11 +68,33 @@ Each network profile contains:
 
 `allowedNetworks` is the administrator-configured exact allowlist. `defaultNetwork`, when set, must be a member of that allowlist. Unknown networks fail validation before BRW-003 may request a runtime.
 
-Secret values are never stored in Browser profile metadata. BRW-003 must resolve any configured proxy secret reference through the existing API-008 operation-scoped secret lease and pass only the leased value through Runtime Manager's secret-environment channel.
+A Browser runtime must also be reachable by the selected Remote VNC provider. The Remote network profile therefore has to include the same runtime network, port `5900`, and the narrow target pattern `julos-browser-*`. Remote policy accepts this trailing wildcard only in the `<dns-label>-*` form; arbitrary prefix wildcards remain invalid.
+
+Secret values are never stored in Browser profile metadata. Proxy credentials remain opaque references for later proxy support; BRW-003 does not lease or inject them until proxy behavior is implemented explicitly.
+
+## Session orchestration
+
+`browser.session/1.0.0` exposes create, read and terminate operations to the Browser package. Core owns the provider implementation, while Browser-owned profile and network data stays behind the Browser worker boundary.
+
+Creation follows one flat path:
+
+1. validate the authenticated Browser caller, operation key, URL and profile mode;
+2. ask the already-running Browser worker for a non-secret runtime plan;
+3. validate the chosen Browser runtime network against the existing Remote VNC policy;
+4. allocate the digest-pinned Chromium runtime through Runtime Manager;
+5. create one package-owned secret reference for the generated VNC credential;
+6. create the existing protocol-neutral Remote session targeting the internal Chromium VNC endpoint;
+7. let the existing Remote VNC provisioner produce the same-origin display descriptor.
+
+The Browser response contains the generic session ID, state, timestamps, same-origin display descriptor and caller-safe failure only. It never returns the internal runtime DNS name, Docker network, Runtime Manager identity or VNC credential.
+
+The Browser runtime ID is deterministic from the authenticated user and exact create request. A short creation critical section prevents two concurrent requests with the same idempotency key from racing runtime, secret and session creation. The durable Remote session remains the single session record; BRW-003 adds no Browser session table.
 
 ## Display credential
 
-The launcher requires exactly eight printable ASCII characters because the VNC password mechanism used by x11vnc has an eight-character protocol limit. The value is supplied through Runtime Manager's secret-environment channel.
+The launcher requires exactly eight printable ASCII characters because the VNC password mechanism used by x11vnc has an eight-character protocol limit. BRW-003 generates a random eight-character Base64 password for every new Browser runtime.
+
+The value is supplied to Chromium's runtime only through Runtime Manager's secret-environment channel. A second encrypted secret reference allows the existing Remote VNC provider to authenticate without exposing the value to the Browser frontend.
 
 The launcher:
 
@@ -82,6 +104,19 @@ The launcher:
 4. removes the password file with the complete temporary runtime directory during cleanup.
 
 There is no default or fallback credential.
+
+## Cleanup
+
+Remote session lifecycle remains authoritative for presentation/provider cleanup. The existing Remote lifecycle background worker also runs one bounded Browser cleanup pass after its normal reconciliation.
+
+For terminal Browser sessions the cleanup pass:
+
+- removes the Chromium runtime idempotently through Runtime Manager;
+- tombstones the Browser-owned VNC secret only after runtime removal succeeds;
+- leaves retained profile volumes untouched;
+- retries later when Runtime Manager or secret cleanup fails.
+
+The undeleted Browser VNC secret is the retry marker, so no second cleanup table or scheduler is introduced. Temporary profile data has no named volume and is removed with the Chromium runtime.
 
 ## Deterministic display
 
@@ -104,7 +139,8 @@ On normal exit, interruption or termination it:
 
 - terminates all recorded child processes;
 - waits for them to exit;
-- removes the complete temporary profile, logs and VNC password file;
+- removes the complete temporary runtime directory, logs and VNC password file;
+- preserves an explicitly mounted retained profile directory;
 - returns Chromium's exit code when Chromium ends normally.
 
 The health probe requires all four processes and the local IPv4 VNC port. It has a 30-second startup grace period and becomes unhealthy after three failed bounded checks.
@@ -128,4 +164,4 @@ It:
 7. creates a GitHub provenance attestation for the image digest;
 8. uploads the exact digest reference as retained workflow evidence.
 
-No `latest` tag is created. BRW-003 must use the recorded `repository@sha256:digest` reference, never the mutable version tag alone.
+No `latest` tag is created. BRW-003 uses the recorded `repository@sha256:digest` reference, never the mutable version tag alone.
