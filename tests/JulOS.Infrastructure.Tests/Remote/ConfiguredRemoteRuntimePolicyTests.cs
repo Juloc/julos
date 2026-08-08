@@ -36,20 +36,20 @@ public sealed class ConfiguredRemoteRuntimePolicyTests
     {
         var profile = NetworkProfile() with
         {
-            AllowedTargetPatterns = ["julos-browser-*"],
+            AllowedTargetPatterns = ["julos-interactive-*"],
         };
         var policy = new ConfiguredRemoteRuntimePolicy([Provider()], [profile]);
 
         _ = policy.Resolve(
             "rdp",
             NetworkProfileId,
-            new RemoteTargetContract("julos-browser-a1b2c3", 3389));
+            new RemoteTargetContract("julos-interactive-a1b2c3", 3389));
 
         var failure = Assert.ThrowsExactly<RemoteRuntimePolicyException>(() =>
             policy.Resolve(
                 "rdp",
                 NetworkProfileId,
-                new RemoteTargetContract("other-browser-a1b2c3", 3389)));
+                new RemoteTargetContract("other-interactive-a1b2c3", 3389)));
         Assert.AreEqual(RemoteSessionFailureCodes.TargetInvalid, failure.Code);
     }
 
