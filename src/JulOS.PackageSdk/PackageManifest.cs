@@ -12,19 +12,6 @@ public static class PackageManifestSchema
 }
 
 /// <summary>The signed declaration of one JulOS package.</summary>
-/// <param name="SchemaVersion">Manifest schema version.</param>
-/// <param name="PackageId">Stable reverse-DNS package identity.</param>
-/// <param name="Version">Package semantic version.</param>
-/// <param name="PublisherId">Trusted publisher identity.</param>
-/// <param name="DisplayNameKey">Localized display-name resource key.</param>
-/// <param name="DescriptionKey">Localized description resource key.</param>
-/// <param name="Runtime">Declared runtime requirements.</param>
-/// <param name="Permissions">Explicitly requested permission names.</param>
-/// <param name="Applications">Applications exported by the package.</param>
-/// <param name="Widgets">Widgets exported by the package.</param>
-/// <param name="Capabilities">Capabilities provided or required by the package.</param>
-/// <param name="Migrations">Versioned package migration declarations.</param>
-/// <param name="Frontend">Optional signed frontend module declaration.</param>
 public sealed record PackageManifest(
     string SchemaVersion,
     string PackageId,
@@ -41,13 +28,6 @@ public sealed record PackageManifest(
     PackageFrontendManifest? Frontend);
 
 /// <summary>Runtime requirements declared by a package.</summary>
-/// <param name="Kind">Runtime kind: none, container or process.</param>
-/// <param name="Image">Immutable container image reference when applicable.</param>
-/// <param name="EntryPoint">Package-owned process entry point when applicable.</param>
-/// <param name="MemoryLimitMegabytes">Maximum runtime memory in MiB.</param>
-/// <param name="CpuLimit">Maximum runtime CPU allocation.</param>
-/// <param name="StartupTimeoutSeconds">Maximum startup duration.</param>
-/// <param name="NetworkAccess">Whether the approved runtime network is required.</param>
 public sealed record PackageRuntimeManifest(
     string Kind,
     string? Image,
@@ -58,14 +38,6 @@ public sealed record PackageRuntimeManifest(
     bool NetworkAccess);
 
 /// <summary>One application exported by a package.</summary>
-/// <param name="StableKey">Package-scoped stable application key.</param>
-/// <param name="DisplayNameKey">Localized display-name resource key.</param>
-/// <param name="InstancePolicy">Single-user, single-target or multiple-instance policy.</param>
-/// <param name="DefaultWidth">Default window width.</param>
-/// <param name="DefaultHeight">Default window height.</param>
-/// <param name="MinimumWidth">Minimum usable window width.</param>
-/// <param name="MinimumHeight">Minimum usable window height.</param>
-/// <param name="Viewports">Supported desktop viewport classes.</param>
 public sealed record PackageApplicationManifest(
     string StableKey,
     string DisplayNameKey,
@@ -74,14 +46,10 @@ public sealed record PackageApplicationManifest(
     int DefaultHeight,
     int MinimumWidth,
     int MinimumHeight,
-    IReadOnlyList<string> Viewports);
+    IReadOnlyList<string> Viewports,
+    string ElementName);
 
 /// <summary>One widget exported by a package.</summary>
-/// <param name="StableKey">Package-scoped stable widget key.</param>
-/// <param name="DisplayNameKey">Localized display-name resource key.</param>
-/// <param name="ElementName">Registered custom-element name.</param>
-/// <param name="Sizes">Supported widget size variants.</param>
-/// <param name="DefaultSize">Default widget size.</param>
 public sealed record PackageWidgetManifest(
     string StableKey,
     string DisplayNameKey,
@@ -90,10 +58,6 @@ public sealed record PackageWidgetManifest(
     string DefaultSize);
 
 /// <summary>One capability provided or required by a package.</summary>
-/// <param name="Name">Capability identity.</param>
-/// <param name="Direction">Provides or requires direction.</param>
-/// <param name="ContractVersion">Capability contract version.</param>
-/// <param name="Required">Whether absence blocks package enablement.</param>
 public sealed record PackageCapabilityManifest(
     string Name,
     string Direction,
@@ -101,10 +65,6 @@ public sealed record PackageCapabilityManifest(
     bool Required);
 
 /// <summary>One package migration declaration.</summary>
-/// <param name="MigrationId">Stable migration identity.</param>
-/// <param name="Resource">Migrated resource type.</param>
-/// <param name="Reversible">Whether automatic rollback is safe.</param>
-/// <param name="Digest">SHA-256 digest of the migration content.</param>
 public sealed record PackageMigrationManifest(
     string MigrationId,
     string Resource,
@@ -112,9 +72,6 @@ public sealed record PackageMigrationManifest(
     string Digest);
 
 /// <summary>Signed browser frontend exported by a package.</summary>
-/// <param name="ModulePath">Package-relative JavaScript module path.</param>
-/// <param name="Sha256">Expected module SHA-256 digest.</param>
-/// <param name="ExportedElements">Custom elements registered by the module.</param>
 public sealed record PackageFrontendManifest(
     string ModulePath,
     string Sha256,
@@ -123,10 +80,10 @@ public sealed record PackageFrontendManifest(
 /// <summary>Raised when a package manifest violates the public schema or rules.</summary>
 public sealed class PackageManifestException : Exception
 {
-    /// <summary>Creates a package manifest validation failure.</summary>
+    /// <summary>Creates a manifest validation failure.</summary>
     /// <param name="code">Stable machine-readable failure code.</param>
-    /// <param name="message">Caller-safe explanation.</param>
-    /// <param name="innerException">Optional parsing cause retained server-side.</param>
+    /// <param name="message">Caller-safe validation detail.</param>
+    /// <param name="innerException">Optional parsing cause.</param>
     public PackageManifestException(string code, string message, Exception? innerException = null)
         : base(message, innerException)
     {
@@ -148,8 +105,8 @@ public static partial class PackageManifestReader
     };
 
     /// <summary>Reads and validates one manifest stream.</summary>
-    /// <param name="stream">UTF-8 JSON manifest stream.</param>
-    /// <returns>The validated manifest.</returns>
+    /// <param name="stream">Manifest JSON stream.</param>
+    /// <returns>The validated package manifest.</returns>
     public static PackageManifest Read(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -176,7 +133,7 @@ public static partial class PackageManifestReader
         return manifest;
     }
 
-    /// <summary>Validates one materialized package manifest.</summary>
+    /// <summary>Validates one package manifest against the supported schema and package rules.</summary>
     /// <param name="manifest">Manifest to validate.</param>
     public static void Validate(PackageManifest manifest)
     {
@@ -197,9 +154,7 @@ public static partial class PackageManifestReader
 
         if (manifest.Permissions.Count == 0)
         {
-            throw new PackageManifestException(
-                "package.permissions_missing",
-                "Every package must explicitly declare its required permissions.");
+            Fail("package.permissions_missing", "Every package must explicitly declare its required permissions.");
         }
         EnsureDistinct(manifest.Permissions, "package.permission_duplicate");
         foreach (var permission in manifest.Permissions)
@@ -231,10 +186,7 @@ public static partial class PackageManifestReader
             ValidateMigration(migration);
         }
 
-        if (manifest.Frontend is not null)
-        {
-            ValidateFrontend(manifest.Frontend);
-        }
+        ValidateFrontendBindings(manifest);
     }
 
     private static void ValidateRuntime(PackageRuntimeManifest runtime)
@@ -248,7 +200,8 @@ public static partial class PackageManifestReader
         {
             Fail("package.runtime_image_missing", "A container package must declare a pinned image.");
         }
-        if (runtime.Image is not null && (runtime.Image.Contains(":latest", StringComparison.OrdinalIgnoreCase) || !runtime.Image.Contains('@')))
+        if (runtime.Image is not null
+            && (runtime.Image.Contains(":latest", StringComparison.OrdinalIgnoreCase) || !runtime.Image.Contains('@')))
         {
             Fail("package.runtime_image_unpinned", "Container images must be pinned by digest.");
         }
@@ -268,6 +221,10 @@ public static partial class PackageManifestReader
     {
         ValidateStableKey(application.StableKey);
         ValidateResourceKey(application.DisplayNameKey, nameof(application.DisplayNameKey));
+        if (!CustomElementName().IsMatch(application.ElementName))
+        {
+            Fail("package.application_element_invalid", "Application custom-element name is invalid.");
+        }
         if (application.InstancePolicy is not ("single-instance-per-user" or "single-instance-per-target" or "multiple-instances"))
         {
             Fail("package.application_policy_invalid", "Application instance policy is invalid.");
@@ -323,6 +280,34 @@ public static partial class PackageManifestReader
         ValidateSha256(migration.Digest);
     }
 
+    private static void ValidateFrontendBindings(PackageManifest manifest)
+    {
+        var surfaceElements = manifest.Applications.Select(application => application.ElementName)
+            .Concat(manifest.Widgets.Select(widget => widget.ElementName))
+            .ToArray();
+        EnsureDistinct(surfaceElements, "package.frontend_surface_element_duplicate");
+
+        if (manifest.Frontend is null)
+        {
+            if (surfaceElements.Length > 0)
+            {
+                Fail("package.frontend_missing", "Packages with applications or widgets must declare a frontend module.");
+            }
+            return;
+        }
+
+        ValidateFrontend(manifest.Frontend);
+        foreach (var elementName in surfaceElements)
+        {
+            if (!manifest.Frontend.ExportedElements.Contains(elementName, StringComparer.Ordinal))
+            {
+                Fail(
+                    "package.frontend_surface_missing",
+                    $"Frontend exported elements do not include declared surface '{elementName}'.");
+            }
+        }
+    }
+
     private static void ValidateFrontend(PackageFrontendManifest frontend)
     {
         if (string.IsNullOrWhiteSpace(frontend.ModulePath)
@@ -332,7 +317,8 @@ public static partial class PackageManifestReader
             Fail("package.frontend_path_invalid", "Frontend module path is invalid.");
         }
         ValidateSha256(frontend.Sha256);
-        if (frontend.ExportedElements.Count == 0 || frontend.ExportedElements.Any(element => !CustomElementName().IsMatch(element)))
+        if (frontend.ExportedElements.Count == 0
+            || frontend.ExportedElements.Any(element => !CustomElementName().IsMatch(element)))
         {
             Fail("package.frontend_elements_invalid", "Frontend exported element names are invalid.");
         }

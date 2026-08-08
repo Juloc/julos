@@ -1,4 +1,5 @@
 ﻿using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using JulOS.Application.Concurrency;
@@ -126,6 +127,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             }
 
             await using var artifact = await BufferArtifactAsync(input.Artifact, cancellationToken).ConfigureAwait(false);
+            var verifiedArtifact = VerifyArtifact(artifact, input);
             using var archive = new ZipArchive(artifact, ZipArchiveMode.Read, leaveOpen: true);
             var manifestEntry = archive.GetEntry("manifest.json")
                 ?? throw Failure("package.manifest_missing", "Package archive has no manifest.json.");
@@ -137,12 +139,6 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 manifestBytes = manifestBuffer.ToArray();
             }
 
-            _ = this.verifier.Verify(
-                manifestBytes,
-                input.Signature,
-                input.ExpectedDigest,
-                input.PublisherId,
-                input.PublisherKeyId);
             PackageManifest manifest;
             using (var manifestStream = new MemoryStream(manifestBytes, writable: false))
             {
@@ -185,7 +181,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 var metadata = new InstalledPackageMetadata(
                     manifest.PackageId,
                     manifest.Version,
-                    input.ExpectedDigest,
+                    verifiedArtifact.DigestSha256,
                     input.PublisherId,
                     input.PublisherKeyId,
                     manifest,
@@ -194,6 +190,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                     WorkerHealthy: false,
                     database);
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Installed;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -291,6 +293,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                     cancellationToken).ConfigureAwait(false);
                 metadata = metadata with { WorkerHealthy = true };
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    metadata.Manifest,
+                    enabled: true,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Enabled;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -332,6 +340,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 await this.workers.StopAsync(packageId, cancellationToken).ConfigureAwait(false);
                 metadata = metadata with { WorkerHealthy = false };
                 await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    metadata.Manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
                 row.State = PackageInstallationState.Disabled;
                 row.Revision = checked(row.Revision + 1);
                 await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -383,6 +397,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             {
                 Directory.Delete(packagePath, recursive: true);
             }
+            await PackageApplicationRegistration.SynchronizeAsync(
+                this.context,
+                metadata.Manifest,
+                enabled: false,
+                this.timeProvider,
+                cancellationToken).ConfigureAwait(false);
             this.context.PackageInstallations.Remove(row);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new PackageInstallationSnapshot(
@@ -413,6 +433,12 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
     {
         metadata = metadata with { WorkerHealthy = false };
         await WriteMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
+        await PackageApplicationRegistration.SynchronizeAsync(
+            this.context,
+            metadata.Manifest,
+            enabled: false,
+            this.timeProvider,
+            cancellationToken).ConfigureAwait(false);
         row.State = PackageInstallationState.Faulted;
         row.FaultCode = code;
         row.FaultDetail = SafeDetail(exception);
@@ -479,6 +505,26 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
         File.Move(temporary, path, overwrite: true);
+    }
+
+    private VerifiedPackageArtifact VerifyArtifact(MemoryStream artifact, PackageInstallInput input)
+    {
+        if (!artifact.TryGetBuffer(out var buffer))
+        {
+            throw Failure("package.artifact_buffer_invalid", "Package archive could not be verified.");
+        }
+
+        var artifactBytes = buffer.AsSpan(0, checked((int)artifact.Length));
+        var observedDigest = Convert.ToHexStringLower(SHA256.HashData(artifactBytes));
+        var expectedDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
+            ? observedDigest
+            : input.ExpectedDigest;
+        return this.verifier.Verify(
+            artifactBytes,
+            input.Signature,
+            expectedDigest,
+            input.PublisherId,
+            input.PublisherKeyId);
     }
 
     private static async Task<MemoryStream> BufferArtifactAsync(Stream source, CancellationToken cancellationToken)
@@ -551,7 +597,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         {
             throw Failure("package.operation_key_invalid", "Package operation key is invalid.");
         }
-        var safe = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(operationKey)));
+        var safe = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(operationKey)));
         return Path.Combine(this.packageRoot, ".operations", safe + ".txt");
     }
 

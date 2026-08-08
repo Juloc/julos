@@ -11,7 +11,7 @@
 /// <param name="FaultedAtUtc">Fault observation time.</param>
 /// <param name="ConfigurationRequired">Whether configuration is required before enablement.</param>
 /// <param name="WorkerHealthy">Whether the package worker is currently healthy.</param>
-/// <param name="ArtifactDigest">Verified artifact digest.</param>
+/// <param name="ArtifactDigest">Verified SHA-256 digest of the complete signed package archive.</param>
 public sealed record PackageInstallationSnapshot(
     Guid InstallationId,
     string PackageId,
@@ -26,16 +26,16 @@ public sealed record PackageInstallationSnapshot(
     string ArtifactDigest);
 
 /// <summary>Verified package installation input.</summary>
-/// <param name="Artifact">Package artifact stream.</param>
-/// <param name="Signature">Publisher signature bytes.</param>
-/// <param name="ExpectedDigest">Expected SHA-256 artifact digest.</param>
+/// <param name="Artifact">Complete package archive stream.</param>
+/// <param name="Signature">Publisher signature over the exact package archive bytes.</param>
+/// <param name="ExpectedDigest">Optional expected SHA-256 digest of the complete package archive.</param>
 /// <param name="PublisherId">Trusted publisher identity.</param>
 /// <param name="PublisherKeyId">Trusted publisher key identity.</param>
 /// <param name="OperationKey">Per-caller idempotency key.</param>
 public sealed record PackageInstallInput(
     Stream Artifact,
     byte[] Signature,
-    string ExpectedDigest,
+    string? ExpectedDigest,
     string PublisherId,
     string PublisherKeyId,
     string OperationKey);

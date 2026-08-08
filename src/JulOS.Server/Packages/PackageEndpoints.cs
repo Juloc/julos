@@ -15,7 +15,7 @@ internal sealed class InstallPackageForm
 
     public required IFormFile Signature { get; init; }
 
-    public required string ExpectedDigest { get; init; }
+    public string? ExpectedDigest { get; init; }
 
     public required string PublisherId { get; init; }
 

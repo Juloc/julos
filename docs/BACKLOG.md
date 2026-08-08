@@ -11,9 +11,13 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | Phase 0 | Repository and engineering foundation | Done | Solution, architecture gates, validation, local stack, CI and version metadata. |
 | Phase 1 | Core platform model | Done | Packages, applications, layouts, sessions, observability, permissions and Agents. |
 | Phase 2 | Persistence, authentication and core APIs | Done | PostgreSQL, auth, authorization, profile, errors, operations, secrets, audit and events. |
-| DESK-001..012 | Desktop shell | Done | Shell, windows, pointer interactions, snapping, taskbar, launcher, persistence, responsive modes, observability, widgets and accessibility. |
+| DESK-001..012 | Desktop shell foundation | Done | Shell, windows, pointer interactions, snapping, taskbar, launcher, persistence, responsive modes, observability, widgets and accessibility. |
+| DESK-013 | Browser first-run and sign-in | Done | Fresh deployments can create the initial administrator and subsequent sessions can sign in entirely through the production Desktop shell. |
+| DESK-014 | Production shell composition | Done | Enabled package apps and persisted widgets use the existing launcher/window/taskbar/frontend/persistence stack; Core Settings, Package Manager, Agent status, notifications and problems are normal desktop windows, and package lifecycle changes refresh the catalog live. |
+| DESK-015 | Cross-platform desktop interaction pass | In progress | Shared responsive rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard handling and the existing Alt-Tab switcher are wired into production; repository validation plus deployed Windows/macOS/touch acceptance remain. |
+| DESK-016 | Appearance and personalization completion | Planned | Final Fluent 2 consistency, accent/personalization details and appearance acceptance follow DESK-015. |
 | REL-ALPHA-007 | Published Desktop web root | Done | The container publishes Desktop assets through the Server web root and the release smoke test verifies `/` plus the main ES module. |
-| Phase 3 | Desktop shell | Done | Complete Desktop foundation is implemented. |
+| Phase 3 | Desktop shell | Done | Complete Desktop foundation is implemented; DESK-013 through DESK-016 are the release-facing UX completion gate. |
 | PKG-001 | Package manifest schema | Done | Versioned strict manifest, runtime, permissions, apps, widgets, capabilities, migrations and frontend declarations. |
 | PKG-002 | Artifact verification | Done | Digest and trusted publisher signature verification reject modified or untrusted artifacts. |
 | PKG-003 | Runtime Manager | Done | Authenticated sidecar controls only allowlisted JulOS-owned Docker runtimes. |

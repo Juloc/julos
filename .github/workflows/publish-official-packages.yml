@@ -1,0 +1,143 @@
+name: Publish official packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      key_id:
+        description: Trusted JulOS package signing key ID
+        required: true
+        default: official-alpha-2026
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-sign:
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+      PACKAGE_PUBLISHER_ID: juloc-official
+      PACKAGE_KEY_ID: ${{ inputs.key_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: packages/JulOS.Remote/frontend/package-lock.json
+
+      - name: Validate signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${PACKAGE_SIGNING_KEY}" ]]; then
+            echo "Repository secret JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM is required." >&2
+            exit 1
+          fi
+          if [[ -z "${PACKAGE_KEY_ID}" ]]; then
+            echo "A non-empty package signing key ID is required." >&2
+            exit 1
+          fi
+
+      - name: Build Remote frontend
+        working-directory: packages/JulOS.Remote/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Validate repository
+        run: node tools/validate.mjs
+
+      - name: Build official package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          bash tools/build-package-artifact.sh packages/JulOS.HostMetrics artifacts/JulOS.HostMetrics-1.0.0.zip
+          bash tools/build-package-artifact.sh packages/JulOS.Remote artifacts/JulOS.Remote-1.0.0.zip
+          bash tools/build-package-artifact.sh packages/JulOS.Browser artifacts/JulOS.Browser-1.0.0.zip
+
+      - name: Sign package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import crypto from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const privateKeyPem = process.env.PACKAGE_SIGNING_KEY;
+          const publisherId = process.env.PACKAGE_PUBLISHER_ID;
+          const keyId = process.env.PACKAGE_KEY_ID;
+          if (!privateKeyPem || !publisherId || !keyId) {
+            throw new Error('Package signing configuration is incomplete.');
+          }
+
+          const privateKey = crypto.createPrivateKey(privateKeyPem);
+          if (privateKey.asymmetricKeyType !== 'ec') {
+            throw new Error('Package signing key must be an EC key.');
+          }
+          const details = privateKey.asymmetricKeyDetails;
+          if (details?.namedCurve !== 'prime256v1') {
+            throw new Error('Package signing key must use ECDSA P-256.');
+          }
+
+          const publicKey = crypto.createPublicKey(privateKey);
+          fs.writeFileSync(
+            'artifacts/juloc-package-signing-public.pem',
+            publicKey.export({ type: 'spki', format: 'pem' }),
+          );
+
+          const archives = fs.readdirSync('artifacts')
+            .filter((name) => /^JulOS\..+\.zip$/u.test(name))
+            .sort();
+
+          for (const archiveName of archives) {
+            const archivePath = path.join('artifacts', archiveName);
+            const archive = fs.readFileSync(archivePath);
+            const signature = crypto.sign('sha256', archive, {
+              key: privateKey,
+              dsaEncoding: 'ieee-p1363',
+            });
+            const valid = crypto.verify('sha256', archive, {
+              key: publicKey,
+              dsaEncoding: 'ieee-p1363',
+            }, signature);
+            if (!valid) {
+              throw new Error(`Generated signature failed verification for ${archiveName}.`);
+            }
+
+            fs.writeFileSync(`${archivePath}.sig`, signature);
+            const sha256 = crypto.createHash('sha256').update(archive).digest('hex');
+            fs.writeFileSync(`${archivePath}.sha256`, `${sha256}  ${archiveName}\n`);
+            fs.writeFileSync(`${archivePath}.json`, `${JSON.stringify({
+              publisherId,
+              keyId,
+              sha256,
+              signatureFormat: 'ieee-p1363',
+              signatureFile: `${archiveName}.sig`,
+            }, null, 2)}\n`);
+          }
+          NODE
+
+      - name: Upload signed package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: julos-official-packages
+          path: |
+            artifacts/JulOS.*.zip
+            artifacts/JulOS.*.zip.sig
+            artifacts/JulOS.*.zip.sha256
+            artifacts/JulOS.*.zip.json
+            artifacts/juloc-package-signing-public.pem
+          if-no-files-found: error
+          retention-days: 30

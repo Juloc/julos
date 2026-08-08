@@ -162,6 +162,7 @@ internal sealed class ProcessPackageWorkerSupervisor : IPackageWorkerSupervisor,
         if (database is not null)
         {
             start.Environment["JULOS_PACKAGE_DATABASE"] = PackageConnectionString(database);
+            start.Environment["JULOS_PACKAGE_DATABASE_PROVIDER"] = database.Provider;
             start.Environment["JULOS_PACKAGE_DATABASE_SCHEMA"] = database.Schema;
         }
 

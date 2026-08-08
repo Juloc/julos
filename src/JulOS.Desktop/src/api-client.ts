@@ -50,6 +50,7 @@ export class JulOsApiError extends Error {
 export interface ApiRequestOptions {
   readonly method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly body?: unknown;
+  readonly formData?: FormData;
   readonly headers?: HeadersInit;
   readonly signal?: AbortSignal;
 }
@@ -101,6 +102,10 @@ export class JulOsApiClient {
 
   async #request(path: string, options: ApiRequestOptions): Promise<Response> {
     validatePath(path);
+    if (options.body !== undefined && options.formData !== undefined) {
+      throw new TypeError('A JulOS API request cannot contain JSON and multipart bodies together.');
+    }
+
     const headers = new Headers(options.headers);
     if (headers.has('Authorization')) {
       throw new TypeError('Raw authentication headers are not accepted by the JulOS API client.');
@@ -113,7 +118,9 @@ export class JulOsApiClient {
       headers,
     };
 
-    if (options.body !== undefined) {
+    if (options.formData !== undefined) {
+      request.body = options.formData;
+    } else if (options.body !== undefined) {
       headers.set('Content-Type', 'application/json');
       request.body = JSON.stringify(options.body);
     }

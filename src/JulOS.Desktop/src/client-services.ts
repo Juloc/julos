@@ -1,4 +1,5 @@
-﻿import {
+﻿import { desktopNotificationCenter } from './desktop-observability.js';
+import {
   RealtimeEventService,
   type RealtimeConnection,
   type RealtimeEventEnvelope,
@@ -18,7 +19,10 @@ export class DesktopClientServices {
     this.#refreshAuthoritativeState = refreshAuthoritativeState;
     this.#realtime = new RealtimeEventService(
       connection,
-      applyEvent,
+      async (event) => {
+        desktopNotificationCenter.ingestEvent(event);
+        await applyEvent(event);
+      },
       refreshAuthoritativeState,
     );
   }
