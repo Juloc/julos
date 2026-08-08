@@ -228,14 +228,14 @@ export class DesktopRuntime {
     this.#renderLauncher(query);
   }
 
-  public openApplication(applicationId: string): void {
+  public openApplication(applicationId: string, targetId?: string): void {
     const launcher = this.#launcher;
     if (launcher === null) {
       return;
     }
-    const result = launcher.search('').find((entry) =>
-      entry.kind === 'application' && entry.applicationId === applicationId,
-    );
+    const result = launcher.search('').find((entry) => targetId === undefined
+      ? entry.kind === 'application' && entry.applicationId === applicationId
+      : entry.kind === 'target' && entry.applicationId === applicationId && entry.targetId === targetId);
     if (result !== undefined) {
       void this.#launch(result);
     }
@@ -278,7 +278,15 @@ export class DesktopRuntime {
         defaultBounds: defaultBounds(application, this.#usableArea()),
         requiredPermissions: [],
       })),
-      targets: [],
+      targets: applications.flatMap((application) => (application.launchTargets ?? []).map((target) => ({
+        targetId: target.launchTargetId,
+        applicationId: application.applicationDefinitionId,
+        title: target.displayName,
+        description: target.externalIdentity,
+        keywords: [application.stableKey, application.packageId, target.externalIdentity],
+        state: 'approved' as const,
+        requiredPermissions: [],
+      }))),
       commands: [],
     }, []);
   }
@@ -308,13 +316,16 @@ export class DesktopRuntime {
     }
 
     for (const result of launcher.search(query)) {
-      if (result.kind !== 'application' || result.applicationId === CoreApplicationIds.settings) {
+      if ((result.kind !== 'application' && result.kind !== 'target') || result.applicationId === CoreApplicationIds.settings) {
         continue;
       }
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'launcher-entry application-entry';
       button.dataset['applicationId'] = result.applicationId ?? result.id;
+      if (result.targetId !== null) {
+        button.dataset['launchTargetId'] = result.targetId;
+      }
       const mark = document.createElement('span');
       mark.className = 'application-glyph';
       mark.textContent = result.title.slice(0, 1).toLocaleUpperCase();
@@ -388,7 +399,25 @@ export class DesktopRuntime {
       theme: resolvedTheme(),
       invokeCapability: (name, operation, payload) =>
         this.#capabilities.invoke(packageId, name, operation, payload),
-      openApplication: (applicationId) => this.openApplication(applicationId),
+      openApplication: (applicationId, targetId) => this.openApplication(applicationId, targetId),
+      saveLaunchTarget: async (applicationStableKey, externalIdentity, displayName) => {
+        const target = await this.#api.saveLaunchTarget(
+          packageId,
+          applicationStableKey,
+          externalIdentity,
+          displayName,
+        );
+        await this.#refreshPackageCatalog();
+        return {
+          launchTargetId: target.launchTargetId,
+          externalIdentity: target.externalIdentity,
+          displayName: target.displayName,
+        };
+      },
+      deleteLaunchTarget: async (launchTargetId) => {
+        await this.#api.deleteLaunchTarget(packageId, launchTargetId);
+        await this.#refreshPackageCatalog();
+      },
     });
   }
 
@@ -492,12 +521,15 @@ export class DesktopRuntime {
             height: persisted.height,
           }, area, application.minimumWidth, application.minimumHeight)
         : restoreBounds;
+      const launchTarget = persisted.launchTargetId === null
+        ? undefined
+        : (application.launchTargets ?? []).find((target) => target.launchTargetId === persisted.launchTargetId);
 
       this.#store.open({
         id: persisted.windowId,
         applicationId: persisted.applicationDefinitionId,
         launchTargetId: persisted.launchTargetId,
-        title: applicationTitle(application),
+        title: launchTarget?.displayName ?? applicationTitle(application),
         bounds: normalBounds,
       });
 
@@ -746,7 +778,19 @@ export class DesktopRuntime {
     if (!customElements.get(application.elementName)) {
       return;
     }
-    const surface = this.#frontendHost.createHostElement(application.elementName);
+    const target = window.launchTargetId === null
+      ? null
+      : (application.launchTargets ?? []).find((item) => item.launchTargetId === window.launchTargetId) ?? null;
+    const surface = this.#frontendHost.createHostElement(
+      application.elementName,
+      target === null
+        ? null
+        : {
+            launchTargetId: target.launchTargetId,
+            externalIdentity: target.externalIdentity,
+            displayName: target.displayName,
+          },
+    );
     body.replaceChildren(surface);
     this.#windowSurfaces.set(window.id, surface);
   }
