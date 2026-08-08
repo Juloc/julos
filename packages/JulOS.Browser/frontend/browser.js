@@ -16,11 +16,13 @@
       form.addEventListener('submit', (event) => {
         event.preventDefault();
         status.textContent = context.language === 'de' ? 'Sitzung wird gestartet' : 'Starting session';
-        void context.invokeCapability('browser.session', 'create', {
+        void context.invokeCapability('interactive.session', 'create', {
           operationKey: crypto.randomUUID(),
-          initialUrl: address.value,
-          profileMode: 'temporary',
-          profileId: null,
+          request: {
+            initialUrl: address.value,
+            profileMode: 'temporary',
+            profileId: null,
+          },
         }).then((session) => {
           status.textContent = session.state ?? 'created';
         }).catch(() => {
