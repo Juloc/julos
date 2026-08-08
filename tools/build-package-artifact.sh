@@ -15,9 +15,9 @@ if [[ ! -f "$manifest" ]]; then
   exit 66
 fi
 
-package_id="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(m.packageId)' "$manifest")"
-package_version="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(m.version)' "$manifest")"
-runtime_kind="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(m.runtime.kind)' "$manifest")"
+package_id="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8").replace(/^﻿/,"")); process.stdout.write(m.PackageId)' "$manifest")"
+package_version="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8").replace(/^﻿/,"")); process.stdout.write(m.Version)' "$manifest")"
+runtime_kind="$(node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8").replace(/^﻿/,"")); process.stdout.write(m.Runtime.Kind)' "$manifest")"
 
 if [[ -z "$package_id" || -z "$package_version" ]]; then
   echo "package manifest is missing packageId or version" >&2

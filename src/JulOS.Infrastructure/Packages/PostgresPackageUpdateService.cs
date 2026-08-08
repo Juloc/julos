@@ -273,16 +273,28 @@ internal sealed class PostgresPackageUpdateService : IPackageUpdateService, IDis
             await stream.CopyToAsync(manifestBuffer, cancellationToken).ConfigureAwait(false);
             manifestBytes = manifestBuffer.ToArray();
         }
-        _ = this.verifier.Verify(
-            manifestBytes,
-            input.Signature,
-            input.ExpectedDigest,
-            input.PublisherId,
-            input.PublisherKeyId);
-        PackageManifest manifest;
-        using (var stream = new MemoryStream(manifestBytes, writable: false))
+        try
         {
+            _ = this.verifier.Verify(
+                manifestBytes,
+                input.Signature,
+                input.ExpectedDigest,
+                input.PublisherId,
+                input.PublisherKeyId);
+        }
+        catch (PackageArtifactVerificationException exception)
+        {
+            throw Failure(exception.Code, exception.Message, exception);
+        }
+        PackageManifest manifest;
+        try
+        {
+            using var stream = new MemoryStream(manifestBytes, writable: false);
             manifest = PackageManifestReader.Read(stream);
+        }
+        catch (PackageManifestException exception)
+        {
+            throw Failure(exception.Code, exception.Message, exception);
         }
         return new CandidateArtifact(buffer, archive, manifest);
     }

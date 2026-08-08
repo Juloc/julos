@@ -1,11 +1,35 @@
 ﻿using JulOS.Server.Errors;
 
+using Microsoft.AspNetCore.Http;
+
 namespace JulOS.Integration.Tests.Errors;
 
 /// <summary>Verifies which caller-supplied correlation identifiers are safe to echo.</summary>
 [TestClass]
 public sealed class CorrelationIdTests
 {
+    [TestMethod]
+    public void GetReturnsTheValueSetByTheMiddleware()
+    {
+        var context = new DefaultHttpContext();
+        CorrelationId.Set(context, "abc-123_XYZ");
+
+        Assert.AreEqual("abc-123_XYZ", CorrelationId.Get(context));
+    }
+
+    [TestMethod]
+    public void GetSanitizesTheDefaultKestrelTraceIdentifierFormat()
+    {
+        // Kestrel's default TraceIdentifier joins a connection ID and a request ordinal
+        // with a colon, which downstream consumers such as the audit correlation
+        // identifier reject. This reproduces that shape without the middleware having run.
+        var context = new DefaultHttpContext { TraceIdentifier = "0HN7VJ8Q2K9RO:00000001" };
+
+        var correlationId = CorrelationId.Get(context);
+
+        Assert.IsFalse(correlationId.Contains(':', StringComparison.Ordinal));
+        Assert.IsTrue(correlationId.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'));
+    }
     [TestMethod]
     public void AnUnreservedValueIsAccepted()
     {

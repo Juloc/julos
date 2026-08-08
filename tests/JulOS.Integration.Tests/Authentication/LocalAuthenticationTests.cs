@@ -218,6 +218,36 @@ public sealed class LocalAuthenticationTests
     }
 
     [TestMethod]
+    public async Task AntiforgeryProtectedEndpointsWorkOverPlainHttp()
+    {
+        var httpClientOptions = new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = true,
+        };
+
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        using var host = new ServerHost(database.ConnectionString);
+        using var client = host.CreateClient(httpClientOptions);
+
+        using var setup = await client
+            .PostAsJsonAsync("/api/v1/auth/setup", ValidAdministrator())
+            .ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Created, setup.StatusCode);
+
+        var token = await client
+            .GetFromJsonAsync<AntiforgeryTokenResponse>("/api/v1/auth/antiforgery")
+            .ConfigureAwait(false);
+        Assert.IsNotNull(token);
+
+        using var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/logout");
+        logoutRequest.Headers.Add(token.HeaderName, token.Token);
+        using var logout = await client.SendAsync(logoutRequest).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.NoContent, logout.StatusCode);
+    }
+
+    [TestMethod]
     public void SessionTimeoutUsesTheConfiguredValue()
     {
         using var host = new ServerHost(
@@ -231,7 +261,7 @@ public sealed class LocalAuthenticationTests
 
         Assert.AreEqual(TimeSpan.FromMinutes(17), applicationCookie.ExpireTimeSpan);
         Assert.IsTrue(applicationCookie.SlidingExpiration);
-        Assert.AreEqual(CookieSecurePolicy.Always, applicationCookie.Cookie.SecurePolicy);
+        Assert.AreEqual(CookieSecurePolicy.SameAsRequest, applicationCookie.Cookie.SecurePolicy);
         Assert.AreEqual(SameSiteMode.Strict, applicationCookie.Cookie.SameSite);
         Assert.IsTrue(applicationCookie.Cookie.HttpOnly);
     }

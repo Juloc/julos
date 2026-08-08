@@ -5,6 +5,7 @@ using JulOS.Infrastructure.Packages;
 using JulOS.PackageSdk;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
+using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Antiforgery;
 
@@ -59,7 +60,7 @@ internal static class PackageCapabilityEndpoints
                     grant.CapabilityName,
                     grant.ContractVersion,
                     operation,
-                    context.TraceIdentifier,
+                    CorrelationId.Get(context),
                     payload,
                     timeProvider.GetUtcNow().AddSeconds(10)),
                 cancellationToken).ConfigureAwait(false);

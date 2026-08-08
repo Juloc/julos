@@ -35,15 +35,18 @@ internal static class CorrelationId
     /// Returns the identifier of the current request.
     /// </summary>
     /// <remarks>
-    /// Falls back to the framework trace identifier. An error response without any
-    /// correlation identifier would be undiagnosable, which is worse than an identifier
-    /// that did not come from the middleware.
+    /// Falls back to the framework trace identifier when it is safe to reuse, and to a
+    /// generated identifier otherwise. The default trace identifier format contains a
+    /// colon, which downstream consumers such as the audit correlation identifier do not
+    /// accept. An error response without any correlation identifier would be
+    /// undiagnosable, which is worse than an identifier that did not come from the
+    /// middleware.
     /// </remarks>
     internal static string Get(HttpContext context)
     {
         return context.Items.TryGetValue(ItemKey, out var value) && value is string correlationId
             ? correlationId
-            : context.TraceIdentifier;
+            : Accept(context.TraceIdentifier);
     }
 
     private static bool IsSafe(string? supplied)

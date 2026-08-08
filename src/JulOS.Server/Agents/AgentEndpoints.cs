@@ -7,6 +7,7 @@ using JulOS.Application.Agents;
 using JulOS.Contracts.Agents;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
+using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
@@ -150,7 +151,7 @@ internal static class AgentEndpoints
             return TypedResults.Ok(await service.CreateEnrollmentTokenAsync(
                 RequireUserId(context.User),
                 request,
-                context.TraceIdentifier,
+                CorrelationId.Get(context),
                 context.Connection.RemoteIpAddress?.ToString(),
                 cancellationToken).ConfigureAwait(false));
         }
@@ -170,7 +171,7 @@ internal static class AgentEndpoints
         {
             var credential = await service.RedeemEnrollmentTokenAsync(
                 request,
-                context.TraceIdentifier,
+                CorrelationId.Get(context),
                 context.Connection.RemoteIpAddress?.ToString(),
                 cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(new RedeemAgentEnrollmentResponse(
@@ -221,7 +222,7 @@ internal static class AgentEndpoints
                 RequireUserId(context.User),
                 agentId,
                 revision,
-                context.TraceIdentifier,
+                CorrelationId.Get(context),
                 context.Connection.RemoteIpAddress?.ToString(),
                 cancellationToken).ConfigureAwait(false));
         }
@@ -248,7 +249,7 @@ internal static class AgentEndpoints
                     RequireUserId(context.User),
                     agentId,
                     request,
-                    context.TraceIdentifier,
+                    CorrelationId.Get(context),
                     context.Connection.RemoteIpAddress?.ToString(),
                     cancellationToken).ConfigureAwait(false));
         }

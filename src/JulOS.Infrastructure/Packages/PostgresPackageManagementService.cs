@@ -105,10 +105,38 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         var result = new List<PackageInstallationSnapshot>(rows.Length);
         foreach (var row in rows)
         {
-            result.Add(ToSnapshot(row, await ReadMetadataAsync(row.PackageId, cancellationToken).ConfigureAwait(false)));
+            InstalledPackageMetadata? metadata;
+            try
+            {
+                metadata = await ReadMetadataAsync(row.PackageId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (PackageManagementException)
+            {
+                // A row without readable metadata (for example an installation that faulted
+                // before it finished extracting an artifact) must not hide every other listed
+                // package; its own state and fault fields already describe what happened.
+                metadata = null;
+            }
+
+            result.Add(metadata is null
+                ? UnavailableMetadataSnapshot(row)
+                : ToSnapshot(row, metadata));
         }
         return result;
     }
+
+    private static PackageInstallationSnapshot UnavailableMetadataSnapshot(PackageInstallationRow row) => new(
+        row.Id,
+        row.PackageId,
+        Version: string.Empty,
+        StateName(row.State),
+        row.Revision,
+        row.FaultCode,
+        row.FaultDetail,
+        row.FaultedAtUtc,
+        ConfigurationRequired: false,
+        WorkerHealthy: false,
+        ArtifactDigest: string.Empty);
 
     public async Task<PackageInstallationSnapshot> InstallAsync(
         PackageInstallInput input,
@@ -140,9 +168,16 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             }
 
             PackageManifest manifest;
-            using (var manifestStream = new MemoryStream(manifestBytes, writable: false))
+            try
             {
+                using var manifestStream = new MemoryStream(manifestBytes, writable: false);
                 manifest = PackageManifestReader.Read(manifestStream);
+            }
+            catch (PackageManifestException exception)
+            {
+                // The reader raises its own exception type so JulOS.PackageSdk stays free of
+                // this service's contract; translate it here, the one place that calls it.
+                throw Failure(exception.Code, exception.Message, exception);
             }
             if (!string.Equals(manifest.PublisherId, input.PublisherId, StringComparison.Ordinal))
             {
@@ -374,7 +409,19 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         {
             var row = await RequireRowAsync(packageId, cancellationToken).ConfigureAwait(false);
             EnsureRevision(row, input.Revision);
-            var metadata = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
+            InstalledPackageMetadata? metadata;
+            try
+            {
+                metadata = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
+            }
+            catch (PackageManagementException)
+            {
+                // An installation that faulted before it finished extracting an artifact
+                // never registered an application or widget, so there is nothing to
+                // synchronize below; only its row and any partial files need to go.
+                metadata = null;
+            }
+
             if (row.State == PackageInstallationState.Enabled)
             {
                 await this.workers.StopAsync(packageId, cancellationToken).ConfigureAwait(false);
@@ -389,6 +436,9 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             }
 
             row.State = PackageInstallationState.Removing;
+            row.FaultCode = null;
+            row.FaultDetail = null;
+            row.FaultedAtUtc = null;
             row.Revision = checked(row.Revision + 1);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await this.storage.DropAsync(packageId, input.DeletePackageData, cancellationToken).ConfigureAwait(false);
@@ -397,18 +447,22 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             {
                 Directory.Delete(packagePath, recursive: true);
             }
-            await PackageApplicationRegistration.SynchronizeAsync(
-                this.context,
-                metadata.Manifest,
-                enabled: false,
-                this.timeProvider,
-                cancellationToken).ConfigureAwait(false);
+            if (metadata is not null)
+            {
+                await PackageApplicationRegistration.SynchronizeAsync(
+                    this.context,
+                    metadata.Manifest,
+                    enabled: false,
+                    this.timeProvider,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             this.context.PackageInstallations.Remove(row);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new PackageInstallationSnapshot(
                 row.Id,
                 packageId,
-                metadata.Version,
+                metadata?.Version ?? string.Empty,
                 "removed",
                 row.Revision,
                 null,
@@ -416,7 +470,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 null,
                 false,
                 false,
-                metadata.ArtifactDigest);
+                metadata?.ArtifactDigest ?? string.Empty);
         }
         finally
         {
@@ -486,10 +540,24 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         CancellationToken cancellationToken)
     {
         var path = MetadataPath(packageId);
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, true);
-        return await JsonSerializer.DeserializeAsync<InstalledPackageMetadata>(stream, this.jsonOptions, cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw Failure("package.metadata_invalid", "Package metadata is invalid.");
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, true);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // An installation that faulted before it finished extracting an artifact never
+            // writes this file. The row itself already carries the fault the caller needs.
+            throw Failure("package.metadata_unavailable", "Package metadata is not available.");
+        }
+
+        await using (stream.ConfigureAwait(false))
+        {
+            return await JsonSerializer.DeserializeAsync<InstalledPackageMetadata>(stream, this.jsonOptions, cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw Failure("package.metadata_invalid", "Package metadata is invalid.");
+        }
     }
 
     private async Task WriteMetadataAsync(
@@ -519,12 +587,22 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         var expectedDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
             ? observedDigest
             : input.ExpectedDigest;
-        return this.verifier.Verify(
-            artifactBytes,
-            input.Signature,
-            expectedDigest,
-            input.PublisherId,
-            input.PublisherKeyId);
+        try
+        {
+            return this.verifier.Verify(
+                artifactBytes,
+                input.Signature,
+                expectedDigest,
+                input.PublisherId,
+                input.PublisherKeyId);
+        }
+        catch (PackageArtifactVerificationException exception)
+        {
+            // The verifier raises its own exception type so it stays free of the package
+            // lifecycle contract; every caller in this service otherwise only throws or
+            // catches PackageManagementException, so translate it at this one boundary.
+            throw Failure(exception.Code, exception.Message, exception);
+        }
     }
 
     private static async Task<MemoryStream> BufferArtifactAsync(Stream source, CancellationToken cancellationToken)
@@ -560,10 +638,13 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         foreach (var entry in archive.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var isDirectoryEntry = entry.FullName.EndsWith('/');
+            var pathToValidate = isDirectoryEntry ? entry.FullName[..^1] : entry.FullName;
             if (string.IsNullOrWhiteSpace(entry.FullName)
                 || Path.IsPathRooted(entry.FullName)
                 || entry.FullName.Contains('\\')
-                || entry.FullName.Split('/').Any(segment => segment is ".." or "." or ""))
+                || pathToValidate.Length == 0
+                || pathToValidate.Split('/').Any(segment => segment is ".." or "." or ""))
             {
                 throw Failure("package.archive_path_invalid", "Package archive contains an invalid path.");
             }

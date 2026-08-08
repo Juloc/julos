@@ -61,7 +61,7 @@ internal static class LocalAuthenticationServices
             cookie.Cookie.HttpOnly = true;
             cookie.Cookie.IsEssential = true;
             cookie.Cookie.SameSite = SameSiteMode.Strict;
-            cookie.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            cookie.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             cookie.ExpireTimeSpan = TimeSpan.FromMinutes(localOptions.SessionTimeoutMinutes);
             cookie.SlidingExpiration = true;
 
@@ -84,7 +84,7 @@ internal static class LocalAuthenticationServices
             options.Cookie.HttpOnly = true;
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         });
 
         services.AddRateLimiter(options =>
