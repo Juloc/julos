@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 
 using JulOS.Application.Concurrency;
+using JulOS.Application.Operations;
 using JulOS.Application.Remote;
 using JulOS.Application.Secrets;
 using JulOS.Contracts.Remote;
@@ -17,9 +18,13 @@ namespace JulOS.Infrastructure.Remote;
 public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
 {
     private const string CallbackTokenEnvironmentName = "JULOS_REMOTE_CALLBACK_TOKEN";
+    private const string TargetCredentialEnvironmentName = "JULOS_REMOTE_TARGET_CREDENTIAL";
+    private const string CredentialOperationType = "remote.session.credential";
     private readonly CoreDbContext context;
     private readonly IRemoteSessionService sessions;
     private readonly ISecretReferenceService secrets;
+    private readonly IOperationService operations;
+    private readonly ISecretLeaseService leases;
     private readonly IRemoteRuntimePolicy runtimePolicy;
     private readonly IRemoteRuntimeManager runtimeManager;
     private readonly RemoteProviderCallbackAuthenticator callbackAuthenticator;
@@ -30,6 +35,8 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
         CoreDbContext context,
         IRemoteSessionService sessions,
         ISecretReferenceService secrets,
+        IOperationService operations,
+        ISecretLeaseService leases,
         IRemoteRuntimePolicy runtimePolicy,
         IRemoteRuntimeManager runtimeManager,
         RemoteProviderCallbackAuthenticator callbackAuthenticator,
@@ -38,6 +45,8 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
         this.context = context ?? throw new ArgumentNullException(nameof(context));
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         this.secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
+        this.operations = operations ?? throw new ArgumentNullException(nameof(operations));
+        this.leases = leases ?? throw new ArgumentNullException(nameof(leases));
         this.runtimePolicy = runtimePolicy ?? throw new ArgumentNullException(nameof(runtimePolicy));
         this.runtimeManager = runtimeManager ?? throw new ArgumentNullException(nameof(runtimeManager));
         this.callbackAuthenticator = callbackAuthenticator
@@ -91,6 +100,7 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
                 .ConfigureAwait(false);
         }
 
+        string targetCredential;
         try
         {
             var secret = await this.secrets.ReadAsync(row.SecretReferenceId, cancellationToken).ConfigureAwait(false);
@@ -101,8 +111,45 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
             {
                 return await this.MarkCredentialUnavailableAsync(row, command, cancellationToken).ConfigureAwait(false);
             }
+
+            var operation = await this.operations.CreateAsync(
+                new CreateOperationCommand(
+                    row.OwnerUserId,
+                    CredentialOperationType,
+                    callerPackageId,
+                    row.Id.ToString("D"),
+                    $"remote-session-credential-{row.Id:D}",
+                    $"remote-{row.Id:N}"),
+                cancellationToken).ConfigureAwait(false);
+            if (operation.State == OperationState.Queued)
+            {
+                operation = await this.operations.MarkRunningAsync(operation.OperationId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else if (operation.State != OperationState.Running)
+            {
+                return await this.MarkCredentialUnavailableAsync(row, command, cancellationToken).ConfigureAwait(false);
+            }
+
+            using var lease = await this.leases.AcquireAsync(row.SecretReferenceId, operation.OperationId, cancellationToken)
+                .ConfigureAwait(false);
+            targetCredential = Convert.ToBase64String(lease.Value.Span);
+
+            try
+            {
+                _ = await this.operations.MarkSucceededAsync(operation.OperationId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationFailureException)
+            {
+                // The lease already succeeded; completion bookkeeping is best effort.
+            }
         }
         catch (SecretReferenceFailureException)
+        {
+            return await this.MarkCredentialUnavailableAsync(row, command, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationFailureException)
         {
             return await this.MarkCredentialUnavailableAsync(row, command, cancellationToken).ConfigureAwait(false);
         }
@@ -158,12 +205,14 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
                 ["JULOS_REMOTE_IDLE_TIMEOUT_SECONDS"] = row.IdleTimeoutSeconds.ToString(CultureInfo.InvariantCulture),
                 ["JULOS_REMOTE_MAXIMUM_SESSION_SECONDS"] = row.MaximumSessionSeconds.ToString(CultureInfo.InvariantCulture),
                 ["JULOS_REMOTE_CALLBACK_ENDPOINT"] = this.callbackAuthenticator.Endpoint!.AbsoluteUri,
+                ["JULOS_REMOTE_EXPECTED_REVISION"] = (row.Revision + 1).ToString(CultureInfo.InvariantCulture),
             },
             selection.NetworkProfile.RuntimeNetworks)
         {
             SecretEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [CallbackTokenEnvironmentName] = callbackToken,
+                [TargetCredentialEnvironmentName] = targetCredential,
             },
         };
 

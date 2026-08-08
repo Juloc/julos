@@ -13,6 +13,7 @@
     <Project Path="packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj" />
     <Project Path="packages/JulOS.HostMetrics/worker/JulOS.HostMetrics.Worker.csproj" />
     <Project Path="packages/JulOS.ReferencePackage/worker/JulOS.ReferencePackage.Worker.csproj" />
+    <Project Path="packages/JulOS.Remote/runtime/JulOS.Remote.ProviderBridge/JulOS.Remote.ProviderBridge.csproj" />
     <Project Path="packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj" />
     <Project Path="packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj" />
   </Folder>

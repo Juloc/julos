@@ -244,11 +244,12 @@ public sealed class RemoteSessionServiceTests
         Assert.AreEqual(
             "https://localhost/api/v1/internal/remote/provider-events",
             allocated.Environment["JULOS_REMOTE_CALLBACK_ENDPOINT"]);
+        Assert.AreEqual("3", allocated.Environment["JULOS_REMOTE_EXPECTED_REVISION"]);
         Assert.IsFalse(allocated.Environment.Keys.Any(key =>
             key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
             || key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
             || key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)));
-        Assert.AreEqual(1, allocated.SecretEnvironment.Count);
+        Assert.AreEqual(2, allocated.SecretEnvironment.Count);
         var callbackToken = allocated.SecretEnvironment["JULOS_REMOTE_CALLBACK_TOKEN"];
         var callbackAuthenticator = scope.ServiceProvider
             .GetRequiredService<RemoteProviderCallbackAuthenticator>();
@@ -256,6 +257,10 @@ public sealed class RemoteSessionServiceTests
             created.SessionId,
             runtimeId,
             callbackToken));
+        var targetCredential = allocated.SecretEnvironment["JULOS_REMOTE_TARGET_CREDENTIAL"];
+        Assert.AreEqual(
+            "test-only-remote-password",
+            Encoding.UTF8.GetString(Convert.FromBase64String(targetCredential)));
     }
 
     [TestMethod]

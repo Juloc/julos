@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Runtime-image bridge translating the JulOS Remote provider environment contract into a Guacamole JSON-auth launch.</Description>
+    <OutputType>Exe</OutputType>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>JulOS.Remote.ProviderBridge</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\JulOS.Remote.Transport\JulOS.Remote.Transport.csproj" />
+  </ItemGroup>
+
+</Project>
