@@ -167,7 +167,7 @@ public sealed class BrowserProfilePolicy
 
         var identity = $"{profile.OwnerUserId:N}:{profile.ProfileId:N}";
         var suffix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)))[..32];
-        return new BrowserRuntimeStorage($"julos-browser-profile-{suffix}", DeleteOnTermination: false);
+        return new BrowserRuntimeStorage($"julos-de-juloc-julos-browser-profile-{suffix}", DeleteOnTermination: false);
     }
 
     /// <summary>Rejects access to a profile owned by another authenticated user.</summary>
