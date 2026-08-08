@@ -9,6 +9,7 @@ namespace JulOS.Browser.Worker;
 public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHandler
 {
     private const string PackageId = "de.juloc.julos.browser";
+    private const int DefaultIdleTimeoutMinutes = 30;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider timeProvider;
     private PackageWorkerContext? context;
@@ -164,7 +165,10 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        if (!this.running || this.profilePolicy is null || this.profileStore is null)
+        if (!this.running
+            || this.context is null
+            || this.profilePolicy is null
+            || this.profileStore is null)
         {
             return Failure("browser.worker_unavailable", "Browser worker is not ready.");
         }
@@ -192,6 +196,7 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
             return Failure("browser.url_invalid", "Browser URL must use HTTP or HTTPS.");
         }
 
+        var idleTimeoutSeconds = ReadIdleTimeoutSeconds(this.context.Configuration);
         if (string.Equals(input.Request.ProfileMode, BrowserSessionProfileModes.Temporary, StringComparison.Ordinal))
         {
             if (input.Request.ProfileId is not null || this.profilePolicy.DefaultNetwork is null)
@@ -201,11 +206,13 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
                     "Temporary Browser session requires no profile and a configured default network.");
             }
             return Success(new BrowserSessionRuntimePlan(
+                this.context.PackageVersion,
                 requestedUrl.AbsoluteUri,
                 this.profilePolicy.DefaultNetwork,
                 BrowserSessionProfileModes.Temporary,
                 null,
-                null));
+                null,
+                idleTimeoutSeconds));
         }
 
         if (input.Request.ProfileId is not Guid profileId || profileId == Guid.Empty)
@@ -261,11 +268,22 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
 
         var storage = BrowserProfilePolicy.RuntimeStorage(profile);
         return Success(new BrowserSessionRuntimePlan(
+            this.context.PackageVersion,
             validatedUrl.AbsoluteUri,
             network.RuntimeNetwork,
             expectedMode,
             profile.ProfileId,
-            storage.VolumeName));
+            storage.VolumeName,
+            idleTimeoutSeconds));
+    }
+
+    private static int ReadIdleTimeoutSeconds(IReadOnlyDictionary<string, string> configuration)
+    {
+        var minutes = configuration.TryGetValue("idleTimeoutMinutes", out var configured)
+            && int.TryParse(configured, out var parsed)
+            ? parsed
+            : DefaultIdleTimeoutMinutes;
+        return checked(minutes * 60);
     }
 
     private static bool TryReadHttpUrl(string value, out Uri uri)
