@@ -21,6 +21,13 @@ public static class BrowserSessionCapabilityContract
     public const string TerminateOperation = "terminate";
 }
 
+/// <summary>Private Browser package worker commands used by the trusted control plane.</summary>
+public static class BrowserWorkerCommands
+{
+    /// <summary>Resolves user-owned profile data into a non-secret runtime plan.</summary>
+    public const string ResolveSessionPlan = "browser.resolve-session-plan";
+}
+
 /// <summary>Browser profile modes accepted by runtime orchestration.</summary>
 public static class BrowserSessionProfileModes
 {
@@ -44,6 +51,26 @@ public sealed record CreateBrowserSessionRequest(
     string InitialUrl,
     string ProfileMode,
     Guid? ProfileId);
+
+/// <summary>Trusted control-plane request to resolve package-owned Browser profile policy.</summary>
+/// <param name="OwnerUserId">Authenticated JulOS user.</param>
+/// <param name="Request">Browser session request to resolve.</param>
+public sealed record ResolveBrowserSessionPlanRequest(
+    Guid OwnerUserId,
+    CreateBrowserSessionRequest Request);
+
+/// <summary>Non-secret runtime plan resolved by the Browser package worker.</summary>
+/// <param name="InitialUrl">Validated URL Chromium must open.</param>
+/// <param name="RuntimeNetwork">Exact configured Runtime Manager network.</param>
+/// <param name="ProfileMode">Resolved profile mode.</param>
+/// <param name="ProfileId">Retained profile identity, when applicable.</param>
+/// <param name="VolumeName">Package-owned persistent profile volume, when applicable.</param>
+public sealed record BrowserSessionRuntimePlan(
+    string InitialUrl,
+    string RuntimeNetwork,
+    string ProfileMode,
+    Guid? ProfileId,
+    string? VolumeName);
 
 /// <summary>Reads one Browser session.</summary>
 /// <param name="SessionId">Stable protocol-neutral session identity.</param>
