@@ -1,5 +1,6 @@
 ﻿using JulOS.Application.Packages;
-using JulOS.Infrastructure.Browser;
+using JulOS.Application.Remote;
+using JulOS.Application.Secrets;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Remote;
 using JulOS.PackageSdk;
@@ -55,10 +56,22 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
         services.AddSingleton<IPackageWorkerCommandDispatcher>(provider =>
             provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
-        services.AddSingleton(BrowserRuntimeOptions.Read(configuration));
-        services.AddSingleton<BrowserSessionCoordinator>();
-        services.AddScoped<BrowserSessionCapabilityProvider>();
-        services.AddScoped<BrowserSessionCleanupService>();
+        services.AddSingleton<InteractiveSessionCoordinator>();
+        services.AddScoped(provider => new InteractiveSessionCapabilityProvider(
+            provider.GetRequiredService<CoreDbContext>(),
+            provider.GetRequiredService<IPackageWorkerCommandDispatcher>(),
+            provider.GetRequiredService<InteractiveSessionCoordinator>(),
+            provider.GetRequiredService<IRemoteRuntimeManager>(),
+            provider.GetRequiredService<IRemoteRuntimePolicy>(),
+            provider.GetRequiredService<IRemoteSessionService>(),
+            provider.GetRequiredService<IRemoteSessionProvisioner>(),
+            provider.GetRequiredService<IRemoteSessionLifecycleService>(),
+            provider.GetRequiredService<ISecretReferenceService>(),
+            provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IInteractiveSessionCleanupService>(provider => new InteractiveSessionCleanupService(
+            provider.GetRequiredService<CoreDbContext>(),
+            provider.GetRequiredService<IRemoteRuntimeManager>(),
+            provider.GetRequiredService<ISecretReferenceService>()));
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
@@ -89,8 +102,8 @@ public static class PackageManagementServiceCollectionExtensions
             broker.Register(hostMetrics.Descriptor.ProviderPackageId, hostMetrics);
             var remote = provider.GetRequiredService<RemoteSessionCapabilityProvider>();
             broker.Register(remote.Descriptor.ProviderPackageId, remote);
-            var browser = provider.GetRequiredService<BrowserSessionCapabilityProvider>();
-            broker.Register(browser.Descriptor.ProviderPackageId, browser);
+            var interactive = provider.GetRequiredService<InteractiveSessionCapabilityProvider>();
+            broker.Register(interactive.Descriptor.ProviderPackageId, interactive);
             return broker;
         });
         services.AddScoped<ICapabilityClient>(
