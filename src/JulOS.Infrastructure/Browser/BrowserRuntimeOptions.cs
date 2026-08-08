@@ -3,13 +3,11 @@
 namespace JulOS.Infrastructure.Browser;
 
 /// <summary>Trusted immutable Browser runtime configuration.</summary>
-public sealed record BrowserRuntimeOptions(string? Image)
+internal sealed record BrowserRuntimeOptions(string? Image)
 {
-    /// <summary>Gets whether a digest-pinned Browser runtime image is configured.</summary>
-    public bool IsConfigured => this.Image is not null;
+    internal bool IsConfigured => this.Image is not null;
 
-    /// <summary>Reads and validates Browser runtime configuration.</summary>
-    public static BrowserRuntimeOptions Read(IConfiguration configuration)
+    internal static BrowserRuntimeOptions Read(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var image = configuration["Browser:Runtime:Image"]
