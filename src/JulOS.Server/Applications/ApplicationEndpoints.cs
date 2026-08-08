@@ -1,4 +1,7 @@
-﻿using JulOS.Application.Packages;
+﻿using System.Security.Claims;
+
+using JulOS.Application.Packages;
+using JulOS.Server.Authentication;
 
 namespace JulOS.Server.Applications;
 
@@ -6,6 +9,16 @@ internal sealed record DesktopApplicationFrontendResponse(
     string ModuleUrl,
     string Sha256,
     IReadOnlyList<string> ExportedElements);
+
+internal sealed record DesktopLaunchTargetResponse(
+    Guid LaunchTargetId,
+    Guid ApplicationDefinitionId,
+    string ExternalIdentity,
+    string DisplayName);
+
+internal sealed record SaveDesktopLaunchTargetRequest(
+    string ExternalIdentity,
+    string DisplayName);
 
 internal sealed record DesktopApplicationResponse(
     Guid ApplicationDefinitionId,
@@ -20,7 +33,8 @@ internal sealed record DesktopApplicationResponse(
     int MinimumHeight,
     IReadOnlyList<string> Viewports,
     string ElementName,
-    DesktopApplicationFrontendResponse Frontend);
+    DesktopApplicationFrontendResponse Frontend,
+    IReadOnlyList<DesktopLaunchTargetResponse> LaunchTargets);
 
 internal sealed record DesktopWidgetResponse(
     string WidgetKey,
@@ -48,6 +62,14 @@ internal static class ApplicationEndpoints
         endpoints.MapGet("/api/v1/packages/{packageId}/frontend/{version}", FrontendAsync)
             .WithTags("Applications")
             .RequireAuthorization();
+        endpoints.MapPost("/api/v1/packages/{packageId}/applications/{stableKey}/targets", SaveTargetAsync)
+            .WithTags("Applications")
+            .RequireAuthorization()
+            .RequireJulOsAntiforgery();
+        endpoints.MapDelete("/api/v1/packages/{packageId}/applications/targets/{targetId:guid}", DeleteTargetAsync)
+            .WithTags("Applications")
+            .RequireAuthorization()
+            .RequireJulOsAntiforgery();
         return endpoints;
     }
 
@@ -60,6 +82,48 @@ internal static class ApplicationEndpoints
         {
             var applications = await catalog.ListAsync(viewport ?? "desktop", cancellationToken).ConfigureAwait(false);
             return TypedResults.Ok(applications.Select(ToResponse).ToArray());
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
+    }
+
+    private static async Task<IResult> SaveTargetAsync(
+        HttpContext context,
+        string packageId,
+        string stableKey,
+        SaveDesktopLaunchTargetRequest request,
+        IDesktopApplicationCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var target = await catalog.SaveLaunchTargetAsync(
+                CurrentUserId(context.User),
+                packageId,
+                stableKey,
+                request.ExternalIdentity,
+                request.DisplayName,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(ToResponse(target));
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
+    }
+
+    private static async Task<IResult> DeleteTargetAsync(
+        string packageId,
+        Guid targetId,
+        IDesktopApplicationCatalog catalog,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await catalog.DeleteLaunchTargetAsync(packageId, targetId, cancellationToken).ConfigureAwait(false);
+            return TypedResults.NoContent();
         }
         catch (PackageManagementException exception)
         {
@@ -112,7 +176,14 @@ internal static class ApplicationEndpoints
         application.MinimumHeight,
         application.Viewports,
         application.ElementName,
-        Frontend(application.PackageId, application.PackageVersion, application.FrontendSha256, application.FrontendExportedElements));
+        Frontend(application.PackageId, application.PackageVersion, application.FrontendSha256, application.FrontendExportedElements),
+        application.LaunchTargets.Select(ToResponse).ToArray());
+
+    private static DesktopLaunchTargetResponse ToResponse(DesktopPackageLaunchTarget target) => new(
+        target.LaunchTargetId,
+        target.ApplicationDefinitionId,
+        target.ExternalIdentity,
+        target.DisplayName);
 
     private static DesktopWidgetResponse ToResponse(DesktopPackageWidget widget) => new(
         widget.WidgetKey,
@@ -134,12 +205,20 @@ internal static class ApplicationEndpoints
         sha256,
         exportedElements);
 
+    private static Guid CurrentUserId(ClaimsPrincipal principal)
+    {
+        var identifier = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(identifier, out var userId) && userId != Guid.Empty
+            ? userId
+            : throw new PackageManagementException("authentication.user_invalid", "Authenticated user is invalid.");
+    }
+
     private static IResult Failure(PackageManagementException exception)
     {
         var status = exception.Code switch
         {
-            "package.not_found" or "package.frontend_not_found" => StatusCodes.Status404NotFound,
-            "package.frontend_digest_mismatch" => StatusCodes.Status409Conflict,
+            "package.not_found" or "package.frontend_not_found" or "application.target_not_found" => StatusCodes.Status404NotFound,
+            "package.frontend_digest_mismatch" or "application.target_conflict" => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest,
         };
         return Results.Json(new { code = exception.Code, detail = exception.Message }, statusCode: status);

@@ -1,4 +1,4 @@
-name: Publish alpha
+name: Publish prerelease
 
 on:
   pull_request:
@@ -25,12 +25,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-alpha-${{ github.ref }}
+  group: publish-prerelease-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
-    name: Validate alpha source
+    name: Validate prerelease source
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -63,13 +63,13 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '\r\n' < VERSION)"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]; then
-            echo "VERSION must be an alpha prerelease, got: $version" >&2
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
+            echo "VERSION must be an alpha or beta prerelease, got: $version" >&2
             exit 1
           fi
           if [ "$GITHUB_EVENT_NAME" = "push" ] && \
              git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
-            echo "Tag v$version already exists; alpha releases are immutable." >&2
+            echo "Tag v$version already exists; prereleases are immutable." >&2
             exit 1
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
@@ -106,7 +106,7 @@ jobs:
       version: ${{ steps.version.outputs.value }}
 
   smoke:
-    name: Build and smoke-test alpha stack
+    name: Build and smoke-test prerelease stack
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -131,9 +131,9 @@ jobs:
         run: |
           set -euo pipefail
           image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
-          smoke_directory="$GITHUB_WORKSPACE/.alpha-smoke"
+          smoke_directory="$GITHUB_WORKSPACE/.prerelease-smoke"
           env_file="$smoke_directory/.env"
-          volume_name="julos-alpha_julos-data"
+          volume_name="julos-beta_julos-data"
           mkdir -p "$smoke_directory"
 
           primary_key="$(openssl rand -base64 32)"
@@ -153,8 +153,6 @@ jobs:
           compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml)
           "${compose[@]}" config --quiet
 
-          # Reproduce an upgrade from an older JulOS volume whose writable paths
-          # are owned by root. The released image must repair this in-place.
           docker volume create "$volume_name" >/dev/null
           docker run --rm \
             --user 0:0 \
@@ -168,24 +166,12 @@ jobs:
           "${compose[@]}" exec -T server sh -c 'test -s /var/lib/julos/data/julos.db && test -d /var/lib/julos/packages && test -d /var/lib/julos/data-protection'
 
           container_id="$("${compose[@]}" ps -q server)"
-          if ! docker exec "$container_id" test -s /application/wwwroot/index.html; then
-            echo "The released image does not contain /application/wwwroot/index.html." >&2
-            exit 1
-          fi
-          if ! curl --fail --silent --show-error http://127.0.0.1:18080/index.html >/dev/null; then
-            echo "The released server does not serve /index.html." >&2
-            exit 1
-          fi
-          if ! curl --fail --silent --show-error http://127.0.0.1:18080/scripts/main.js >/dev/null; then
-            echo "The released server does not serve /scripts/main.js." >&2
-            exit 1
-          fi
+          docker exec "$container_id" test -s /application/wwwroot/index.html
+          curl --fail --silent --show-error http://127.0.0.1:18080/index.html >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18080/scripts/main.js >/dev/null
 
           root_html="$(curl --fail --silent --show-error http://127.0.0.1:18080/)"
-          if ! grep -Fq '<title>JulOS</title>' <<< "$root_html"; then
-            echo "The released server image did not serve the JulOS Desktop at /." >&2
-            exit 1
-          fi
+          grep -Fq '<title>JulOS</title>' <<< "$root_html"
 
           process_uid="$(docker exec "$container_id" awk '/^Uid:/ { print $2 }' /proc/1/status)"
           if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" = 0 ]]; then
@@ -206,7 +192,6 @@ jobs:
           logs="$("${compose[@]}" logs --no-color server)"
           if grep -Eq 'may not be persisted outside of the container|No XML encryptor configured|package.worker_supervisor_unavailable|unable to open database file' <<< "$logs"; then
             echo "$logs" >&2
-            echo "The SQLite alpha stack emitted a known persistence or package-worker warning." >&2
             exit 1
           fi
 
@@ -216,12 +201,12 @@ jobs:
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
           mkdir -p release-files
-          cp deploy/alpha/compose.sqlite.yaml release-files/julos-alpha-compose.yaml
-          cp deploy/alpha/.env.sqlite.example release-files/julos-alpha.env.example
+          cp deploy/alpha/compose.sqlite.yaml release-files/julos-beta-compose.yaml
+          cp deploy/alpha/.env.sqlite.example release-files/julos-beta.env.example
           cp "docs/releases/$version.md" release-files/RELEASE_NOTES.md
           (
             cd release-files
-            sha256sum julos-alpha-compose.yaml julos-alpha.env.example RELEASE_NOTES.md > SHA256SUMS
+            sha256sum julos-beta-compose.yaml julos-beta.env.example RELEASE_NOTES.md > SHA256SUMS
           )
 
       - name: Upload release files
@@ -315,7 +300,7 @@ jobs:
             --title "JulOS $version" \
             --notes-file "docs/releases/$version.md" \
             --prerelease \
-            release-files/julos-alpha-compose.yaml \
-            release-files/julos-alpha.env.example \
+            release-files/julos-beta-compose.yaml \
+            release-files/julos-beta.env.example \
             release-files/RELEASE_NOTES.md \
             release-files/SHA256SUMS

@@ -60,6 +60,13 @@ export interface DesktopApplicationFrontend {
   readonly exportedElements: readonly string[];
 }
 
+export interface DesktopLaunchTarget {
+  readonly launchTargetId: string;
+  readonly applicationDefinitionId: string;
+  readonly externalIdentity: string;
+  readonly displayName: string;
+}
+
 export interface DesktopApplication {
   readonly applicationDefinitionId: string;
   readonly packageId: string;
@@ -74,6 +81,7 @@ export interface DesktopApplication {
   readonly viewports: readonly ('desktop' | 'tablet' | 'mobile')[];
   readonly elementName: string;
   readonly frontend: DesktopApplicationFrontend;
+  readonly launchTargets?: readonly DesktopLaunchTarget[];
 }
 
 export type DesktopWidgetSize = 'small' | 'medium' | 'wide' | 'large';
@@ -143,6 +151,34 @@ export class ShellApiClient {
   public readApplications(viewport: 'desktop' | 'tablet' | 'mobile'): Promise<readonly DesktopApplication[]> {
     return this.#api.get<readonly DesktopApplication[]>(
       `/api/v1/applications?viewport=${encodeURIComponent(viewport)}`,
+    );
+  }
+
+  public async saveLaunchTarget(
+    packageId: string,
+    stableKey: string,
+    externalIdentity: string,
+    displayName: string,
+  ): Promise<DesktopLaunchTarget> {
+    const antiforgery = await this.readAntiforgeryToken();
+    return this.#api.requestJson<DesktopLaunchTarget>(
+      `/api/v1/packages/${encodeURIComponent(packageId)}/applications/${encodeURIComponent(stableKey)}/targets`,
+      {
+        method: 'POST',
+        body: { externalIdentity, displayName },
+        headers: { [antiforgery.headerName]: antiforgery.token },
+      },
+    );
+  }
+
+  public async deleteLaunchTarget(packageId: string, launchTargetId: string): Promise<void> {
+    const antiforgery = await this.readAntiforgeryToken();
+    await this.#api.requestVoid(
+      `/api/v1/packages/${encodeURIComponent(packageId)}/applications/targets/${encodeURIComponent(launchTargetId)}`,
+      {
+        method: 'DELETE',
+        headers: { [antiforgery.headerName]: antiforgery.token },
+      },
     );
   }
 

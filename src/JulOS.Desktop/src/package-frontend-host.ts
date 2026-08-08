@@ -6,12 +6,24 @@
   readonly exportedElements: readonly string[];
 }
 
+export interface PackageLaunchTarget {
+  readonly launchTargetId: string;
+  readonly externalIdentity: string;
+  readonly displayName: string;
+}
+
 export interface PackageFrontendContext {
   readonly packageId: string;
   readonly language: 'en' | 'de';
   readonly theme: 'light' | 'dark';
   readonly invokeCapability: (name: string, operation: string, payload: unknown) => Promise<unknown>;
   readonly openApplication: (applicationId: string, targetId?: string) => void | Promise<void>;
+  readonly saveLaunchTarget: (
+    applicationStableKey: string,
+    externalIdentity: string,
+    displayName: string,
+  ) => Promise<PackageLaunchTarget>;
+  readonly deleteLaunchTarget: (launchTargetId: string) => Promise<void>;
 }
 
 export interface PackageFrontendModule {
@@ -49,7 +61,7 @@ export class PackageFrontendHost {
     return loading;
   }
 
-  public createHostElement(elementName: string): HTMLElement {
+  public createHostElement(elementName: string, launchTarget: PackageLaunchTarget | null = null): HTMLElement {
     if (!customElements.get(elementName)) {
       throw new PackageFrontendError(
         'package.frontend_element_missing',
@@ -59,7 +71,8 @@ export class PackageFrontendHost {
     const shell = document.createElement('section');
     shell.className = 'package-surface';
     const shadow = shell.attachShadow({ mode: 'closed' });
-    const element = document.createElement(elementName);
+    const element = document.createElement(elementName) as HTMLElement & { launchTarget?: PackageLaunchTarget | null };
+    element.launchTarget = launchTarget;
     shadow.append(element);
     return shell;
   }

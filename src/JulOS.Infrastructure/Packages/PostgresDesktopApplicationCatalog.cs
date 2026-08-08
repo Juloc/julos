@@ -18,12 +18,14 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
     private const int MaximumFrontendBytes = 16 * 1024 * 1024;
     private readonly CoreDbContext context;
     private readonly string packageRoot;
+    private readonly TimeProvider timeProvider;
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
 
-    public PostgresDesktopApplicationCatalog(CoreDbContext context, string packageRoot)
+    public PostgresDesktopApplicationCatalog(CoreDbContext context, string packageRoot, TimeProvider timeProvider)
     {
         this.context = context;
         this.packageRoot = Path.GetFullPath(packageRoot);
+        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
     public async Task<IReadOnlyList<DesktopPackageApplication>> ListAsync(
@@ -47,6 +49,27 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
             .ThenBy(row => row.StableKey)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
+
+        var applicationIds = rows.Select(row => row.Id).ToArray();
+        LaunchTargetRow[] targetRows = applicationIds.Length == 0
+            ? []
+            : await this.context.LaunchTargets
+                .AsNoTracking()
+                .Where(row => applicationIds.Contains(row.ApplicationDefinitionId)
+                    && row.ApprovalState == LaunchTargetApprovalState.Approved)
+                .OrderBy(row => row.DisplayName)
+                .ThenBy(row => row.ExternalIdentity)
+                .ToArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
+        var targets = targetRows
+            .GroupBy(row => row.ApplicationDefinitionId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<DesktopPackageLaunchTarget>)group.Select(row => new DesktopPackageLaunchTarget(
+                    row.Id,
+                    row.ApplicationDefinitionId,
+                    row.ExternalIdentity,
+                    row.DisplayName)).ToArray());
 
         var metadata = new Dictionary<string, InstalledPackageMetadata>(StringComparer.Ordinal);
         var result = new List<DesktopPackageApplication>(rows.Length);
@@ -81,10 +104,105 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
                 row.SupportedViewports.Select(item => ViewportName(item.ViewportClass)).Order().ToArray(),
                 application.ElementName,
                 frontend.Sha256,
-                frontend.ExportedElements.ToArray()));
+                frontend.ExportedElements.ToArray(),
+                targets.GetValueOrDefault(row.Id) ?? []));
         }
 
         return result;
+    }
+
+    public async Task<DesktopPackageLaunchTarget> SaveLaunchTargetAsync(
+        Guid userId,
+        string packageId,
+        string applicationStableKey,
+        string externalIdentity,
+        string displayName,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTargetInput(userId, packageId, applicationStableKey, externalIdentity, displayName);
+        var packageEnabled = await this.context.PackageInstallations
+            .AsNoTracking()
+            .AnyAsync(
+                row => row.PackageId == packageId && row.State == PackageInstallationState.Enabled,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (!packageEnabled)
+        {
+            throw Failure("package.not_found", "Package is not enabled.");
+        }
+
+        var application = await this.context.ApplicationDefinitions
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                row => row.OwningPackageId == packageId
+                    && row.StableKey == applicationStableKey
+                    && row.IsEnabled,
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw Failure("application.not_found", "Application is not enabled.");
+
+        var now = this.timeProvider.GetUtcNow();
+        var row = await this.context.LaunchTargets
+            .SingleOrDefaultAsync(
+                candidate => candidate.OwningPackageId == packageId
+                    && candidate.ExternalIdentity == externalIdentity,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (row is not null && row.ApplicationDefinitionId != application.Id)
+        {
+            throw Failure("application.target_conflict", "Launch target identity belongs to another application.");
+        }
+
+        if (row is null)
+        {
+            row = new LaunchTargetRow
+            {
+                Id = Guid.NewGuid(),
+                ApplicationDefinitionId = application.Id,
+                OwningPackageId = packageId,
+                ExternalIdentity = externalIdentity,
+                DisplayName = displayName,
+                ApprovalState = LaunchTargetApprovalState.Approved,
+                FirstObservedAtUtc = now,
+                LastObservedAtUtc = now,
+                ApprovedAtUtc = now,
+                ApprovedByUserId = userId,
+                Revision = 1,
+            };
+            this.context.LaunchTargets.Add(row);
+        }
+        else
+        {
+            row.DisplayName = displayName;
+            row.ApprovalState = LaunchTargetApprovalState.Approved;
+            row.LastObservedAtUtc = now;
+            row.ApprovedAtUtc = now;
+            row.ApprovedByUserId = userId;
+            row.Revision = checked(row.Revision + 1);
+        }
+
+        await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return new DesktopPackageLaunchTarget(row.Id, row.ApplicationDefinitionId, row.ExternalIdentity, row.DisplayName);
+    }
+
+    public async Task DeleteLaunchTargetAsync(
+        string packageId,
+        Guid launchTargetId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(packageId) || packageId != packageId.Trim() || launchTargetId == Guid.Empty)
+        {
+            throw Failure("application.target_invalid", "Launch target identity is invalid.");
+        }
+
+        var row = await this.context.LaunchTargets
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == launchTargetId && candidate.OwningPackageId == packageId,
+                cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw Failure("application.target_not_found", "Launch target was not found.");
+        this.context.LaunchTargets.Remove(row);
+        await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<DesktopPackageWidget>> ListWidgetsAsync(
@@ -207,6 +325,29 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
             cancellationToken).ConfigureAwait(false)
             ?? throw Failure("package.metadata_invalid", "Package metadata is invalid.");
     }
+
+    private static void ValidateTargetInput(
+        Guid userId,
+        string packageId,
+        string applicationStableKey,
+        string externalIdentity,
+        string displayName)
+    {
+        if (userId == Guid.Empty
+            || !ValidText(packageId, 128)
+            || !ValidText(applicationStableKey, 64)
+            || !ValidText(externalIdentity, 256)
+            || !ValidText(displayName, 256))
+        {
+            throw Failure("application.target_invalid", "Launch target is invalid.");
+        }
+    }
+
+    private static bool ValidText(string value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value)
+        && value == value.Trim()
+        && value.Length <= maximumLength
+        && !value.Any(char.IsControl);
 
     private static string WidgetKey(string packageId, string stableKey) => $"{packageId}:{stableKey}";
 
