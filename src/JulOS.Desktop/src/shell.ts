@@ -193,6 +193,9 @@ export class JulOsShell extends HTMLElement {
       },
       language: () => this.#language,
       onFailure: (error) => this.#showClientFailure(error),
+      onProfileChanged: async () => {
+        await this.#loadSession();
+      },
     });
     this.#desktopRuntime = runtime;
 
