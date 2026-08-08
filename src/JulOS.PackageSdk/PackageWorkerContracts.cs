@@ -1,4 +1,6 @@
-﻿namespace JulOS.PackageSdk;
+﻿using System.Text.Json;
+
+namespace JulOS.PackageSdk;
 
 /// <summary>Configuration and identity supplied to one package worker instance.</summary>
 /// <param name="PackageId">Stable package identity.</param>
@@ -27,7 +29,7 @@ public sealed record PackageValidationIssue(
     bool Blocking);
 
 /// <summary>Result of package configuration validation.</summary>
-/// <param name="Valid">Whether the configuration may be applied.</param>
+/// <param name="Valid">Whether configuration may be applied.</param>
 /// <param name="Issues">All discovered issues.</param>
 public sealed record PackageValidationResult(
     bool Valid,
@@ -89,6 +91,33 @@ public sealed record RegisteredProblemCondition(
     string ConditionKey,
     string Severity,
     string TitleKey);
+
+/// <summary>One private control-plane command delivered only to the owning package worker.</summary>
+/// <param name="Name">Package-defined bounded command name.</param>
+/// <param name="Payload">Package-defined JSON payload.</param>
+public sealed record PackageWorkerCommand(
+    string Name,
+    JsonElement Payload);
+
+/// <summary>Result returned by a package-owned private worker command.</summary>
+/// <param name="Succeeded">Whether the command was accepted.</param>
+/// <param name="ErrorCode">Stable caller-safe package error code.</param>
+/// <param name="ErrorDetail">Caller-safe error detail.</param>
+/// <param name="Payload">Package-defined successful payload.</param>
+public sealed record PackageWorkerCommandResult(
+    bool Succeeded,
+    string? ErrorCode,
+    string? ErrorDetail,
+    JsonElement Payload);
+
+/// <summary>Optional private command handler for package-owned policy and data operations.</summary>
+public interface IJulOsPackageCommandHandler
+{
+    /// <summary>Handles one control-plane command without exposing the worker transport to packages.</summary>
+    Task<PackageWorkerCommandResult> InvokeCommandAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken);
+}
 
 /// <summary>The complete lifecycle contract hosted by every package worker.</summary>
 public interface IJulOsPackageWorker
