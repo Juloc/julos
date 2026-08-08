@@ -45,11 +45,15 @@ public static class PackageManagementServiceCollectionExtensions
         services.AddSingleton(new PostgresPackageStorageProvisioner(
             coreDatabase,
             packageRoot));
-        services.AddSingleton<IPackageWorkerSupervisor>(new ProcessPackageWorkerSupervisor(
+        services.AddSingleton(_ => new ProcessPackageWorkerSupervisor(
             packageRoot,
             serverEndpoint,
             coreDatabase.Provider,
             coreDatabase.ConnectionString));
+        services.AddSingleton<IPackageWorkerSupervisor>(provider =>
+            provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
+        services.AddSingleton<IPackageWorkerCommandDispatcher>(provider =>
+            provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
