@@ -60,17 +60,21 @@ public sealed record ResolveBrowserSessionPlanRequest(
     CreateBrowserSessionRequest Request);
 
 /// <summary>Non-secret runtime plan resolved by the Browser package worker.</summary>
+/// <param name="PackageVersion">Installed Browser package version.</param>
 /// <param name="InitialUrl">Validated URL Chromium must open.</param>
 /// <param name="RuntimeNetwork">Exact configured Runtime Manager network.</param>
 /// <param name="ProfileMode">Resolved profile mode.</param>
 /// <param name="ProfileId">Retained profile identity, when applicable.</param>
 /// <param name="VolumeName">Package-owned persistent profile volume, when applicable.</param>
+/// <param name="IdleTimeoutSeconds">Validated session idle timeout.</param>
 public sealed record BrowserSessionRuntimePlan(
+    string PackageVersion,
     string InitialUrl,
     string RuntimeNetwork,
     string ProfileMode,
     Guid? ProfileId,
-    string? VolumeName);
+    string? VolumeName,
+    int IdleTimeoutSeconds);
 
 /// <summary>Reads one Browser session.</summary>
 /// <param name="SessionId">Stable protocol-neutral session identity.</param>
