@@ -58,6 +58,7 @@ public static class PackageManagementServiceCollectionExtensions
         services.AddSingleton(BrowserRuntimeOptions.Read(configuration));
         services.AddSingleton<BrowserSessionCoordinator>();
         services.AddScoped<BrowserSessionCapabilityProvider>();
+        services.AddScoped<BrowserSessionCleanupService>();
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
