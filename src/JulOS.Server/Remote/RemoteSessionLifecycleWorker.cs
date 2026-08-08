@@ -1,4 +1,5 @@
 ﻿using JulOS.Application.Remote;
+using JulOS.Infrastructure.Browser;
 
 namespace JulOS.Server.Remote;
 
@@ -14,6 +15,10 @@ internal sealed class RemoteSessionLifecycleWorker : BackgroundService
         LogLevel.Error,
         new EventId(6102, nameof(ReconciliationFailed)),
         "Remote lifecycle reconciliation failed.");
+    private static readonly Action<ILogger, int, Exception?> BrowserCleanupFailures = LoggerMessage.Define<int>(
+        LogLevel.Warning,
+        new EventId(6103, nameof(BrowserCleanupFailures)),
+        "Browser lifecycle reconciliation left {FailureCount} cleanup failures.");
 
     private readonly IServiceScopeFactory scopeFactory;
     private readonly TimeProvider timeProvider;
@@ -48,6 +53,13 @@ internal sealed class RemoteSessionLifecycleWorker : BackgroundService
             if (result.CleanupFailures > 0)
             {
                 CleanupFailures(this.logger, result.CleanupFailures, null);
+            }
+
+            var browser = scope.ServiceProvider.GetRequiredService<BrowserSessionCleanupService>();
+            var browserResult = await browser.ReconcileAsync(100, cancellationToken).ConfigureAwait(false);
+            if (browserResult.Failures > 0)
+            {
+                BrowserCleanupFailures(this.logger, browserResult.Failures, null);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
