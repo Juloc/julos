@@ -1,16 +1,18 @@
 ﻿namespace JulOS.Infrastructure.Browser;
 
 /// <summary>Serializes Browser runtime creation so one idempotency key cannot race secret/runtime setup.</summary>
-internal sealed class BrowserSessionCoordinator : IDisposable
+public sealed class BrowserSessionCoordinator : IDisposable
 {
     private readonly SemaphoreSlim createLock = new(1, 1);
 
-    internal async Task<IDisposable> EnterAsync(CancellationToken cancellationToken)
+    /// <summary>Enters the Browser session-creation critical section.</summary>
+    public async Task<IDisposable> EnterAsync(CancellationToken cancellationToken)
     {
         await this.createLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         return new Releaser(this.createLock);
     }
 
+    /// <inheritdoc />
     public void Dispose()
     {
         this.createLock.Dispose();
