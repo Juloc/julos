@@ -1,5 +1,12 @@
 ﻿namespace JulOS.Application.Packages;
 
+/// <summary>One approved launch target owned by a package application.</summary>
+public sealed record DesktopPackageLaunchTarget(
+    Guid LaunchTargetId,
+    Guid ApplicationDefinitionId,
+    string ExternalIdentity,
+    string DisplayName);
+
 /// <summary>One enabled package application that can be composed into the JulOS Desktop.</summary>
 public sealed record DesktopPackageApplication(
     Guid ApplicationDefinitionId,
@@ -15,7 +22,8 @@ public sealed record DesktopPackageApplication(
     IReadOnlyList<string> Viewports,
     string ElementName,
     string FrontendSha256,
-    IReadOnlyList<string> FrontendExportedElements);
+    IReadOnlyList<string> FrontendExportedElements,
+    IReadOnlyList<DesktopPackageLaunchTarget> LaunchTargets);
 
 /// <summary>One enabled package widget that can be placed on the JulOS Desktop grid.</summary>
 public sealed record DesktopPackageWidget(
@@ -41,24 +49,30 @@ public sealed record DesktopPackageFrontend(
 public interface IDesktopApplicationCatalog
 {
     /// <summary>Lists enabled package applications for one supported viewport.</summary>
-    /// <param name="viewport">Viewport identity such as desktop, tablet or mobile.</param>
-    /// <param name="cancellationToken">Request cancellation.</param>
-    /// <returns>Launchable applications visible to the Desktop shell.</returns>
     Task<IReadOnlyList<DesktopPackageApplication>> ListAsync(
         string viewport,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Creates or updates an approved package-owned launch target.</summary>
+    Task<DesktopPackageLaunchTarget> SaveLaunchTargetAsync(
+        Guid userId,
+        string packageId,
+        string applicationStableKey,
+        string externalIdentity,
+        string displayName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Removes one package-owned launch target.</summary>
+    Task DeleteLaunchTargetAsync(
+        string packageId,
+        Guid launchTargetId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Lists widgets declared by enabled packages.</summary>
-    /// <param name="cancellationToken">Request cancellation.</param>
-    /// <returns>Widgets that may be resolved by stored desktop placements.</returns>
     Task<IReadOnlyList<DesktopPackageWidget>> ListWidgetsAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>Reads and verifies the signed frontend module for one enabled installed package version.</summary>
-    /// <param name="packageId">Stable package identity.</param>
-    /// <param name="version">Exact installed package version.</param>
-    /// <param name="cancellationToken">Request cancellation.</param>
-    /// <returns>Verified frontend module bytes and digest.</returns>
     Task<DesktopPackageFrontend> ReadFrontendAsync(
         string packageId,
         string version,
