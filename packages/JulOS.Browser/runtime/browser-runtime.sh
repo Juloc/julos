@@ -9,7 +9,8 @@ x_pid_file="$runtime_directory/xvfb.pid"
 window_manager_pid_file="$runtime_directory/openbox.pid"
 vnc_pid_file="$runtime_directory/x11vnc.pid"
 chromium_pid_file="$runtime_directory/chromium.pid"
-profile_directory="$runtime_directory/profile"
+temporary_profile_directory="$runtime_directory/profile"
+profile_directory=${JULOS_PROFILE_DIRECTORY:-$temporary_profile_directory}
 log_directory="$runtime_directory/logs"
 
 cleanup() {
@@ -56,8 +57,22 @@ case "$start_url" in
         ;;
 esac
 
+case "$profile_directory" in
+    /*) ;;
+    *)
+        echo "JULOS_PROFILE_DIRECTORY must be an absolute path." >&2
+        exit 64
+        ;;
+esac
+
 rm -rf "$runtime_directory"
-install -d -m 0700 "$runtime_directory" "$profile_directory" "$log_directory"
+install -d -m 0700 "$runtime_directory" "$log_directory"
+if [ "$profile_directory" = "$temporary_profile_directory" ]; then
+    install -d -m 0700 "$profile_directory"
+else
+    mkdir -p "$profile_directory"
+    chmod 0700 "$profile_directory"
+fi
 
 x11vnc -storepasswd "$JULOS_VNC_PASSWORD" "$password_file" >/dev/null 2>&1
 unset JULOS_VNC_PASSWORD
