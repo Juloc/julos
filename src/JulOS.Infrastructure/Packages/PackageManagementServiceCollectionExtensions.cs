@@ -1,4 +1,5 @@
 ﻿using JulOS.Application.Packages;
+using JulOS.Infrastructure.Browser;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Infrastructure.Remote;
 using JulOS.PackageSdk;
@@ -54,6 +55,9 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
         services.AddSingleton<IPackageWorkerCommandDispatcher>(provider =>
             provider.GetRequiredService<ProcessPackageWorkerSupervisor>());
+        services.AddSingleton(BrowserRuntimeOptions.Read(configuration));
+        services.AddSingleton<BrowserSessionCoordinator>();
+        services.AddScoped<BrowserSessionCapabilityProvider>();
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
@@ -84,6 +88,8 @@ public static class PackageManagementServiceCollectionExtensions
             broker.Register(hostMetrics.Descriptor.ProviderPackageId, hostMetrics);
             var remote = provider.GetRequiredService<RemoteSessionCapabilityProvider>();
             broker.Register(remote.Descriptor.ProviderPackageId, remote);
+            var browser = provider.GetRequiredService<BrowserSessionCapabilityProvider>();
+            broker.Register(browser.Descriptor.ProviderPackageId, browser);
             return broker;
         });
         services.AddScoped<ICapabilityClient>(
