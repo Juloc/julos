@@ -17,7 +17,10 @@
         event.preventDefault();
         status.textContent = context.language === 'de' ? 'Sitzung wird gestartet' : 'Starting session';
         void context.invokeCapability('browser.session', 'create', {
+          operationKey: crypto.randomUUID(),
           initialUrl: address.value,
+          profileMode: 'temporary',
+          profileId: null,
         }).then((session) => {
           status.textContent = session.state ?? 'created';
         }).catch(() => {
