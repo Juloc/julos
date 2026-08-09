@@ -12,7 +12,9 @@ artifacts/
 .idea/
 
 docs/
-deploy/
+deploy/*
+!deploy/official-packages/
+!deploy/official-packages/**
 tools/
 tests/
 

@@ -11,6 +11,7 @@ on:
       - packages/**
       - tests/**
       - deploy/alpha/**
+      - deploy/official-packages/**
       - docs/releases/**
       - tools/**
       - .github/workflows/publish-alpha.yml
@@ -30,6 +31,8 @@ concurrency:
 
 env:
   DOCKER_BUILD_RECORD_UPLOAD: "false"
+  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a
+  JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
 jobs:
   validate:
@@ -112,11 +115,36 @@ jobs:
     name: Build and smoke-test prerelease stack
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Set up .NET for official packages
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node for official packages
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Stage signed official package catalog
+        if: github.event_name != 'pull_request'
+        env:
+          PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+          PACKAGE_PUBLISHER_ID: juloc-official
+          PACKAGE_KEY_ID: ${{ env.JULOS_PACKAGE_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
+          test -s deploy/official-packages/juloc-package-signing-public.pem
 
       - name: Build exact server image
         shell: bash
@@ -188,6 +216,13 @@ jobs:
             exit 1
           fi
 
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            docker exec "$container_id" test -s /application/official-packages/catalog.json
+            docker exec "$container_id" test -s /application/official-packages/JulOS.Browser-1.0.0.zip
+            docker exec "$container_id" test -s /application/official-packages/JulOS.Remote-1.0.0.zip
+            docker exec "$container_id" test -s /application/official-packages/JulOS.HostMetrics-1.0.0.zip
+          fi
+
           "${compose[@]}" restart server
           "${compose[@]}" up --detach --wait --wait-timeout 120
           curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
@@ -228,7 +263,7 @@ jobs:
       - validate
       - smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     permissions:
       contents: write
       packages: write
@@ -239,6 +274,27 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Set up .NET for official packages
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Set up Node for official packages
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Stage signed official package catalog
+        env:
+          PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+          PACKAGE_PUBLISHER_ID: juloc-official
+          PACKAGE_KEY_ID: ${{ env.JULOS_PACKAGE_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
