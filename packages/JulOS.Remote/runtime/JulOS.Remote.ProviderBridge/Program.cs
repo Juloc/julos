@@ -77,7 +77,7 @@ static async Task FinalizeAsync(string keyFilePath, string nginxTokenFilePath)
     var maximumSessionSeconds = RequireInt("JULOS_REMOTE_MAXIMUM_SESSION_SECONDS");
     var credentialBase64 = RequireEnvironment("JULOS_REMOTE_TARGET_CREDENTIAL");
 
-    var credential = ParseCredential(credentialBase64);
+    var credential = ParseCredential(credentialBase64, protocol);
     var request = BuildLaunchRequest(sessionId, protocol, targetHost, targetPort, maximumSessionSeconds, credential);
 
     GuacamoleLaunchToken token;
@@ -101,12 +101,12 @@ static async Task FinalizeAsync(string keyFilePath, string nginxTokenFilePath)
     await ReportConnectedAsync(sessionId).ConfigureAwait(false);
 }
 
-static ProviderCredential ParseCredential(string credentialBase64)
+static ProviderCredential ParseCredential(string credentialBase64, string protocol)
 {
-    byte[] credentialJson;
+    byte[] credentialBytes;
     try
     {
-        credentialJson = Convert.FromBase64String(credentialBase64);
+        credentialBytes = Convert.FromBase64String(credentialBase64);
     }
     catch (FormatException exception)
     {
@@ -118,25 +118,56 @@ static ProviderCredential ParseCredential(string credentialBase64)
 
     try
     {
-        using var document = JsonDocument.Parse(credentialJson);
-        var root = document.RootElement;
-        return new ProviderCredential(
-            ReadOptionalString(root, "username"),
-            ReadOptionalString(root, "password"),
-            ReadOptionalString(root, "domain"),
-            ReadOptionalString(root, "privateKey"),
-            ReadOptionalString(root, "passphrase"));
-    }
-    catch (JsonException exception)
-    {
-        throw new ProviderBridgeException(
-            "remote.provider_credential_invalid",
-            "The Remote target credential is not valid JSON.",
-            exception);
+        try
+        {
+            using var document = JsonDocument.Parse(credentialBytes);
+            var root = document.RootElement;
+            return new ProviderCredential(
+                ReadOptionalString(root, "username"),
+                ReadOptionalString(root, "password"),
+                ReadOptionalString(root, "domain"),
+                ReadOptionalString(root, "privateKey"),
+                ReadOptionalString(root, "passphrase"));
+        }
+        catch (JsonException exception) when (string.Equals(protocol, RemoteTransportProtocols.Vnc, StringComparison.Ordinal))
+        {
+            string password;
+            try
+            {
+                password = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true)
+                    .GetString(credentialBytes);
+            }
+            catch (DecoderFallbackException decoderException)
+            {
+                throw new ProviderBridgeException(
+                    "remote.provider_credential_invalid",
+                    "The VNC target credential is not valid UTF-8.",
+                    decoderException);
+            }
+
+            if (string.IsNullOrWhiteSpace(password)
+                || password.Length > 4096
+                || password.Any(char.IsControl))
+            {
+                throw new ProviderBridgeException(
+                    "remote.provider_credential_invalid",
+                    "The VNC target credential is invalid.",
+                    exception);
+            }
+
+            return new ProviderCredential(null, password, null, null, null);
+        }
+        catch (JsonException exception)
+        {
+            throw new ProviderBridgeException(
+                "remote.provider_credential_invalid",
+                "The Remote target credential is not valid JSON.",
+                exception);
+        }
     }
     finally
     {
-        CryptographicOperations.ZeroMemory(credentialJson);
+        CryptographicOperations.ZeroMemory(credentialBytes);
     }
 }
 

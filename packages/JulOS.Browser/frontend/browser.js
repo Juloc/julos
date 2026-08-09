@@ -100,12 +100,13 @@
           },
         });
         await this.#consume(session);
-      } catch {
+      } catch (error) {
         this.#required('stop').disabled = true;
         this.#setStatus(
-          context.language === 'de'
-            ? 'Browsersitzung konnte nicht gestartet werden.'
-            : 'Browser session could not be started.',
+          failureDetail(error)
+            ?? (context.language === 'de'
+              ? 'Browsersitzung konnte nicht gestartet werden.'
+              : 'Browser session could not be started.'),
           'error',
         );
       }
@@ -295,6 +296,12 @@ function normalizeUrl(value) {
     throw new Error('Browser URL must use HTTP or HTTPS.');
   }
   return url.href;
+}
+
+function failureDetail(value) {
+  return value instanceof Error && value.message.trim().length > 0
+    ? value.message.trim()
+    : null;
 }
 
 function validateSession(value) {

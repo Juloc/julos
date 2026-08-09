@@ -176,7 +176,7 @@ function isAbort(value: unknown): boolean {
 
 async function readProblemDetails(response: Response): Promise<JulOsProblemDetails | null> {
   const contentType = response.headers.get('Content-Type') ?? '';
-  if (!contentType.toLowerCase().includes('application/problem+json')) {
+  if (!contentType.toLowerCase().includes('json')) {
     return fallbackProblem(response);
   }
 
@@ -196,6 +196,9 @@ async function readProblemDetails(response: Response): Promise<JulOsProblemDetai
   const code = typeof raw['code'] === 'string' ? raw['code'] : fallbackCode(status);
   const correlationId = safeOptionalString(raw['correlationId'])
     ?? safeOptionalString(response.headers.get('X-Correlation-Id'));
+  const retryable = typeof raw['retryable'] === 'boolean'
+    ? raw['retryable']
+    : response.status === 429 || response.status === 503;
 
   return {
     type: safeOptionalString(raw['type']),
@@ -204,7 +207,7 @@ async function readProblemDetails(response: Response): Promise<JulOsProblemDetai
     detail: safeOptionalString(raw['detail']),
     code,
     correlationId,
-    retryable: raw['retryable'] === true,
+    retryable,
     sourcePackage: safeOptionalString(raw['sourcePackage']),
     fieldErrors: readFieldErrors(raw['fieldErrors']),
     currentRevision: typeof raw['currentRevision'] === 'number' ? raw['currentRevision'] : null,

@@ -58,7 +58,9 @@ case "$runtime_kind" in
       --no-self-contained \
       -p:GeneratePackageOnBuild=false \
       -p:DebugSymbols=false \
-      -p:DebugType=None
+      -p:DebugType=None \
+      -p:Version="$package_version" \
+      -p:ContinuousIntegrationBuild=true
     ;;
   none)
     ;;
@@ -71,7 +73,8 @@ esac
 mkdir -p "$(dirname "$output_zip")"
 rm -f "$output_zip"
 
-# Stable timestamps and lexical file order make the archive reproducible across runs.
+# Stable timestamps, package-owned assembly versions and lexical file order keep
+# an unchanged package artifact reproducible across JulOS server releases.
 find "$stage" -type f -exec touch -d '2000-01-01 00:00:00 UTC' {} +
 (
   cd "$stage"
