@@ -1,7 +1,7 @@
-﻿{
+{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.browser",
-  "Version": "1.0.0",
+  "Version": "1.0.1",
   "PublisherId": "juloc-official",
   "DisplayNameKey": "package.browser.name",
   "DescriptionKey": "package.browser.description",
