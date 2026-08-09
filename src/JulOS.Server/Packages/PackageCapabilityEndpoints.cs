@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using System.Text.Json;
 
+using JulOS.Contracts.Runtime;
 using JulOS.Infrastructure.Packages;
 using JulOS.PackageSdk;
 using JulOS.Server.Authentication;
@@ -15,6 +16,9 @@ internal sealed record InvokePackageCapabilityRequest(JsonElement Payload);
 
 internal static class PackageCapabilityEndpoints
 {
+    private static readonly TimeSpan DefaultCapabilityTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan InteractiveCreateTimeout = TimeSpan.FromMinutes(6);
+
     internal static IEndpointRouteBuilder MapJulOsPackageCapabilities(
         this IEndpointRouteBuilder endpoints)
     {
@@ -62,7 +66,7 @@ internal static class PackageCapabilityEndpoints
                     operation,
                     CorrelationId.Get(context),
                     payload,
-                    timeProvider.GetUtcNow().AddSeconds(10)),
+                    CapabilityDeadlineUtc(timeProvider, grant.CapabilityName, operation)),
                 cancellationToken).ConfigureAwait(false);
             return response.Succeeded
                 ? Results.Json(response.Payload)
@@ -95,6 +99,24 @@ internal static class PackageCapabilityEndpoints
                 new { code = exception.Code, detail = exception.Message },
                 statusCode: status);
         }
+    }
+
+    private static DateTimeOffset CapabilityDeadlineUtc(
+        TimeProvider timeProvider,
+        string capabilityName,
+        string operation)
+    {
+        var timeout = string.Equals(
+                capabilityName,
+                InteractiveSessionCapabilityContract.Name,
+                StringComparison.Ordinal)
+            && string.Equals(
+                operation,
+                InteractiveSessionCapabilityContract.CreateOperation,
+                StringComparison.Ordinal)
+                ? InteractiveCreateTimeout
+                : DefaultCapabilityTimeout;
+        return timeProvider.GetUtcNow().Add(timeout);
     }
 
     private static IResult AuthorizationFailure(
