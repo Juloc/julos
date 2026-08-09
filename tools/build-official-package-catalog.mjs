@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -21,11 +21,24 @@ if (privateKey.asymmetricKeyType !== 'ec' || privateKey.asymmetricKeyDetails?.na
 }
 const publicKey = crypto.createPublicKey(privateKey);
 
+function readPackageVersion(manifestPath) {
+  const raw = fs.readFileSync(path.resolve(manifestPath), 'utf8').replace(/^\uFEFF/u, '');
+  const manifest = JSON.parse(raw);
+  if (typeof manifest.Version !== 'string' || manifest.Version.length === 0) {
+    throw new Error(`Official package manifest has no version: ${manifestPath}`);
+  }
+  return manifest.Version;
+}
+
+const browserVersion = readPackageVersion('packages/JulOS.Browser/manifest.json');
+const remoteVersion = readPackageVersion('packages/JulOS.Remote/manifest.json');
+const hostMetricsVersion = readPackageVersion('packages/JulOS.HostMetrics/manifest.json');
+
 const packageDefinitions = [
   {
     packageId: 'de.juloc.julos.browser',
-    version: '1.0.0',
-    archive: 'JulOS.Browser-1.0.0.zip',
+    version: browserVersion,
+    archive: `JulOS.Browser-${browserVersion}.zip`,
     displayNameEn: 'Browser',
     displayNameDe: 'Browser',
     descriptionEn: 'Isolated Chromium sessions and saved URL applications.',
@@ -40,8 +53,8 @@ const packageDefinitions = [
   },
   {
     packageId: 'de.juloc.julos.remote',
-    version: '1.0.0',
-    archive: 'JulOS.Remote-1.0.0.zip',
+    version: remoteVersion,
+    archive: `JulOS.Remote-${remoteVersion}.zip`,
     displayNameEn: 'Remote',
     displayNameDe: 'Remote',
     descriptionEn: 'Saved RDP, SSH and VNC connections as JulOS applications.',
@@ -53,8 +66,8 @@ const packageDefinitions = [
   },
   {
     packageId: 'de.juloc.julos.hostmetrics',
-    version: '1.0.0',
-    archive: 'JulOS.HostMetrics-1.0.0.zip',
+    version: hostMetricsVersion,
+    archive: `JulOS.HostMetrics-${hostMetricsVersion}.zip`,
     displayNameEn: 'Host Metrics',
     displayNameDe: 'Host-Metriken',
     descriptionEn: 'Core host status and metrics surfaces.',
