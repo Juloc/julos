@@ -16,4 +16,4 @@ jobs:
       - name: Dispatch prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run release.yml --ref main -f target=prerelease
+        run: gh workflow run release.yml --repo Juloc/julos --ref main -f target=prerelease
