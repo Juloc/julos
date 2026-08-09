@@ -34,17 +34,15 @@ jobs:
           fs.writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
 
-          sed -i 's/JulOS\.Browser-1\.0\.0\.zip/JulOS.Browser-1.0.1.zip/g' .github/workflows/release.yml
           node tools/normalize-encoding.mjs
 
-      - name: Commit finalized files and remove helper
+      - name: Commit finalized source files
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/workflows/beta4-normalize.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add docs packages src tools VERSION
           if git diff --cached --quiet; then
             exit 0
           fi
