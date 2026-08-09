@@ -5,8 +5,5 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs"
-  },
-  "devDependencies": {
-    "fflate": "0.8.2"
   }
 }
