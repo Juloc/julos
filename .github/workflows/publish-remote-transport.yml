@@ -137,7 +137,7 @@ jobs:
           name: JulOS.Remote.Transport-${{ steps.package.outputs.version }}-${{ github.sha }}
           path: ${{ steps.package.outputs.directory }}
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 3
 
       - name: Configure the GitHub NuGet source
         shell: bash
