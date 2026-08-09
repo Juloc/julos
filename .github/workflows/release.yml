@@ -1,6 +1,4 @@
 # Single manual publication entry point for JulOS.
-# The temporary push trigger runs one repository cleanup after this workflow
-# replaces the old workflow set. It is removed after the cleanup succeeds.
 
 name: Release
 
@@ -17,17 +15,12 @@ on:
           - browser-runtime
           - session-runtimes
           - remote-transport
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/release.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -36,122 +29,8 @@ env:
   JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
 jobs:
-  cleanup-actions:
-    name: Cleanup legacy Actions
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      actions: write
-      contents: read
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Disable legacy workflows and delete their runs
-        shell: bash
-        run: |
-          set -euo pipefail
-          repository="$GITHUB_REPOSITORY"
-          keep_ci=".github/workflows/ci.yml"
-          keep_release=".github/workflows/release.yml"
-
-          mapfile -t workflows < <(
-            gh api --paginate "repos/$repository/actions/workflows?per_page=100" \
-              --jq '.workflows[] | [.id, .path, .state] | @tsv'
-          )
-
-          ci_id=""
-          release_id=""
-          disabled=0
-          deleted_runs=0
-          cancelled_runs=0
-
-          for workflow in "${workflows[@]}"; do
-            IFS=$'\t' read -r workflow_id path state <<<"$workflow"
-            if [[ "$path" == "$keep_ci" ]]; then
-              ci_id="$workflow_id"
-              continue
-            fi
-            if [[ "$path" == "$keep_release" ]]; then
-              release_id="$workflow_id"
-              continue
-            fi
-
-            if [[ "$state" == "active" ]]; then
-              gh api --method PUT "repos/$repository/actions/workflows/$workflow_id/disable" >/dev/null
-              disabled=$((disabled + 1))
-            fi
-          done
-
-          if [[ -z "$ci_id" || -z "$release_id" ]]; then
-            echo "Could not resolve the CI and Release workflow IDs." >&2
-            exit 1
-          fi
-
-          for attempt in $(seq 1 12); do
-            mapfile -t legacy_runs < <(
-              gh api --paginate "repos/$repository/actions/runs?per_page=100" \
-                --jq ".workflow_runs[] | select(.workflow_id != $ci_id and .workflow_id != $release_id) | [.id, .status] | @tsv"
-            )
-
-            if (( ${#legacy_runs[@]} == 0 )); then
-              break
-            fi
-
-            pending=0
-            for legacy_run in "${legacy_runs[@]}"; do
-              IFS=$'\t' read -r run_id status <<<"$legacy_run"
-              if [[ "$status" == "completed" ]]; then
-                gh api --method DELETE "repos/$repository/actions/runs/$run_id" >/dev/null
-                deleted_runs=$((deleted_runs + 1))
-                continue
-              fi
-
-              pending=$((pending + 1))
-              if [[ "$attempt" == "1" ]]; then
-                if gh api --method POST "repos/$repository/actions/runs/$run_id/cancel" >/dev/null 2>&1; then
-                  cancelled_runs=$((cancelled_runs + 1))
-                fi
-              fi
-            done
-
-            if (( pending > 0 )); then
-              sleep 5
-            fi
-          done
-
-          remaining_legacy_runs="$(
-            gh api --paginate "repos/$repository/actions/runs?per_page=100" \
-              --jq "[.workflow_runs[] | select(.workflow_id != $ci_id and .workflow_id != $release_id)] | length" \
-              | awk '{ total += $1 } END { print total + 0 }'
-          )"
-          if [[ "$remaining_legacy_runs" != "0" ]]; then
-            echo "Legacy workflow runs are still present: $remaining_legacy_runs" >&2
-            exit 1
-          fi
-
-          active_legacy="$(
-            gh api --paginate "repos/$repository/actions/workflows?per_page=100" \
-              --jq '[.workflows[] | select(.state == "active") | select(.path != ".github/workflows/ci.yml") | select(.path != ".github/workflows/release.yml")] | length' \
-              | awk '{ total += $1 } END { print total + 0 }'
-          )"
-          if [[ "$active_legacy" != "0" ]]; then
-            echo "Legacy workflows are still active: $active_legacy" >&2
-            exit 1
-          fi
-
-          {
-            echo "### Actions cleanup"
-            echo
-            echo "- Legacy workflows disabled: $disabled"
-            echo "- Legacy workflow runs cancelled: $cancelled_runs"
-            echo "- Legacy workflow runs deleted: $deleted_runs"
-            echo "- Active workflows kept: CI, Release"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   validate:
     name: Validate release source
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -183,6 +62,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_REF_NAME" != "main" ]]; then
+            echo "Release must be dispatched from main, got: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
           version="$(tr -d '\r\n' < VERSION)"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
             echo "VERSION is not a supported immutable version: $version" >&2
@@ -230,7 +113,7 @@ jobs:
 
   prerelease:
     name: Publish prerelease
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'prerelease'
+    if: inputs.target == 'prerelease'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -425,7 +308,7 @@ jobs:
           set -euo pipefail
           version="${{ needs.validate.outputs.version }}"
           gh release create "v$version" \
-            --target "$GITHUB_SHA" \
+            --target "$GITHUB_REF_NAME" \
             --title "JulOS $version" \
             --notes-file "docs/releases/$version.md" \
             --prerelease \
@@ -444,7 +327,7 @@ jobs:
 
   browser-runtime:
     name: Publish Browser Runtime
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'browser-runtime'
+    if: inputs.target == 'browser-runtime'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -564,7 +447,7 @@ jobs:
 
   session-runtimes:
     name: Publish session runtimes
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'session-runtimes'
+    if: inputs.target == 'session-runtimes'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 70
@@ -656,7 +539,7 @@ jobs:
 
   remote-transport:
     name: Publish Remote Transport
-    if: github.event_name == 'workflow_dispatch' && inputs.target == 'remote-transport'
+    if: inputs.target == 'remote-transport'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 35
