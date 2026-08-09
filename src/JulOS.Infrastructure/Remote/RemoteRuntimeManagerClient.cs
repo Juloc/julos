@@ -44,7 +44,8 @@ internal sealed class HttpRemoteRuntimeManager : IRemoteRuntimeManager, IDisposa
 {
     private const string ApiKeyHeader = "X-JulOS-Runtime-Key";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan RuntimeCreateTimeout = TimeSpan.FromMinutes(5);
     private readonly HttpClient client;
     private readonly string apiKey;
 
@@ -110,7 +111,8 @@ internal sealed class HttpRemoteRuntimeManager : IRemoteRuntimeManager, IDisposa
     {
         using var create = Request(HttpMethod.Post, "v1/runtimes/");
         create.Content = JsonContent.Create(request, options: JsonOptions);
-        using var response = await this.SendAsync(create, cancellationToken).ConfigureAwait(false);
+        using var response = await this.SendAsync(create, cancellationToken, RuntimeCreateTimeout)
+            .ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.Conflict)
         {
             return await ReadSuccessAsync<PackageRuntimeResponse>(response, cancellationToken)
@@ -132,10 +134,11 @@ internal sealed class HttpRemoteRuntimeManager : IRemoteRuntimeManager, IDisposa
 
     private async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? requestTimeout = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(RequestTimeout);
+        deadline.CancelAfter(requestTimeout ?? DefaultRequestTimeout);
         try
         {
             return await this.client.SendAsync(
