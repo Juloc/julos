@@ -60,12 +60,20 @@ jobs:
               --jq '.workflows[] | [.id, .path, .state] | @tsv'
           )
 
+          ci_id=""
+          release_id=""
           disabled=0
           deleted_runs=0
+          cancelled_runs=0
 
           for workflow in "${workflows[@]}"; do
             IFS=$'\t' read -r workflow_id path state <<<"$workflow"
-            if [[ "$path" == "$keep_ci" || "$path" == "$keep_release" ]]; then
+            if [[ "$path" == "$keep_ci" ]]; then
+              ci_id="$workflow_id"
+              continue
+            fi
+            if [[ "$path" == "$keep_release" ]]; then
+              release_id="$workflow_id"
               continue
             fi
 
@@ -73,22 +81,54 @@ jobs:
               gh api --method PUT "repos/$repository/actions/workflows/$workflow_id/disable" >/dev/null
               disabled=$((disabled + 1))
             fi
+          done
 
-            while true; do
-              mapfile -t runs < <(
-                gh api "repos/$repository/actions/workflows/$workflow_id/runs?per_page=100" \
-                  --jq '.workflow_runs[].id'
-              )
-              if (( ${#runs[@]} == 0 )); then
-                break
-              fi
+          if [[ -z "$ci_id" || -z "$release_id" ]]; then
+            echo "Could not resolve the CI and Release workflow IDs." >&2
+            exit 1
+          fi
 
-              for run_id in "${runs[@]}"; do
+          for attempt in $(seq 1 12); do
+            mapfile -t legacy_runs < <(
+              gh api --paginate "repos/$repository/actions/runs?per_page=100" \
+                --jq ".workflow_runs[] | select(.workflow_id != $ci_id and .workflow_id != $release_id) | [.id, .status] | @tsv"
+            )
+
+            if (( ${#legacy_runs[@]} == 0 )); then
+              break
+            fi
+
+            pending=0
+            for legacy_run in "${legacy_runs[@]}"; do
+              IFS=$'\t' read -r run_id status <<<"$legacy_run"
+              if [[ "$status" == "completed" ]]; then
                 gh api --method DELETE "repos/$repository/actions/runs/$run_id" >/dev/null
                 deleted_runs=$((deleted_runs + 1))
-              done
+                continue
+              fi
+
+              pending=$((pending + 1))
+              if [[ "$attempt" == "1" ]]; then
+                if gh api --method POST "repos/$repository/actions/runs/$run_id/cancel" >/dev/null 2>&1; then
+                  cancelled_runs=$((cancelled_runs + 1))
+                fi
+              fi
             done
+
+            if (( pending > 0 )); then
+              sleep 5
+            fi
           done
+
+          remaining_legacy_runs="$(
+            gh api --paginate "repos/$repository/actions/runs?per_page=100" \
+              --jq "[.workflow_runs[] | select(.workflow_id != $ci_id and .workflow_id != $release_id)] | length" \
+              | awk '{ total += $1 } END { print total + 0 }'
+          )"
+          if [[ "$remaining_legacy_runs" != "0" ]]; then
+            echo "Legacy workflow runs are still present: $remaining_legacy_runs" >&2
+            exit 1
+          fi
 
           active_legacy="$(
             gh api --paginate "repos/$repository/actions/workflows?per_page=100" \
@@ -104,6 +144,7 @@ jobs:
             echo "### Actions cleanup"
             echo
             echo "- Legacy workflows disabled: $disabled"
+            echo "- Legacy workflow runs cancelled: $cancelled_runs"
             echo "- Legacy workflow runs deleted: $deleted_runs"
             echo "- Active workflows kept: CI, Release"
           } >> "$GITHUB_STEP_SUMMARY"
