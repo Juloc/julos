@@ -1,0 +1,38 @@
+name: Beta2 Release Trigger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/beta2-trigger.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    name: Dispatch Beta2 prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Verify version and dispatch Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(gh api "repos/$GITHUB_REPOSITORY/contents/VERSION?ref=main" --jq .content | base64 --decode | tr -d '\r\n')"
+          if [[ "$version" != "0.4.0-beta.2" ]]; then
+            echo "Refusing one-time trigger for unexpected VERSION: $version" >&2
+            exit 1
+          fi
+
+          gh api \
+            --method POST \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/dispatches" \
+            -f ref=main \
+            -f 'inputs[target]=prerelease'
+
+          echo "Dispatched Release target prerelease for $version." >> "$GITHUB_STEP_SUMMARY"
