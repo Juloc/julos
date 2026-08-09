@@ -1,1 +1,0 @@
-One-time internal release trigger for 0.4.0-beta.2. Remove with .github/workflows/beta2-trigger.yml after the prerelease dispatch succeeds.
