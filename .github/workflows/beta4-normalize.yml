@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node tools/normalize-encoding.mjs
           browser_hash="$(sha256sum packages/JulOS.Browser/frontend/browser.js | cut -d' ' -f1)"
           BROWSER_HASH="$browser_hash" node <<'NODE'
           const fs = require('fs');
@@ -33,7 +34,6 @@ jobs:
           manifest.Frontend.Sha256 = process.env.BROWSER_HASH;
           fs.writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
-
           node tools/normalize-encoding.mjs
 
       - name: Commit finalized source files
@@ -46,5 +46,5 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m 'fix: finalize Beta4 package metadata'
+          git commit -m 'fix: refresh normalized Browser frontend digest'
           git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
