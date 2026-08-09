@@ -1,4 +1,4 @@
-export type ApiFailureKind =
+﻿export type ApiFailureKind =
   | 'offline'
   | 'unauthorized'
   | 'forbidden'

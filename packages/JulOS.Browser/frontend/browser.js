@@ -1,4 +1,4 @@
-export async function register(context) {
+﻿export async function register(context) {
   class JulOsBrowserApp extends HTMLElement {
     launchTarget = null;
     #session = null;

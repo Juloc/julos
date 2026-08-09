@@ -1,4 +1,4 @@
-{
+﻿{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.browser",
   "Version": "1.0.1",
@@ -10,7 +10,7 @@
     "Image": null,
     "EntryPoint": "worker/JulOS.Browser.Worker.dll",
     "MemoryLimitMegabytes": 256,
-    "CpuLimit": 1.0,
+    "CpuLimit": 1,
     "StartupTimeoutSeconds": 30,
     "NetworkAccess": false
   },
@@ -46,7 +46,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/browser.js",
-    "Sha256": "9b4c8caf7aebce074f1640f1774e2f00f513d78c303808bcbe985b0d5f838ae0",
+    "Sha256": "1b649f858ffe18e57c9538a4397ad46f7c0dd76cc7a3c369e9b1201872af22b7",
     "ExportedElements": [
       "julos-browser-app"
     ]
