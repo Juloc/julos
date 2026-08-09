@@ -1,0 +1,127 @@
+name: Beta2 Finalize
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/beta2-finalize.yml
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a
+  JULOS_PACKAGE_KEY_ID: official-alpha-2026
+
+jobs:
+  finalize:
+    name: Finalize JulOS 0.4.0-beta.2
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify release state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          test "$version" = "0.4.0-beta.2"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "Release v$version already exists." >&2
+            exit 1
+          fi
+          docker manifest inspect "ghcr.io/juloc/julos-server:$version" >/dev/null
+          git ls-remote --exit-code origin refs/heads/release/0.4.0-beta.2-source >/dev/null
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Build and sign official packages
+        env:
+          PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+          PACKAGE_PUBLISHER_ID: juloc-official
+          PACKAGE_KEY_ID: ${{ env.JULOS_PACKAGE_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
+          test -s deploy/official-packages/juloc-package-signing-public.pem
+          test -s deploy/official-packages/JulOS.Browser-1.0.0.zip
+          test -s deploy/official-packages/JulOS.Remote-1.0.0.zip
+          test -s deploy/official-packages/JulOS.HostMetrics-1.0.0.zip
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.4.0-beta.2"
+          mkdir -p release-files
+          cp deploy/alpha/compose.sqlite.yaml release-files/julos-beta-compose.yaml
+          cp deploy/alpha/.env.sqlite.example release-files/julos-beta.env.example
+          cp "docs/releases/$version.md" release-files/RELEASE_NOTES.md
+          cp deploy/official-packages/catalog.json release-files/
+          cp deploy/official-packages/juloc-package-signing-public.pem release-files/
+          cp deploy/official-packages/JulOS.Browser-1.0.0.zip release-files/
+          cp deploy/official-packages/JulOS.Remote-1.0.0.zip release-files/
+          cp deploy/official-packages/JulOS.HostMetrics-1.0.0.zip release-files/
+          (
+            cd release-files
+            sha256sum \
+              julos-beta-compose.yaml \
+              julos-beta.env.example \
+              RELEASE_NOTES.md \
+              catalog.json \
+              juloc-package-signing-public.pem \
+              JulOS.Browser-1.0.0.zip \
+              JulOS.Remote-1.0.0.zip \
+              JulOS.HostMetrics-1.0.0.zip \
+              > SHA256SUMS
+          )
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.4.0-beta.2"
+          gh release create "v$version" \
+            --target "release/0.4.0-beta.2-source" \
+            --title "JulOS $version" \
+            --notes-file "docs/releases/$version.md" \
+            --prerelease \
+            release-files/*
+
+      - name: Verify prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh release view v0.4.0-beta.2 --json isPrerelease --jq .isPrerelease)" = "true"
+          for asset in \
+            julos-beta-compose.yaml \
+            julos-beta.env.example \
+            RELEASE_NOTES.md \
+            catalog.json \
+            juloc-package-signing-public.pem \
+            JulOS.Browser-1.0.0.zip \
+            JulOS.Remote-1.0.0.zip \
+            JulOS.HostMetrics-1.0.0.zip \
+            SHA256SUMS; do
+            gh release view v0.4.0-beta.2 --json assets --jq '.assets[].name' | grep -Fx "$asset"
+          done
