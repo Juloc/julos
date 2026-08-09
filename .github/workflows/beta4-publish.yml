@@ -22,3 +22,4 @@ jobs:
           set -euo pipefail
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=session-runtimes
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=prerelease
+          echo "Beta4 publication workflows dispatched."
