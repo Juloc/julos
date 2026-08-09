@@ -1,7 +1,7 @@
 ﻿{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.hostmetrics",
-  "Version": "1.0.0",
+  "Version": "1.0.1",
   "PublisherId": "juloc-official",
   "DisplayNameKey": "package.hostmetrics.name",
   "DescriptionKey": "package.hostmetrics.description",
