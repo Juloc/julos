@@ -4,9 +4,22 @@ import path from 'node:path';
 
 const outputDirectory = path.resolve(process.argv[2] ?? '');
 const browserRuntimeImage = process.argv[3] ?? '';
+const privateKeyPem = process.env.PACKAGE_SIGNING_KEY ?? '';
+const publisherId = process.env.PACKAGE_PUBLISHER_ID ?? 'juloc-official';
+const keyId = process.env.PACKAGE_KEY_ID ?? '';
+
 if (!outputDirectory || !/^ghcr\.io\/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$/u.test(browserRuntimeImage)) {
   throw new Error('usage: node build-official-package-catalog.mjs <output-directory> <digest-pinned-browser-runtime-image>');
 }
+if (!privateKeyPem || !publisherId || !keyId) {
+  throw new Error('Official package signing configuration is incomplete.');
+}
+
+const privateKey = crypto.createPrivateKey(privateKeyPem);
+if (privateKey.asymmetricKeyType !== 'ec' || privateKey.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+  throw new Error('Official package signing key must use ECDSA P-256.');
+}
+const publicKey = crypto.createPublicKey(privateKey);
 
 const packageDefinitions = [
   {
@@ -51,20 +64,22 @@ const packageDefinitions = [
 ];
 
 fs.mkdirSync(outputDirectory, { recursive: true });
-const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-const publisherId = 'juloc-official';
-const keyId = 'release-local-p256-v1';
 const publicKeyFile = 'juloc-package-signing-public.pem';
 fs.writeFileSync(path.join(outputDirectory, publicKeyFile), publicKey.export({ type: 'spki', format: 'pem' }));
 
 const packages = [];
 for (const definition of packageDefinitions) {
   const archivePath = path.join(outputDirectory, definition.archive);
+  if (!fs.existsSync(archivePath)) {
+    throw new Error(`Official package archive is missing: ${definition.archive}`);
+  }
+
   const archive = fs.readFileSync(archivePath);
   const signature = crypto.sign('sha256', archive, { key: privateKey, dsaEncoding: 'ieee-p1363' });
   if (!crypto.verify('sha256', archive, { key: publicKey, dsaEncoding: 'ieee-p1363' }, signature)) {
     throw new Error(`Signature verification failed for ${definition.archive}.`);
   }
+
   const signatureFile = `${definition.archive}.sig`;
   fs.writeFileSync(path.join(outputDirectory, signatureFile), signature);
   packages.push({
