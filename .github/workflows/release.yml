@@ -1,4 +1,5 @@
 # Single manual publication entry point for JulOS.
+
 name: Release
 
 on:
@@ -139,13 +140,17 @@ jobs:
         run: |
           set -euo pipefail
           bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
+          test -s deploy/official-packages/juloc-package-signing-public.pem
           node <<'NODE'
           const fs = require('fs');
           const catalog = JSON.parse(fs.readFileSync('deploy/official-packages/catalog.json', 'utf8'));
           for (const pkg of catalog.packages) {
             for (const name of [pkg.artifactFile, pkg.signatureFile]) {
-              const path = `deploy/official-packages/${name}`;
-              if (!fs.existsSync(path) || fs.statSync(path).size === 0) throw new Error(`Missing official package asset: ${path}`);
+              const file = `deploy/official-packages/${name}`;
+              if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
+                throw new Error(`Missing official package asset: ${file}`);
+              }
             }
           }
           NODE
@@ -222,8 +227,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          prior_assets="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq '.[] | .assets[] | [.name, (.digest // "")] | @tsv')"
+          prior_assets="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | .assets[] | [.name, (.digest // "")] | @tsv')"
           for package in release-files/JulOS.*-*.zip; do
             name="$(basename "$package")"
             digest="sha256:$(sha256sum "$package" | cut -d' ' -f1)"
@@ -323,7 +327,9 @@ jobs:
           push-to-registry: true
 
       - name: Runtime summary
-        run: echo "- Browser Runtime: ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          echo "- Browser Runtime: ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   session-runtimes:
     name: Publish session runtimes
@@ -452,8 +458,12 @@ jobs:
             -p:PackageVersion="$version" \
             -p:ContinuousIntegrationBuild=true \
             -p:RepositoryCommit="$GITHUB_SHA"
-          echo "package=$output/JulOS.Remote.Transport.$version.nupkg" >> "$GITHUB_OUTPUT"
-          echo "symbols=$output/JulOS.Remote.Transport.$version.snupkg" >> "$GITHUB_OUTPUT"
+          package="$output/JulOS.Remote.Transport.$version.nupkg"
+          symbols="$output/JulOS.Remote.Transport.$version.snupkg"
+          test -f "$package"
+          test -f "$symbols"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "symbols=$symbols" >> "$GITHUB_OUTPUT"
 
       - name: Attest package
         uses: actions/attest@v4
@@ -479,7 +489,14 @@ jobs:
       - name: Publish package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet nuget push "${{ steps.package.outputs.package }}" --source github --api-key "$GITHUB_TOKEN" --timeout 600
+        shell: bash
+        run: |
+          dotnet nuget push "${{ steps.package.outputs.package }}" \
+            --source github \
+            --api-key "$GITHUB_TOKEN" \
+            --timeout 600
 
       - name: Package summary
-        run: echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
