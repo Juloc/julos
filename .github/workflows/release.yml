@@ -396,9 +396,9 @@ jobs:
           {
             echo "### JulOS ${{ needs.validate.outputs.version }}"
             echo
-            echo "- Server: `ghcr.io/juloc/julos-server@${{ steps.server.outputs.digest }}`"
-            echo "- Browser runtime pinned in package catalog: `$JULOS_BROWSER_RUNTIME_IMAGE`"
-            echo "- GitHub prerelease: `v${{ needs.validate.outputs.version }}`"
+            echo "- Server: ghcr.io/juloc/julos-server@${{ steps.server.outputs.digest }}"
+            echo "- Browser runtime pinned in package catalog: $JULOS_BROWSER_RUNTIME_IMAGE"
+            echo "- GitHub prerelease: v${{ needs.validate.outputs.version }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   browser-runtime:
@@ -466,6 +466,9 @@ jobs:
             sleep 2
           done
           test "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" = "healthy"
+          docker stop --time 10 "$container_id" >/dev/null
+          cleanup
+          trap - EXIT
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v4
@@ -483,6 +486,7 @@ jobs:
       - name: Refuse existing image
         shell: bash
         run: |
+          set -euo pipefail
           image="ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}"
           if docker manifest inspect "$image" >/dev/null 2>&1; then
             echo "Browser runtime version already exists: $image" >&2
@@ -513,7 +517,9 @@ jobs:
           push-to-registry: true
 
       - name: Runtime summary
-        run: echo "- Browser Runtime: `ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}`" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          echo "- Browser Runtime: ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   session-runtimes:
     name: Publish session runtimes
@@ -603,8 +609,8 @@ jobs:
         shell: bash
         run: |
           {
-            echo "- Runtime Manager: `ghcr.io/juloc/julos-runtime-manager@${{ steps.manager.outputs.digest }}`"
-            echo "- Remote Provider: `ghcr.io/juloc/julos-remote-provider@${{ steps.provider.outputs.digest }}`"
+            echo "- Runtime Manager: ghcr.io/juloc/julos-runtime-manager@${{ steps.manager.outputs.digest }}"
+            echo "- Remote Provider: ghcr.io/juloc/julos-remote-provider@${{ steps.provider.outputs.digest }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   remote-transport:
@@ -673,6 +679,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          set -euo pipefail
           dotnet nuget add source \
             --username "${{ github.repository_owner }}" \
             --password "$GITHUB_TOKEN" \
@@ -684,7 +691,9 @@ jobs:
       - name: Publish package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
+          set -euo pipefail
           dotnet nuget push \
             "${{ steps.package.outputs.package }}" \
             --source github \
@@ -692,4 +701,6 @@ jobs:
             --timeout 600
 
       - name: Package summary
-        run: echo "- Remote Transport: `JulOS.Remote.Transport ${{ needs.validate.outputs.version }}`" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
