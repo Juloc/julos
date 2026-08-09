@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { JulOsApiClient, JulOsApiError } from './api-client.js';
@@ -83,6 +83,31 @@ test('forbidden and ordinary problems retain their stable details', async () => 
       && error.kind === 'problem'
       && error.problem?.currentRevision === 8
       && error.problem.fieldErrors?.['revision']?.[0] === 'The revision is stale.',
+  );
+});
+
+test('plain JSON capability failures retain their code and detail', async () => {
+  const client = new JulOsApiClient(async () => new Response(JSON.stringify({
+    code: 'remote.runtime_unavailable',
+    detail: 'No compatible Remote provider runtime is currently available.',
+  }), {
+    status: 503,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'X-Correlation-Id': 'corr-503',
+    },
+  }));
+
+  await assert.rejects(
+    () => client.get('/api/v1/packages/de.juloc.julos.browser/capabilities/interactive.session/create'),
+    (error: unknown) =>
+      error instanceof JulOsApiError
+      && error.kind === 'problem'
+      && error.status === 503
+      && error.message === 'No compatible Remote provider runtime is currently available.'
+      && error.problem?.code === 'remote.runtime_unavailable'
+      && error.correlationId === 'corr-503'
+      && error.retryable,
   );
 });
 
