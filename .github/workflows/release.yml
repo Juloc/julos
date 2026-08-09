@@ -1,0 +1,706 @@
+# Single manual publication entry point for JulOS.
+# The temporary push trigger runs one repository cleanup after this workflow
+# replaces the old workflow set. It is removed after the cleanup succeeds.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: What should be published?
+        required: true
+        default: prerelease
+        type: choice
+        options:
+          - prerelease
+          - browser-runtime
+          - session-runtimes
+          - remote-transport
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
+  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a
+  JULOS_PACKAGE_KEY_ID: official-alpha-2026
+
+jobs:
+  cleanup-actions:
+    name: Cleanup legacy Actions
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Disable legacy workflows and delete their runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_REPOSITORY"
+          keep_ci=".github/workflows/ci.yml"
+          keep_release=".github/workflows/release.yml"
+
+          mapfile -t workflows < <(
+            gh api --paginate "repos/$repository/actions/workflows?per_page=100" \
+              --jq '.workflows[] | [.id, .path, .state] | @tsv'
+          )
+
+          disabled=0
+          deleted_runs=0
+
+          for workflow in "${workflows[@]}"; do
+            IFS=$'\t' read -r workflow_id path state <<<"$workflow"
+            if [[ "$path" == "$keep_ci" || "$path" == "$keep_release" ]]; then
+              continue
+            fi
+
+            if [[ "$state" == "active" ]]; then
+              gh api --method PUT "repos/$repository/actions/workflows/$workflow_id/disable" >/dev/null
+              disabled=$((disabled + 1))
+            fi
+
+            while true; do
+              mapfile -t runs < <(
+                gh api "repos/$repository/actions/workflows/$workflow_id/runs?per_page=100" \
+                  --jq '.workflow_runs[].id'
+              )
+              if (( ${#runs[@]} == 0 )); then
+                break
+              fi
+
+              for run_id in "${runs[@]}"; do
+                gh api --method DELETE "repos/$repository/actions/runs/$run_id" >/dev/null
+                deleted_runs=$((deleted_runs + 1))
+              done
+            done
+          done
+
+          active_legacy="$(
+            gh api --paginate "repos/$repository/actions/workflows?per_page=100" \
+              --jq '[.workflows[] | select(.state == "active") | select(.path != ".github/workflows/ci.yml") | select(.path != ".github/workflows/release.yml")] | length' \
+              | awk '{ total += $1 } END { print total + 0 }'
+          )"
+          if [[ "$active_legacy" != "0" ]]; then
+            echo "Legacy workflows are still active: $active_legacy" >&2
+            exit 1
+          fi
+
+          {
+            echo "### Actions cleanup"
+            echo
+            echo "- Legacy workflows disabled: $disabled"
+            echo "- Legacy workflow runs deleted: $deleted_runs"
+            echo "- Active workflows kept: CI, Release"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Validate release source
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "VERSION is not a supported immutable version: $version" >&2
+            exit 1
+          fi
+          if [[ "${{ inputs.target }}" == "prerelease" ]]; then
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta)\.[0-9]+$ ]]; then
+              echo "Prerelease target requires an alpha or beta VERSION, got: $version" >&2
+              exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+              echo "Tag v$version already exists; prereleases are immutable." >&2
+              exit 1
+            fi
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Cache NuGet
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Validate
+        run: sh tools/validate.sh
+
+      - name: Verify clean tree
+        run: |
+          git status --short
+          git diff --stat
+          git diff --exit-code
+
+  prerelease:
+    name: Publish prerelease
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'prerelease'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Build and sign official packages
+        env:
+          PACKAGE_SIGNING_KEY: ${{ secrets.JULOS_PACKAGE_SIGNING_PRIVATE_KEY_PEM }}
+          PACKAGE_PUBLISHER_ID: juloc-official
+          PACKAGE_KEY_ID: ${{ env.JULOS_PACKAGE_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
+          test -s deploy/official-packages/juloc-package-signing-public.pem
+          test -s deploy/official-packages/JulOS.Browser-1.0.0.zip
+          test -s deploy/official-packages/JulOS.Remote-1.0.0.zip
+          test -s deploy/official-packages/JulOS.HostMetrics-1.0.0.zip
+
+      - name: Build exact server image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --file src/JulOS.Server/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ needs.validate.outputs.version }}" \
+            --tag "julos-release-smoke:${{ needs.validate.outputs.version }}" \
+            .
+
+      - name: Smoke-test SQLite deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="julos-release-smoke:${{ needs.validate.outputs.version }}"
+          smoke_directory="$GITHUB_WORKSPACE/.release-smoke"
+          env_file="$smoke_directory/.env"
+          volume_name="julos-beta_julos-data"
+          mkdir -p "$smoke_directory"
+
+          primary_key="$(openssl rand -base64 32)"
+          cat > "$env_file" <<EOF
+          JULOS_SERVER_IMAGE=$image
+          JULOS_PRIMARY_KEY=$primary_key
+          JULOS_BIND_ADDRESS=127.0.0.1
+          JULOS_SERVER_PORT=18080
+          EOF
+
+          compose=(docker compose --env-file "$env_file" --file deploy/alpha/compose.sqlite.yaml)
+          cleanup() {
+            "${compose[@]}" logs --no-color || true
+            "${compose[@]}" down --volumes --remove-orphans || true
+          }
+          trap cleanup EXIT
+
+          "${compose[@]}" config --quiet
+          docker volume create "$volume_name" >/dev/null
+          docker run --rm \
+            --user 0:0 \
+            --entrypoint /bin/sh \
+            --volume "$volume_name:/var/lib/julos" \
+            "$image" \
+            -c 'mkdir -p /var/lib/julos/data /var/lib/julos/packages /var/lib/julos/data-protection && chown -R 0:0 /var/lib/julos/data /var/lib/julos/packages /var/lib/julos/data-protection && touch /var/lib/julos/.preexisting-volume'
+
+          "${compose[@]}" up --detach --wait --wait-timeout 180
+          curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
+
+          container_id="$("${compose[@]}" ps -q server)"
+          docker exec "$container_id" test -s /var/lib/julos/data/julos.db
+          docker exec "$container_id" test -s /application/wwwroot/index.html
+          docker exec "$container_id" test -s /application/official-packages/catalog.json
+          docker exec "$container_id" test -s /application/official-packages/JulOS.Browser-1.0.0.zip
+          docker exec "$container_id" test -s /application/official-packages/JulOS.Remote-1.0.0.zip
+          docker exec "$container_id" test -s /application/official-packages/JulOS.HostMetrics-1.0.0.zip
+
+          process_uid="$(docker exec "$container_id" awk '/^Uid:/ { print $2 }' /proc/1/status)"
+          if [[ ! "$process_uid" =~ ^[0-9]+$ || "$process_uid" == "0" ]]; then
+            echo "The JulOS server process must run as non-root, got UID: $process_uid" >&2
+            exit 1
+          fi
+
+          "${compose[@]}" restart server
+          "${compose[@]}" up --detach --wait --wait-timeout 120
+          curl --fail --silent --show-error --retry 20 --retry-delay 2 http://127.0.0.1:18080/health/ready
+
+          logs="$("${compose[@]}" logs --no-color server)"
+          if grep -Eq 'may not be persisted outside of the container|No XML encryptor configured|package.worker_supervisor_unavailable|unable to open database file' <<<"$logs"; then
+            echo "$logs" >&2
+            exit 1
+          fi
+
+          cleanup
+          trap - EXIT
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse existing server image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Server image version already exists: $image" >&2
+            exit 1
+          fi
+
+      - name: Publish server image
+        id: server
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/JulOS.Server/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-server
+          cache-to: type=gha,mode=max,scope=julos-server
+          provenance: false
+          sbom: true
+
+      - name: Attest server image
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/juloc/julos-server
+          subject-digest: ${{ steps.server.outputs.digest }}
+          push-to-registry: true
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          mkdir -p release-files
+          cp deploy/alpha/compose.sqlite.yaml release-files/julos-beta-compose.yaml
+          cp deploy/alpha/.env.sqlite.example release-files/julos-beta.env.example
+          cp "docs/releases/$version.md" release-files/RELEASE_NOTES.md
+          cp deploy/official-packages/catalog.json release-files/
+          cp deploy/official-packages/juloc-package-signing-public.pem release-files/
+          cp deploy/official-packages/JulOS.Browser-1.0.0.zip release-files/
+          cp deploy/official-packages/JulOS.Remote-1.0.0.zip release-files/
+          cp deploy/official-packages/JulOS.HostMetrics-1.0.0.zip release-files/
+          (
+            cd release-files
+            sha256sum \
+              julos-beta-compose.yaml \
+              julos-beta.env.example \
+              RELEASE_NOTES.md \
+              catalog.json \
+              juloc-package-signing-public.pem \
+              JulOS.Browser-1.0.0.zip \
+              JulOS.Remote-1.0.0.zip \
+              JulOS.HostMetrics-1.0.0.zip \
+              > SHA256SUMS
+          )
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          gh release create "v$version" \
+            --target "$GITHUB_SHA" \
+            --title "JulOS $version" \
+            --notes-file "docs/releases/$version.md" \
+            --prerelease \
+            release-files/*
+
+      - name: Release summary
+        shell: bash
+        run: |
+          {
+            echo "### JulOS ${{ needs.validate.outputs.version }}"
+            echo
+            echo "- Server: ghcr.io/juloc/julos-server@${{ steps.server.outputs.digest }}"
+            echo "- Browser runtime pinned in package catalog: $JULOS_BROWSER_RUNTIME_IMAGE"
+            echo "- GitHub prerelease: v${{ needs.validate.outputs.version }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  browser-runtime:
+    name: Publish Browser Runtime
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'browser-runtime'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build and smoke-test runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="julos-browser-runtime-smoke:${{ needs.validate.outputs.version }}"
+          docker build \
+            --file packages/JulOS.Browser/runtime/Dockerfile \
+            --build-arg "JULOS_VERSION=${{ needs.validate.outputs.version }}" \
+            --tag "$image" \
+            .
+
+          set +e
+          output="$(docker run --rm --network none "$image" 2>&1)"
+          status=$?
+          set -e
+          if [[ "$status" -eq 0 ]] || ! grep -Fq "JULOS_VNC_PASSWORD is required." <<<"$output"; then
+            echo "$output" >&2
+            echo "Browser runtime password validation failed." >&2
+            exit 1
+          fi
+
+          container_id="$(docker run --detach \
+            --network none \
+            --cpus 2 \
+            --memory 1024m \
+            --pids-limit 256 \
+            --security-opt no-new-privileges=true \
+            --cap-drop ALL \
+            --env JULOS_VNC_PASSWORD=A7b9C2d4 \
+            "$image")"
+          cleanup() {
+            docker rm --force "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          test "$(docker image inspect --format '{{.Config.User}}' "$image")" = "10001:10001"
+          for attempt in $(seq 1 45); do
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container_id")"
+            if [[ "$health" == "healthy" ]]; then
+              break
+            fi
+            if [[ "$health" == "unhealthy" || "$health" == "missing" ]]; then
+              docker logs "$container_id" >&2 || true
+              exit 1
+            fi
+            sleep 2
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$container_id")" = "healthy"
+          docker stop --time 10 "$container_id" >/dev/null
+          cleanup
+          trap - EXIT
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse existing image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}"
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Browser runtime version already exists: $image" >&2
+            exit 1
+          fi
+
+      - name: Publish Browser Runtime
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/JulOS.Browser/runtime/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-browser-runtime
+          cache-to: type=gha,mode=max,scope=julos-browser-runtime
+          provenance: false
+          sbom: false
+
+      - name: Attest Browser Runtime
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/juloc/julos-browser-runtime
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Runtime summary
+        shell: bash
+        run: |
+          echo "- Browser Runtime: ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+  session-runtimes:
+    name: Publish session runtimes
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'session-runtimes'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse existing images
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          for image in \
+            "ghcr.io/juloc/julos-runtime-manager:$version" \
+            "ghcr.io/juloc/julos-remote-provider:$version"; do
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "Runtime image version already exists: $image" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish Runtime Manager
+        id: manager
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/JulOS.RuntimeManager/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/juloc/julos-runtime-manager:${{ needs.validate.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ needs.validate.outputs.version }}
+          provenance: false
+          sbom: true
+
+      - name: Attest Runtime Manager
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/juloc/julos-runtime-manager
+          subject-digest: ${{ steps.manager.outputs.digest }}
+          push-to-registry: true
+
+      - name: Publish Remote Provider
+        id: provider
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: packages/JulOS.Remote/runtime/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/juloc/julos-remote-provider:${{ needs.validate.outputs.version }}
+          build-args: |
+            JULOS_VERSION=${{ needs.validate.outputs.version }}
+          provenance: false
+          sbom: true
+
+      - name: Attest Remote Provider
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/juloc/julos-remote-provider
+          subject-digest: ${{ steps.provider.outputs.digest }}
+          push-to-registry: true
+
+      - name: Runtime summary
+        shell: bash
+        run: |
+          {
+            echo "- Runtime Manager: ghcr.io/juloc/julos-runtime-manager@${{ steps.manager.outputs.digest }}"
+            echo "- Remote Provider: ghcr.io/juloc/julos-remote-provider@${{ steps.provider.outputs.digest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  remote-transport:
+    name: Publish Remote Transport
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'remote-transport'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          output="$RUNNER_TEMP/remote-transport-package"
+          mkdir -p "$output"
+
+          dotnet pack \
+            packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj \
+            --configuration Release \
+            --output "$output" \
+            -p:GeneratePackageOnBuild=false \
+            -p:PackageVersion="$version" \
+            -p:ContinuousIntegrationBuild=true \
+            -p:RepositoryCommit="$GITHUB_SHA"
+
+          package="$output/JulOS.Remote.Transport.$version.nupkg"
+          symbols="$output/JulOS.Remote.Transport.$version.snupkg"
+          test -f "$package"
+          test -f "$symbols"
+          (
+            cd "$output"
+            sha256sum "$(basename "$package")" "$(basename "$symbols")" > SHA256SUMS
+          )
+
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "symbols=$symbols" >> "$GITHUB_OUTPUT"
+          echo "checksums=$output/SHA256SUMS" >> "$GITHUB_OUTPUT"
+
+      - name: Attest package
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ steps.package.outputs.package }}
+            ${{ steps.package.outputs.symbols }}
+            ${{ steps.package.outputs.checksums }}
+
+      - name: Configure GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet nuget add source \
+            --username "${{ github.repository_owner }}" \
+            --password "$GITHUB_TOKEN" \
+            --store-password-in-clear-text \
+            --valid-authentication-types basic \
+            --name github \
+            "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+
+      - name: Publish package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet nuget push \
+            "${{ steps.package.outputs.package }}" \
+            --source github \
+            --api-key "$GITHUB_TOKEN" \
+            --timeout 600
+
+      - name: Package summary
+        shell: bash
+        run: |
+          echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"

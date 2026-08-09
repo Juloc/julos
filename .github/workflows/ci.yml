@@ -1,0 +1,70 @@
+# One continuous-integration entry point for JulOS pull requests.
+# Release validation lives in release.yml and runs only when a release is requested.
+
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
+
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: julos
+          POSTGRES_PASSWORD: julos-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username=julos --dbname=postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Cache NuGet
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Validate
+        run: sh tools/validate.sh
+
+      - name: Verify clean tree
+        run: |
+          git status --short
+          git diff --stat
+          git diff --exit-code
