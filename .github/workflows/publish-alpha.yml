@@ -28,6 +28,9 @@ concurrency:
   group: publish-prerelease-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
+
 jobs:
   validate:
     name: Validate prerelease source
@@ -209,13 +212,14 @@ jobs:
             sha256sum julos-beta-compose.yaml julos-beta.env.example RELEASE_NOTES.md > SHA256SUMS
           )
 
-      - name: Upload release files
+      - name: Upload release files for publish job
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: julos-${{ needs.validate.outputs.version }}
           path: release-files/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   publish:
     name: Publish image and prerelease
