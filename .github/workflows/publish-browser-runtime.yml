@@ -27,6 +27,7 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/juloc/julos-browser-runtime
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   publish:
@@ -247,4 +248,4 @@ jobs:
             browser-runtime-reference.txt
             browser-runtime-digest.txt
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 3
