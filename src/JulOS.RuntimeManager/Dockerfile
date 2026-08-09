@@ -16,6 +16,7 @@ RUN dotnet publish src/JulOS.RuntimeManager/JulOS.RuntimeManager.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.3 AS runtime
 ARG JULOS_VERSION=0.0.0-development
 ARG DOCKER_CLI_VERSION=27.5.1
+ARG TARGETARCH
 LABEL org.opencontainers.image.title="JulOS Runtime Manager" \
       org.opencontainers.image.description="Narrow privileged sidecar owning JulOS-owned runtime containers" \
       org.opencontainers.image.source="https://github.com/Juloc/julos" \
@@ -23,13 +24,17 @@ LABEL org.opencontainers.image.title="JulOS Runtime Manager" \
 ENV DOTNET_EnableDiagnostics=0 \
     ASPNETCORE_HTTP_PORTS=8081
 
-# Only the static docker CLI binary is installed. Runtime Manager never receives
-# the Docker daemon socket credentials of the host it runs on beyond the one
-# socket mount an operator explicitly grants; it does not install or run dockerd.
-RUN apt-get update \
+# Only the static Docker CLI is installed. The architecture comes from BuildKit,
+# while the version remains pinned for reproducible release images.
+RUN case "$TARGETARCH" in \
+      amd64) docker_arch=x86_64 ;; \
+      arm64) docker_arch=aarch64 ;; \
+      *) echo "Unsupported Runtime Manager architecture: $TARGETARCH" >&2; exit 64 ;; \
+    esac \
+    && apt-get update \
     && apt-get install --yes --no-install-recommends curl ca-certificates \
     && curl --fail --location --silent --show-error \
-        "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" \
+        "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_CLI_VERSION}.tgz" \
         --output /tmp/docker-cli.tgz \
     && tar --extract --gzip --file /tmp/docker-cli.tgz --directory /usr/local/bin --strip-components 1 docker/docker \
     && rm -rf /tmp/docker-cli.tgz \
