@@ -30,6 +30,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
   JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a
   JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
@@ -246,13 +247,14 @@ jobs:
             sha256sum julos-beta-compose.yaml julos-beta.env.example RELEASE_NOTES.md > SHA256SUMS
           )
 
-      - name: Upload release files
+      - name: Upload release files for publish job
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: julos-${{ needs.validate.outputs.version }}
           path: release-files/
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
 
   publish:
     name: Publish image and prerelease
