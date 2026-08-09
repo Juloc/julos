@@ -2,6 +2,7 @@
 import { NotificationCenterStore, type NotificationCenterSnapshot } from './notification-center.js';
 import {
   PackageManagerStore,
+  type OfficialPackageStoreView,
   type PackageInstallationView,
   type PackageManagerSnapshot,
 } from './package-manager.js';
@@ -112,13 +113,7 @@ export class CoreApplicationCatalog {
     save.type = 'submit';
     save.className = 'core-primary-button';
     save.textContent = text(language, 'save');
-    form.append(
-      languageSelect.label,
-      themeSelect.label,
-      motionSelect.label,
-      timeZoneField.label,
-      save,
-    );
+    form.append(languageSelect.label, themeSelect.label, motionSelect.label, timeZoneField.label, save);
     root.append(heading, status, form);
 
     let profile: UserProfile | null = null;
@@ -139,9 +134,7 @@ export class CoreApplicationCatalog {
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      if (profile === null) {
-        return;
-      }
+      if (profile === null) return;
       save.disabled = true;
       status.hidden = false;
       status.textContent = text(language, 'saving');
@@ -158,9 +151,7 @@ export class CoreApplicationCatalog {
       }).catch((error: unknown) => {
         status.textContent = errorMessage(error, text(language, 'requestFailed'));
         this.#onFailure(error);
-      }).finally(() => {
-        save.disabled = false;
-      });
+      }).finally(() => { save.disabled = false; });
     });
 
     void load();
@@ -171,25 +162,32 @@ export class CoreApplicationCatalog {
     const language = this.#language();
     const store = new PackageManagerStore();
     const root = section('core-packages');
-    const toolbar = coreToolbar(text(language, 'packages'), text(language, 'refresh'));
-    const install = this.#packageInstallForm(store, language);
-    const list = document.createElement('div');
-    list.className = 'core-list';
-    root.append(toolbar.root, install.element, list);
+    const toolbar = coreToolbar(text(language, 'packageStore'), text(language, 'refresh'));
+    const intro = statusText(text(language, 'storeDescription'));
+    const catalog = document.createElement('div');
+    catalog.className = 'core-list package-store-list';
+    const installedHeading = document.createElement('h3');
+    installedHeading.textContent = text(language, 'installedPackages');
+    const installed = document.createElement('div');
+    installed.className = 'core-list';
+    const manual = this.#packageInstallForm(store, language);
+    root.append(toolbar.root, intro, catalog, installedHeading, installed, manual.element);
 
     const render = (snapshot: PackageManagerSnapshot): void => {
       toolbar.button.disabled = snapshot.loading;
-      install.setBusy(snapshot.loading);
-      list.replaceChildren();
-      if (snapshot.lastError !== null) {
-        list.append(statusText(snapshot.lastError, 'error'));
+      manual.setBusy(snapshot.loading);
+      catalog.replaceChildren();
+      installed.replaceChildren();
+      if (snapshot.lastError !== null) catalog.append(statusText(snapshot.lastError, 'error'));
+      if (!snapshot.loading && snapshot.catalog.length === 0) {
+        catalog.append(emptyMessage(text(language, 'noStorePackages')));
+      } else {
+        for (const item of snapshot.catalog) catalog.append(this.#officialPackageCard(store, item, language));
       }
       if (!snapshot.loading && snapshot.packages.length === 0) {
-        list.append(emptyMessage(text(language, 'noPackages')));
-        return;
-      }
-      for (const item of snapshot.packages) {
-        list.append(this.#packageCard(store, item, language));
+        installed.append(emptyMessage(text(language, 'noPackages')));
+      } else {
+        for (const item of snapshot.packages) installed.append(this.#packageCard(store, item, language));
       }
     };
 
@@ -199,6 +197,46 @@ export class CoreApplicationCatalog {
     return { element: root, dispose: unsubscribe };
   }
 
+  #officialPackageCard(
+    store: PackageManagerStore,
+    item: OfficialPackageStoreView,
+    language: SupportedLanguage,
+  ): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'core-card package-card package-store-card';
+    const header = document.createElement('div');
+    header.className = 'core-card-heading';
+    const title = document.createElement('strong');
+    title.textContent = language === 'de' ? item.displayNameDe : item.displayNameEn;
+    const version = document.createElement('span');
+    version.textContent = item.version;
+    header.append(title, version);
+    const description = document.createElement('p');
+    description.textContent = language === 'de' ? item.descriptionDe : item.descriptionEn;
+    const state = document.createElement('small');
+    state.className = 'core-muted';
+    state.textContent = item.installedVersion === null
+      ? text(language, 'available')
+      : item.updateAvailable
+        ? `${text(language, 'updateAvailable')} · ${item.installedVersion} → ${item.version}`
+        : `${text(language, 'installed')} · ${item.installedState ?? ''}`;
+    card.append(header, description, state);
+
+    if (item.installedVersion === null || item.updateAvailable) {
+      const action = actionButton(
+        text(language, item.updateAvailable ? 'update' : 'install'),
+        async () => {
+          await store.installOfficial(item.packageId);
+          await this.#onPackagesChanged();
+        },
+        this.#onFailure,
+      );
+      action.classList.add('core-primary-button');
+      card.append(action);
+    }
+    return card;
+  }
+
   #packageInstallForm(
     store: PackageManagerStore,
     language: SupportedLanguage,
@@ -206,7 +244,7 @@ export class CoreApplicationCatalog {
     const details = document.createElement('details');
     details.className = 'package-install';
     const summary = document.createElement('summary');
-    summary.textContent = text(language, 'installPackage');
+    summary.textContent = text(language, 'advancedInstall');
     const form = document.createElement('form');
     form.className = 'core-form package-install-form';
     const artifact = fileField(text(language, 'packageFile'), '.zip,application/zip');
@@ -232,7 +270,6 @@ export class CoreApplicationCatalog {
         status.className = 'core-status core-status-error';
         return;
       }
-
       status.hidden = false;
       status.className = 'core-status';
       status.textContent = text(language, 'installing');
@@ -255,18 +292,12 @@ export class CoreApplicationCatalog {
     return {
       element: details,
       setBusy: (busy) => {
-        for (const control of form.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) {
-          control.disabled = busy;
-        }
+        for (const control of form.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')) control.disabled = busy;
       },
     };
   }
 
-  #packageCard(
-    store: PackageManagerStore,
-    item: PackageInstallationView,
-    language: SupportedLanguage,
-  ): HTMLElement {
+  #packageCard(store: PackageManagerStore, item: PackageInstallationView, language: SupportedLanguage): HTMLElement {
     const card = document.createElement('article');
     card.className = 'core-card package-card';
     const header = document.createElement('div');
@@ -319,7 +350,6 @@ export class CoreApplicationCatalog {
       remove.classList.add('danger');
       actions.append(remove);
     }
-
     if (item.faultDetail !== null) {
       const fault = document.createElement('p');
       fault.className = 'core-error-detail';
@@ -338,28 +368,19 @@ export class CoreApplicationCatalog {
     const list = document.createElement('div');
     list.className = 'core-list';
     root.append(toolbar.root, list);
-
     const refresh = async (): Promise<void> => {
       toolbar.button.disabled = true;
       list.replaceChildren(statusText(text(language, 'loading')));
       try {
         const entries = await store.refresh();
         list.replaceChildren();
-        if (entries.length === 0) {
-          list.append(emptyMessage(text(language, 'noAgents')));
-        } else {
-          for (const entry of entries) {
-            list.append(agentCard(entry, language));
-          }
-        }
+        if (entries.length === 0) list.append(emptyMessage(text(language, 'noAgents')));
+        else for (const entry of entries) list.append(agentCard(entry, language));
       } catch (error) {
         list.replaceChildren(statusText(errorMessage(error, text(language, 'requestFailed')), 'error'));
         this.#onFailure(error);
-      } finally {
-        toolbar.button.disabled = false;
-      }
+      } finally { toolbar.button.disabled = false; }
     };
-
     toolbar.button.addEventListener('click', () => void refresh());
     void refresh();
     return { element: root, dispose: () => undefined };
@@ -384,15 +405,11 @@ export class CoreApplicationCatalog {
     const list = document.createElement('div');
     list.className = 'core-list';
     root.append(heading, list);
-
     const render = (snapshot: NotificationCenterSnapshot): void => {
       list.replaceChildren();
       if (problemsOnly) {
         const problems = [...snapshot.activeProblems, ...snapshot.resolvedProblems];
-        if (problems.length === 0) {
-          list.append(emptyMessage(text(language, 'noProblems')));
-          return;
-        }
+        if (problems.length === 0) { list.append(emptyMessage(text(language, 'noProblems'))); return; }
         for (const problem of problems) {
           const card = document.createElement('article');
           card.className = 'core-card';
@@ -408,10 +425,7 @@ export class CoreApplicationCatalog {
           list.append(card);
         }
       } else {
-        if (snapshot.notifications.length === 0) {
-          list.append(emptyMessage(text(language, 'noNotifications')));
-          return;
-        }
+        if (snapshot.notifications.length === 0) { list.append(emptyMessage(text(language, 'noNotifications'))); return; }
         for (const notification of snapshot.notifications) {
           const card = document.createElement('article');
           card.className = 'core-card notification-card';
@@ -436,7 +450,6 @@ export class CoreApplicationCatalog {
         }
       }
     };
-
     const unsubscribe = this.#notifications.subscribe(render);
     return { element: root, dispose: unsubscribe };
   }
@@ -487,10 +500,7 @@ function coreToolbar(titleText: string, actionText: string): { root: HTMLElement
   return { root, button };
 }
 
-function selectField(
-  title: string,
-  options: readonly (readonly [string, string])[],
-): { label: HTMLLabelElement; select: HTMLSelectElement } {
+function selectField(title: string, options: readonly (readonly [string, string])[]): { label: HTMLLabelElement; select: HTMLSelectElement } {
   const label = document.createElement('label');
   label.className = 'core-field';
   const caption = document.createElement('span');
@@ -520,26 +530,18 @@ function inputField(title: string): { label: HTMLLabelElement; input: HTMLInputE
 function fileField(title: string, accept: string | undefined): { label: HTMLLabelElement; input: HTMLInputElement } {
   const field = inputField(title);
   field.input.type = 'file';
-  if (accept !== undefined) {
-    field.input.accept = accept;
-  }
+  if (accept !== undefined) field.input.accept = accept;
   return field;
 }
 
-function actionButton(
-  title: string,
-  action: () => void | Promise<void>,
-  onFailure: (error: unknown) => void,
-): HTMLButtonElement {
+function actionButton(title: string, action: () => void | Promise<void>, onFailure: (error: unknown) => void): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'core-secondary-button';
   button.textContent = title;
   button.addEventListener('click', () => {
     button.disabled = true;
-    void Promise.resolve(action()).catch(onFailure).finally(() => {
-      button.disabled = false;
-    });
+    void Promise.resolve(action()).catch(onFailure).finally(() => { button.disabled = false; });
   });
   return button;
 }
@@ -560,28 +562,19 @@ function agentCard(entry: AgentDashboardEntry, language: SupportedLanguage): HTM
   platform.textContent = `${entry.agent.operatingSystem} · ${entry.agent.architecture} · ${entry.agent.version}`;
   const observed = document.createElement('small');
   observed.className = 'core-muted';
-  observed.textContent = entry.observedAtUtc === null
-    ? text(language, 'neverSeen')
-    : formatDate(entry.observedAtUtc, language);
+  observed.textContent = entry.observedAtUtc === null ? text(language, 'neverSeen') : formatDate(entry.observedAtUtc, language);
   card.append(header, platform, observed);
   return card;
 }
 
 function parseConfiguration(value: string): Readonly<Record<string, string>> {
   let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch (error) {
-    throw new TypeError('Configuration must be a JSON object.', { cause: error });
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new TypeError('Configuration must be a JSON object.');
-  }
+  try { parsed = JSON.parse(value); }
+  catch (error) { throw new TypeError('Configuration must be a JSON object.', { cause: error }); }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new TypeError('Configuration must be a JSON object.');
   const result: Record<string, string> = {};
   for (const [key, item] of Object.entries(parsed)) {
-    if (typeof item !== 'string') {
-      throw new TypeError(`Configuration value '${key}' must be a string.`);
-    }
+    if (typeof item !== 'string') throw new TypeError(`Configuration value '${key}' must be a string.`);
     result[key] = item;
   }
   return result;
@@ -624,24 +617,28 @@ type TextKey = keyof typeof messages.en;
 
 const messages = {
   en: {
-    settings: 'Settings', packages: 'Package Manager', agents: 'Agents', notifications: 'Notifications', problems: 'Problems',
+    settings: 'Settings', packages: 'Package Manager', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Notifications', problems: 'Problems',
     language: 'Language', theme: 'Theme', motion: 'Motion', timeZone: 'Time zone', system: 'System', light: 'Light', dark: 'Dark',
     motionEnabled: 'Enabled', motionReduced: 'Reduced', save: 'Save', saving: 'Saving…', saved: 'Saved', loading: 'Loading…',
-    requestFailed: 'Request failed.', refresh: 'Refresh', noPackages: 'No packages are installed.', enable: 'Enable', disable: 'Disable',
-    remove: 'Remove', confirmRemove: 'Remove this package? Package data will be kept.', noAgents: 'No agents are enrolled.', neverSeen: 'Never seen',
+    requestFailed: 'Request failed.', refresh: 'Refresh', storeDescription: 'Official JulOS packages. Signatures, configuration and activation are handled automatically.',
+    noStorePackages: 'No official packages are included in this JulOS build.', installedPackages: 'Installed packages', noPackages: 'No packages are installed.',
+    available: 'Available', updateAvailable: 'Update available', update: 'Update', enable: 'Enable', disable: 'Disable', remove: 'Remove',
+    confirmRemove: 'Remove this package? Package data will be kept.', noAgents: 'No agents are enrolled.', neverSeen: 'Never seen',
     markAllRead: 'Mark all read', markRead: 'Mark read', noNotifications: 'No notifications.', noProblems: 'No problems.',
-    installPackage: 'Install signed package', packageFile: 'Package (.zip)', signatureFile: 'Signature file', publisherId: 'Publisher ID',
+    advancedInstall: 'Advanced · install external signed package', packageFile: 'Package (.zip)', signatureFile: 'Signature file', publisherId: 'Publisher ID',
     publisherKeyId: 'Publisher key ID', install: 'Install', installing: 'Installing…', installed: 'Installed', filesRequired: 'Package and signature files are required.',
     configuration: 'Configuration JSON', configure: 'Configure',
   },
   de: {
-    settings: 'Einstellungen', packages: 'Paketverwaltung', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme',
+    settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme',
     language: 'Sprache', theme: 'Design', motion: 'Animationen', timeZone: 'Zeitzone', system: 'System', light: 'Hell', dark: 'Dunkel',
     motionEnabled: 'Aktiviert', motionReduced: 'Reduziert', save: 'Speichern', saving: 'Speichern…', saved: 'Gespeichert', loading: 'Laden…',
-    requestFailed: 'Anfrage fehlgeschlagen.', refresh: 'Aktualisieren', noPackages: 'Keine Pakete installiert.', enable: 'Aktivieren', disable: 'Deaktivieren',
-    remove: 'Entfernen', confirmRemove: 'Dieses Paket entfernen? Paketdaten bleiben erhalten.', noAgents: 'Keine Agents registriert.', neverSeen: 'Noch nie verbunden',
+    requestFailed: 'Anfrage fehlgeschlagen.', refresh: 'Aktualisieren', storeDescription: 'Offizielle JulOS-Pakete. Signatur, Konfiguration und Aktivierung erledigt JulOS automatisch.',
+    noStorePackages: 'Dieser JulOS-Build enthält keine offiziellen Pakete.', installedPackages: 'Installierte Pakete', noPackages: 'Keine Pakete installiert.',
+    available: 'Verfügbar', updateAvailable: 'Update verfügbar', update: 'Aktualisieren', enable: 'Aktivieren', disable: 'Deaktivieren', remove: 'Entfernen',
+    confirmRemove: 'Dieses Paket entfernen? Paketdaten bleiben erhalten.', noAgents: 'Keine Agents registriert.', neverSeen: 'Noch nie verbunden',
     markAllRead: 'Alle als gelesen markieren', markRead: 'Als gelesen markieren', noNotifications: 'Keine Benachrichtigungen.', noProblems: 'Keine Probleme.',
-    installPackage: 'Signiertes Paket installieren', packageFile: 'Paket (.zip)', signatureFile: 'Signaturdatei', publisherId: 'Publisher-ID',
+    advancedInstall: 'Erweitert · externes signiertes Paket installieren', packageFile: 'Paket (.zip)', signatureFile: 'Signaturdatei', publisherId: 'Publisher-ID',
     publisherKeyId: 'Publisher-Key-ID', install: 'Installieren', installing: 'Installieren…', installed: 'Installiert', filesRequired: 'Paket- und Signaturdatei sind erforderlich.',
     configuration: 'Konfiguration als JSON', configure: 'Konfigurieren',
   },

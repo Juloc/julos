@@ -33,6 +33,11 @@ internal static class PackageEndpoints
 
         group.MapGet("/", ListAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageRead);
+        group.MapGet("/catalog", ListCatalogAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.PackageRead);
+        group.MapPost("/catalog/{packageId}/install", InstallOfficialAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
+            .RequireJulOsAntiforgery();
         group.MapPost("/install", InstallAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
             .RequireJulOsAntiforgery()
@@ -58,6 +63,53 @@ internal static class PackageEndpoints
     {
         var packages = await service.ListAsync(cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(packages.Select(ToResponse).ToArray());
+    }
+
+    private static async Task<IResult> ListCatalogAsync(
+        IOfficialPackageStoreService store,
+        CancellationToken cancellationToken)
+    {
+        var packages = await store.ListAsync(cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(packages.Select(item => new OfficialPackageStoreResponse(
+            item.Package.PackageId,
+            item.Package.Version,
+            item.Package.DisplayNameEn,
+            item.Package.DisplayNameDe,
+            item.Package.DescriptionEn,
+            item.Package.DescriptionDe,
+            item.Installation?.Version,
+            item.Installation?.State,
+            item.Installation?.Revision,
+            item.Installation is not null
+                && !string.Equals(item.Installation.Version, item.Package.Version, StringComparison.Ordinal))).ToArray());
+    }
+
+    private static async Task<IResult> InstallOfficialAsync(
+        HttpContext context,
+        string packageId,
+        IAntiforgery antiforgery,
+        IOfficialPackageStoreService store,
+        SafeModeState safeMode,
+        CancellationToken cancellationToken)
+    {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+        if (safeMode.Enabled)
+        {
+            return Results.Conflict(new
+            {
+                code = "package.safe_mode",
+                detail = "Optional packages cannot be installed or enabled while JulOS is in safe mode.",
+            });
+        }
+
+        try
+        {
+            return TypedResults.Ok(ToResponse(await store.InstallOrUpdateAsync(packageId, cancellationToken).ConfigureAwait(false)));
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
     }
 
     private static async Task<IResult> InstallAsync(
@@ -209,7 +261,7 @@ internal static class PackageEndpoints
     {
         var status = exception.Code switch
         {
-            "package.not_found" => StatusCodes.Status404NotFound,
+            "package.not_found" or "package.catalog_not_found" => StatusCodes.Status404NotFound,
             "package.already_installed" => StatusCodes.Status409Conflict,
             "package.configuration_invalid" => StatusCodes.Status422UnprocessableEntity,
             _ => StatusCodes.Status400BadRequest,

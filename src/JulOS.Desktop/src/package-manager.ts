@@ -27,6 +27,19 @@ export interface PackageInstallationView {
   readonly artifactDigest: string;
 }
 
+export interface OfficialPackageStoreView {
+  readonly packageId: string;
+  readonly version: string;
+  readonly displayNameEn: string;
+  readonly displayNameDe: string;
+  readonly descriptionEn: string;
+  readonly descriptionDe: string;
+  readonly installedVersion: string | null;
+  readonly installedState: PackageLifecycleState | null;
+  readonly installedRevision: number | null;
+  readonly updateAvailable: boolean;
+}
+
 export interface PackageInstallRequest {
   readonly artifact: File;
   readonly signature: File;
@@ -36,6 +49,7 @@ export interface PackageInstallRequest {
 
 export interface PackageManagerSnapshot {
   readonly packages: readonly PackageInstallationView[];
+  readonly catalog: readonly OfficialPackageStoreView[];
   readonly loading: boolean;
   readonly activePackageId: string | null;
   readonly safeMode: boolean;
@@ -49,11 +63,12 @@ interface AntiforgeryToken {
   readonly token: string;
 }
 
-/** State model for the Core Package Manager application. */
+/** State model for the Core Package Manager application and official package store. */
 export class PackageManagerStore {
   readonly #api: JulOsApiClient;
   readonly #listeners = new Set<PackageManagerListener>();
   #packages: PackageInstallationView[] = [];
+  #catalog: OfficialPackageStoreView[] = [];
   #loading = false;
   #activePackageId: string | null = null;
   #safeMode = false;
@@ -73,6 +88,7 @@ export class PackageManagerStore {
   public snapshot(): PackageManagerSnapshot {
     return {
       packages: [...this.#packages],
+      catalog: [...this.#catalog],
       loading: this.#loading,
       activePackageId: this.#activePackageId,
       safeMode: this.#safeMode,
@@ -81,14 +97,25 @@ export class PackageManagerStore {
   }
 
   public async refresh(): Promise<void> {
+    await this.#run(() => this.#load());
+  }
+
+  public async installOfficial(packageId: string): Promise<void> {
+    if (this.#safeMode) {
+      throw new PackageManagerError('package.safe_mode', 'Optional packages cannot be installed in safe mode.');
+    }
     await this.#run(async () => {
-      this.#packages = await this.#api.get<PackageInstallationView[]>('/api/v1/packages/');
-      if (
-        this.#activePackageId !== null
-        && !this.#packages.some((item) => item.packageId === this.#activePackageId)
-      ) {
-        this.#activePackageId = null;
-      }
+      const antiforgery = await this.#readAntiforgery();
+      await this.#api.requestJson<PackageInstallationView>(
+        `/api/v1/packages/catalog/${encodeURIComponent(packageId)}/install`,
+        {
+          method: 'POST',
+          body: {},
+          headers: { [antiforgery.headerName]: antiforgery.token },
+        },
+      );
+      await this.#load();
+      this.#activePackageId = packageId;
     });
   }
 
@@ -107,8 +134,7 @@ export class PackageManagerStore {
         formData: form,
         headers: { [antiforgery.headerName]: antiforgery.token },
       });
-      this.#packages = [...this.#packages.filter((item) => item.packageId !== installed.packageId), installed]
-        .sort((left, right) => left.packageId.localeCompare(right.packageId));
+      await this.#load();
       this.#activePackageId = installed.packageId;
     });
   }
@@ -126,28 +152,22 @@ export class PackageManagerStore {
     revision: number,
     values: Readonly<Record<string, string>>,
   ): Promise<void> {
-    await this.#mutate(packageId, 'PUT', `/api/v1/packages/${encodeURIComponent(packageId)}/configuration`, {
-      revision,
-      values,
-    });
+    await this.#mutate('PUT', `/api/v1/packages/${encodeURIComponent(packageId)}/configuration`, { revision, values });
   }
 
   public async enable(packageId: string, revision: number): Promise<void> {
     if (this.#safeMode) {
       throw new PackageManagerError('package.safe_mode', 'Optional packages cannot be enabled in safe mode.');
     }
-    await this.#mutate(packageId, 'POST', `/api/v1/packages/${encodeURIComponent(packageId)}/enable`, { revision });
+    await this.#mutate('POST', `/api/v1/packages/${encodeURIComponent(packageId)}/enable`, { revision });
   }
 
   public async disable(packageId: string, revision: number): Promise<void> {
-    await this.#mutate(packageId, 'POST', `/api/v1/packages/${encodeURIComponent(packageId)}/disable`, { revision });
+    await this.#mutate('POST', `/api/v1/packages/${encodeURIComponent(packageId)}/disable`, { revision });
   }
 
   public async remove(packageId: string, revision: number, deletePackageData: boolean): Promise<void> {
-    await this.#mutate(packageId, 'DELETE', `/api/v1/packages/${encodeURIComponent(packageId)}`, {
-      revision,
-      deletePackageData,
-    });
+    await this.#mutate('DELETE', `/api/v1/packages/${encodeURIComponent(packageId)}`, { revision, deletePackageData });
   }
 
   public setSafeMode(enabled: boolean): void {
@@ -168,23 +188,28 @@ export class PackageManagerStore {
     return item.state;
   }
 
-  async #mutate(
-    packageId: string,
-    method: 'POST' | 'PUT' | 'DELETE',
-    path: string,
-    body: unknown,
-  ): Promise<void> {
+  async #mutate(method: 'POST' | 'PUT' | 'DELETE', path: string, body: unknown): Promise<void> {
     await this.#run(async () => {
       const antiforgery = await this.#readAntiforgery();
-      const updated = await this.#api.requestJson<PackageInstallationView>(path, {
+      await this.#api.requestJson<PackageInstallationView>(path, {
         method,
         body,
         headers: { [antiforgery.headerName]: antiforgery.token },
       });
-      this.#packages = updated.state === 'removed'
-        ? this.#packages.filter((item) => item.packageId !== packageId)
-        : this.#packages.map((item) => item.packageId === packageId ? updated : item);
+      await this.#load();
     });
+  }
+
+  async #load(): Promise<void> {
+    const [packages, catalog] = await Promise.all([
+      this.#api.get<PackageInstallationView[]>('/api/v1/packages/'),
+      this.#api.get<OfficialPackageStoreView[]>('/api/v1/packages/catalog'),
+    ]);
+    this.#packages = packages;
+    this.#catalog = catalog;
+    if (this.#activePackageId !== null && !packages.some((item) => item.packageId === this.#activePackageId)) {
+      this.#activePackageId = null;
+    }
   }
 
   async #readAntiforgery(): Promise<AntiforgeryToken> {

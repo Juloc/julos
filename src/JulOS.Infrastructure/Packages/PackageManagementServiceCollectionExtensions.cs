@@ -26,6 +26,9 @@ public static class PackageManagementServiceCollectionExtensions
         var packageRoot = configuration["Packages:Root"]
             ?? Environment.GetEnvironmentVariable("JULOS_PACKAGE_ROOT")
             ?? "/var/lib/julos/packages";
+        var officialCatalogRoot = configuration["Packages:OfficialCatalogRoot"]
+            ?? Environment.GetEnvironmentVariable("JULOS_OFFICIAL_PACKAGE_CATALOG_ROOT")
+            ?? "/application/official-packages";
         var serverEndpointValue = configuration["Packages:ServerEndpoint"]
             ?? Environment.GetEnvironmentVariable("JULOS_PACKAGE_SERVER_ENDPOINT")
             ?? "http://127.0.0.1:8080";
@@ -35,15 +38,23 @@ public static class PackageManagementServiceCollectionExtensions
             throw new InvalidOperationException("Packages:ServerEndpoint must be an absolute HTTP or HTTPS URI.");
         }
 
+        var officialCatalog = OfficialPackageCatalogIndex.Load(officialCatalogRoot);
         var publishers = configuration.GetSection("Packages:TrustedPublishers")
             .Get<TrustedPublisherConfiguration[]>()
             ?? [];
-
-        services.AddSingleton(new PackageArtifactVerifier(publishers.Select(publisher =>
+        var trustedPublishers = publishers.Select(publisher =>
             new TrustedPackagePublisher(
                 publisher.PublisherId,
                 publisher.KeyId,
-                publisher.PublicKeyPem))));
+                publisher.PublicKeyPem))
+            .ToList();
+        if (officialCatalog.TrustedPublisher is not null)
+        {
+            trustedPublishers.Add(officialCatalog.TrustedPublisher);
+        }
+
+        services.AddSingleton(officialCatalog);
+        services.AddSingleton(new PackageArtifactVerifier(trustedPublishers));
         services.AddSingleton(new PostgresPackageStorageProvisioner(
             coreDatabase,
             packageRoot));
@@ -89,6 +100,7 @@ public static class PackageManagementServiceCollectionExtensions
             provider.GetRequiredService<IPackageWorkerSupervisor>(),
             packageRoot,
             provider.GetRequiredService<TimeProvider>()));
+        services.AddScoped<IOfficialPackageStoreService, OfficialPackageStoreService>();
         services.AddScoped<PackageCapabilityAuthorizer>(provider => new PackageCapabilityAuthorizer(
             provider.GetRequiredService<CoreDbContext>(),
             packageRoot));
