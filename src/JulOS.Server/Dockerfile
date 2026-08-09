@@ -9,8 +9,6 @@ FROM node:24.18.0-alpine AS desktop-build
 
 WORKDIR /desktop
 
-# Dependency installation is isolated from source changes. The production build
-# emits native ES modules and static files without retaining Node in the runtime.
 COPY src/JulOS.Desktop/package.json src/JulOS.Desktop/package-lock.json ./
 RUN npm ci
 
@@ -23,9 +21,6 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 
 WORKDIR /source
 
-# Restore first from the project graph alone, so a source change does not
-# invalidate the dependency layer. The analyzer configuration is copied as part
-# of the build contract so container publishing enforces the same rules as CI.
 COPY .editorconfig global.json Directory.Build.props Directory.Packages.props VERSION ./
 COPY src/JulOS.Domain/JulOS.Domain.csproj src/JulOS.Domain/
 COPY src/JulOS.Contracts/JulOS.Contracts.csproj src/JulOS.Contracts/
@@ -42,8 +37,6 @@ COPY src/JulOS.PackageSdk/ src/JulOS.PackageSdk/
 COPY src/JulOS.Infrastructure/ src/JulOS.Infrastructure/
 COPY src/JulOS.Server/ src/JulOS.Server/
 
-# The Desktop is part of the Server web root at publish time. This keeps ASP.NET
-# Core's published static-web-asset view and the runtime filesystem identical.
 COPY --from=desktop-build /desktop/dist/ src/JulOS.Server/wwwroot/
 
 RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
@@ -51,12 +44,29 @@ RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
       --no-restore \
       --output /application
 
+# Official Store artifacts are built from the same source revision as the Server.
+# The catalog key is generated only in this build stage. The final image receives
+# the public key, signed archives and signatures; the private key is never copied.
+FROM build AS official-packages-build
+
+ARG JULOS_BROWSER_RUNTIME_IMAGE="ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a"
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends nodejs zip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY packages/ packages/
+COPY tools/build-package-artifact.sh tools/build-official-package-catalog.mjs tools/
+
+RUN chmod 0555 tools/build-package-artifact.sh \
+    && mkdir -p /official-packages \
+    && tools/build-package-artifact.sh packages/JulOS.Browser /official-packages/JulOS.Browser-1.0.0.zip \
+    && tools/build-package-artifact.sh packages/JulOS.Remote /official-packages/JulOS.Remote-1.0.0.zip \
+    && tools/build-package-artifact.sh packages/JulOS.HostMetrics /official-packages/JulOS.HostMetrics-1.0.0.zip \
+    && node tools/build-official-package-catalog.mjs /official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.3 AS runtime
 
-# The application version always comes from the VERSION file above. This argument
-# only labels the image, because a Dockerfile cannot read a file into a label.
-# tools/validate.mjs and continuous integration pass the real value; a plain
-# `docker compose up --build` produces a clearly marked development image.
 ARG JULOS_VERSION=0.0.0-development
 
 LABEL org.opencontainers.image.title="JulOS Server" \
@@ -64,9 +74,6 @@ LABEL org.opencontainers.image.title="JulOS Server" \
       org.opencontainers.image.source="https://github.com/Juloc/julos" \
       org.opencontainers.image.version="${JULOS_VERSION}"
 
-# Npgsql loads the system GSSAPI library even when password authentication is
-# used. gosu is used only by the entrypoint to repair ownership of JulOS-owned
-# paths in pre-existing named volumes before dropping to the runtime UID.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends gosu libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
@@ -75,20 +82,17 @@ RUN apt-get update \
         /var/lib/julos/packages \
         /var/lib/julos/data-protection
 
-# The image ships no HTTP client for probing. The application answers its own
-# readiness probe through --health-check.
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0
 
 WORKDIR /application
 
 COPY --from=build /application ./
+COPY --from=official-packages-build /official-packages ./official-packages/
 COPY src/JulOS.Server/docker-entrypoint.sh /usr/local/bin/julos-entrypoint
 RUN chmod 0555 /usr/local/bin/julos-entrypoint
 
 EXPOSE 8080
 
-# The entrypoint starts as root only long enough to repair JulOS volume ownership,
-# then execs the server as APP_UID. The server process itself is never root.
 ENTRYPOINT ["/usr/local/bin/julos-entrypoint"]
 CMD ["dotnet", "/application/JulOS.Server.dll"]
