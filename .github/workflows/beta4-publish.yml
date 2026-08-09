@@ -1,0 +1,24 @@
+name: Beta4 publish dispatcher
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/beta4-publish.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Beta4 publications
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=session-runtimes
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=prerelease
