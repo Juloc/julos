@@ -56,6 +56,7 @@ case "$runtime_kind" in
       --configuration Release \
       --output "$stage/worker" \
       --no-self-contained \
+      -p:GeneratePackageOnBuild=false \
       -p:DebugSymbols=false \
       -p:DebugType=None
     ;;

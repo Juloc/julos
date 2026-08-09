@@ -122,16 +122,28 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up .NET for official packages
-        if: github.event_name != 'pull_request'
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
       - name: Set up Node for official packages
-        if: github.event_name != 'pull_request'
         uses: actions/setup-node@v7
         with:
           node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Stage test-signed official package catalog
+        if: github.event_name == 'pull_request'
+        env:
+          PACKAGE_PUBLISHER_ID: juloc-official
+          PACKAGE_KEY_ID: ${{ env.JULOS_PACKAGE_KEY_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_SIGNING_KEY="$(openssl ecparam -name prime256v1 -genkey -noout)"
+          export PACKAGE_SIGNING_KEY
+          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          test -s deploy/official-packages/catalog.json
+          test -s deploy/official-packages/juloc-package-signing-public.pem
 
       - name: Stage signed official package catalog
         if: github.event_name != 'pull_request'
@@ -216,12 +228,10 @@ jobs:
             exit 1
           fi
 
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
-            docker exec "$container_id" test -s /application/official-packages/catalog.json
-            docker exec "$container_id" test -s /application/official-packages/JulOS.Browser-1.0.0.zip
-            docker exec "$container_id" test -s /application/official-packages/JulOS.Remote-1.0.0.zip
-            docker exec "$container_id" test -s /application/official-packages/JulOS.HostMetrics-1.0.0.zip
-          fi
+          docker exec "$container_id" test -s /application/official-packages/catalog.json
+          docker exec "$container_id" test -s /application/official-packages/JulOS.Browser-1.0.0.zip
+          docker exec "$container_id" test -s /application/official-packages/JulOS.Remote-1.0.0.zip
+          docker exec "$container_id" test -s /application/official-packages/JulOS.HostMetrics-1.0.0.zip
 
           "${compose[@]}" restart server
           "${compose[@]}" up --detach --wait --wait-timeout 120
