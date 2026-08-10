@@ -261,6 +261,167 @@ public sealed class BrowserWorkerCommandTests
             CancellationToken.None);
     }
 
+    [TestMethod]
+    public async Task CreateNetworkProfileStoresAndListsWithoutSecret()
+    {
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+        var secret = Guid.NewGuid();
+
+        var created = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.CreateNetworkProfile,
+                Guid.NewGuid(),
+                new { key = "lan", runtimeNetwork = "julos-lan", proxySecretReferenceId = secret }),
+            CancellationToken.None);
+
+        Assert.IsTrue(created.Succeeded, created.ErrorCode);
+        Assert.IsTrue(created.Payload.GetProperty("hasProxy").GetBoolean());
+
+        var list = await worker.InvokeCommandAsync(
+            ManageCommand(InteractiveProfilesWorkerCommands.ListNetworkProfiles, Guid.NewGuid(), request: null),
+            CancellationToken.None);
+
+        Assert.IsTrue(list.Succeeded, list.ErrorCode);
+        var networks = list.Payload.GetProperty("networkProfiles");
+        Assert.AreEqual(1, networks.GetArrayLength());
+        Assert.AreEqual("lan", networks[0].GetProperty("key").GetString());
+        Assert.IsFalse(
+            list.Payload.GetRawText().Contains(secret.ToString("D"), StringComparison.OrdinalIgnoreCase),
+            "The proxy secret reference must never be returned.");
+    }
+
+    [TestMethod]
+    public async Task CreateNetworkProfileOnUnlistedNetworkIsDenied()
+    {
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+
+        var result = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.CreateNetworkProfile,
+                Guid.NewGuid(),
+                new { key = "guest", runtimeNetwork = "julos-guest" }),
+            CancellationToken.None);
+
+        Assert.IsFalse(result.Succeeded);
+        Assert.AreEqual("browser.network_denied", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task CreateNetworkProfileRejectsADuplicateKey()
+    {
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+        var command = ManageCommand(
+            InteractiveProfilesWorkerCommands.CreateNetworkProfile,
+            Guid.NewGuid(),
+            new { key = "lan", runtimeNetwork = "julos-lan" });
+
+        var first = await worker.InvokeCommandAsync(command, CancellationToken.None);
+        Assert.IsTrue(first.Succeeded, first.ErrorCode);
+
+        var second = await worker.InvokeCommandAsync(command, CancellationToken.None);
+        Assert.IsFalse(second.Succeeded);
+        Assert.AreEqual("browser.network_exists", second.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task CreateProfilePersistsAndListsForOwnerOnly()
+    {
+        var owner = Guid.NewGuid();
+        await SeedNetworkProfileAsync("julos-lan", "julos-lan");
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+
+        var created = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.CreateProfile,
+                owner,
+                new { displayName = "Work", mode = "persistent", networkProfileKey = "julos-lan" }),
+            CancellationToken.None);
+
+        Assert.IsTrue(created.Succeeded, created.ErrorCode);
+        Assert.AreEqual("persistent", created.Payload.GetProperty("mode").GetString());
+
+        var owned = await worker.InvokeCommandAsync(
+            ManageCommand(InteractiveProfilesWorkerCommands.ListProfiles, owner, request: null),
+            CancellationToken.None);
+        Assert.IsTrue(owned.Succeeded, owned.ErrorCode);
+        Assert.AreEqual(1, owned.Payload.GetProperty("profiles").GetArrayLength());
+
+        var other = await worker.InvokeCommandAsync(
+            ManageCommand(InteractiveProfilesWorkerCommands.ListProfiles, Guid.NewGuid(), request: null),
+            CancellationToken.None);
+        Assert.IsTrue(other.Succeeded, other.ErrorCode);
+        Assert.AreEqual(0, other.Payload.GetProperty("profiles").GetArrayLength());
+    }
+
+    [TestMethod]
+    public async Task CreateProfileWithUnknownNetworkFails()
+    {
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+
+        var result = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.CreateProfile,
+                Guid.NewGuid(),
+                new { displayName = "Work", mode = "persistent", networkProfileKey = "absent" }),
+            CancellationToken.None);
+
+        Assert.IsFalse(result.Succeeded);
+        Assert.AreEqual("browser.network_not_found", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task CreateProfileRejectsTemporaryMode()
+    {
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+
+        var result = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.CreateProfile,
+                Guid.NewGuid(),
+                new { displayName = "Work", mode = "temporary", networkProfileKey = "julos-lan" }),
+            CancellationToken.None);
+
+        Assert.IsFalse(result.Succeeded);
+        Assert.AreEqual("browser.request_invalid", result.ErrorCode);
+    }
+
+    [TestMethod]
+    public async Task DeleteProfileRequiresOwnerAndCurrentRevision()
+    {
+        var owner = Guid.NewGuid();
+        await SeedNetworkProfileAsync("julos-lan", "julos-lan");
+        var profile = await SeedPersistentProfileAsync(owner, "julos-lan");
+        var worker = await StartWorkerAsync(["julos-lan"], defaultNetwork: null, runtimeImage: null);
+
+        var stale = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.DeleteProfile,
+                owner,
+                new { profileId = profile.ProfileId, revision = profile.Revision + 1 }),
+            CancellationToken.None);
+        Assert.IsFalse(stale.Succeeded);
+        Assert.AreEqual("browser.profile_not_found", stale.ErrorCode);
+
+        var deleted = await worker.InvokeCommandAsync(
+            ManageCommand(
+                InteractiveProfilesWorkerCommands.DeleteProfile,
+                owner,
+                new { profileId = profile.ProfileId, revision = profile.Revision }),
+            CancellationToken.None);
+        Assert.IsTrue(deleted.Succeeded, deleted.ErrorCode);
+        Assert.IsTrue(deleted.Payload.GetProperty("deleted").GetBoolean());
+    }
+
+    private static PackageWorkerCommand ManageCommand(string name, Guid owner, object? request)
+    {
+        var payload = new
+        {
+            OwnerUserId = owner,
+            Request = JsonSerializer.SerializeToElement(request ?? new { }, JsonOptions),
+        };
+        return new PackageWorkerCommand(name, JsonSerializer.SerializeToElement(payload, JsonOptions));
+    }
+
     private static PackageWorkerCommand ResolvePlanCommand(Guid ownerUserId, string initialUrl, string profileMode, Guid? profileId)
     {
         var browserRequest = new Dictionary<string, object?>(StringComparer.Ordinal)

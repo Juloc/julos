@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Data.Common;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 using JulOS.Contracts.Remote;
@@ -188,9 +189,31 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
         {
             return Failure("browser.worker_unavailable", "Browser worker is not ready.");
         }
-        if (!string.Equals(command.Name, InteractiveSessionWorkerCommands.ResolvePlan, StringComparison.Ordinal))
+        return command.Name switch
         {
-            return Failure("browser.command_unsupported", "Browser worker command is not supported.");
+            InteractiveSessionWorkerCommands.ResolvePlan =>
+                await this.ResolvePlanAsync(command, cancellationToken).ConfigureAwait(false),
+            InteractiveProfilesWorkerCommands.CreateNetworkProfile =>
+                await this.CreateNetworkProfileAsync(command, cancellationToken).ConfigureAwait(false),
+            InteractiveProfilesWorkerCommands.ListNetworkProfiles =>
+                await this.ListNetworkProfilesAsync(command, cancellationToken).ConfigureAwait(false),
+            InteractiveProfilesWorkerCommands.CreateProfile =>
+                await this.CreateProfileAsync(command, cancellationToken).ConfigureAwait(false),
+            InteractiveProfilesWorkerCommands.ListProfiles =>
+                await this.ListProfilesAsync(command, cancellationToken).ConfigureAwait(false),
+            InteractiveProfilesWorkerCommands.DeleteProfile =>
+                await this.DeleteProfileAsync(command, cancellationToken).ConfigureAwait(false),
+            _ => Failure("browser.command_unsupported", "Browser worker command is not supported."),
+        };
+    }
+
+    private async Task<PackageWorkerCommandResult> ResolvePlanAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.context is null || this.profilePolicy is null || this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
         }
 
         ResolveInteractiveSessionPlanRequest? input;
@@ -300,6 +323,247 @@ public sealed class BrowserWorker : IJulOsPackageWorker, IJulOsPackageCommandHan
             storage.VolumeName,
             idleTimeoutSeconds));
     }
+
+    private async Task<PackageWorkerCommandResult> CreateNetworkProfileAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.profilePolicy is null || this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!TryReadManageRequest(command, out _, out var element)
+            || DeserializeOrNull<BrowserCreateNetworkProfileRequest>(element) is not { } input
+            || input.Key is null
+            || input.RuntimeNetwork is null)
+        {
+            return Failure("browser.request_invalid", "Browser network profile request is invalid.");
+        }
+
+        BrowserNetworkProfile profile;
+        try
+        {
+            profile = this.profilePolicy.CreateNetworkProfile(
+                input.Key,
+                input.RuntimeNetwork,
+                input.ProxySecretReferenceId);
+        }
+        catch (InvalidOperationException)
+        {
+            return Failure("browser.network_denied", "The requested Browser runtime network is not allowlisted.");
+        }
+        catch (ArgumentException)
+        {
+            return Failure("browser.network_invalid", "Browser network profile is invalid.");
+        }
+
+        try
+        {
+            await this.profileStore.CreateNetworkProfileAsync(profile, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbException)
+        {
+            return Failure("browser.network_exists", "A Browser network profile with that key already exists.");
+        }
+
+        return Success(ToNetworkResponse(profile));
+    }
+
+    private async Task<PackageWorkerCommandResult> ListNetworkProfilesAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!TryReadManageRequest(command, out _, out _))
+        {
+            return Failure("browser.request_invalid", "Browser network profile request is invalid.");
+        }
+
+        var profiles = await this.profileStore.ListNetworkProfilesAsync(cancellationToken).ConfigureAwait(false);
+        return Success(new BrowserNetworkProfileListResponse(
+            profiles.Select(ToNetworkResponse).ToList()));
+    }
+
+    private async Task<PackageWorkerCommandResult> CreateProfileAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!TryReadManageRequest(command, out var owner, out var element)
+            || owner == Guid.Empty
+            || DeserializeOrNull<BrowserCreateProfileRequest>(element) is not { } input
+            || input.DisplayName is null
+            || input.NetworkProfileKey is null
+            || !TryParseRetainedMode(input.Mode, out var mode))
+        {
+            return Failure("browser.request_invalid", "Browser profile request is invalid.");
+        }
+
+        Uri? startUrl = null;
+        if (!string.IsNullOrEmpty(input.StartUrl)
+            && !Uri.TryCreate(input.StartUrl, UriKind.Absolute, out startUrl))
+        {
+            return Failure("browser.url_invalid", "Browser profile URL is invalid.");
+        }
+
+        BrowserProfile profile;
+        try
+        {
+            profile = BrowserProfilePolicy.CreateProfile(
+                owner,
+                input.DisplayName,
+                mode,
+                input.NetworkProfileKey,
+                startUrl,
+                input.ApplicationKey,
+                this.timeProvider.GetUtcNow());
+        }
+        catch (ArgumentException)
+        {
+            return Failure("browser.profile_invalid", "Browser profile is invalid.");
+        }
+
+        try
+        {
+            await this.profileStore.CreateProfileAsync(profile, cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            return Failure("browser.network_not_found", "Browser network profile was not found.");
+        }
+        catch (DbException)
+        {
+            return Failure("browser.profile_conflict", "Browser profile could not be stored.");
+        }
+
+        return Success(ToProfileResponse(profile));
+    }
+
+    private async Task<PackageWorkerCommandResult> ListProfilesAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!TryReadManageRequest(command, out var owner, out _) || owner == Guid.Empty)
+        {
+            return Failure("browser.request_invalid", "Browser profile request is invalid.");
+        }
+
+        var profiles = await this.profileStore.ListProfilesAsync(owner, cancellationToken).ConfigureAwait(false);
+        return Success(new BrowserProfileListResponse(
+            profiles.Select(ToProfileResponse).ToList()));
+    }
+
+    private async Task<PackageWorkerCommandResult> DeleteProfileAsync(
+        PackageWorkerCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (this.profileStore is null)
+        {
+            return Failure("browser.worker_unavailable", "Browser worker is not ready.");
+        }
+        if (!TryReadManageRequest(command, out var owner, out var element)
+            || owner == Guid.Empty
+            || DeserializeOrNull<BrowserDeleteProfileRequest>(element) is not { } input
+            || input.ProfileId == Guid.Empty
+            || input.Revision < 1)
+        {
+            return Failure("browser.request_invalid", "Browser profile request is invalid.");
+        }
+
+        var deleted = await this.profileStore
+            .DeleteProfileAsync(owner, input.ProfileId, input.Revision, cancellationToken)
+            .ConfigureAwait(false);
+        return deleted
+            ? Success(new BrowserDeleteProfileResponse(true))
+            : Failure("browser.profile_not_found", "Browser profile was not found or was modified.");
+    }
+
+    private static bool TryReadManageRequest(
+        PackageWorkerCommand command,
+        out Guid owner,
+        out JsonElement request)
+    {
+        owner = Guid.Empty;
+        request = default;
+        try
+        {
+            var envelope = command.Payload.Deserialize<ManageInteractiveProfilesRequest>(JsonOptions);
+            if (envelope is null)
+            {
+                return false;
+            }
+            owner = envelope.OwnerUserId;
+            request = envelope.Request;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static T? DeserializeOrNull<T>(JsonElement element)
+        where T : class
+    {
+        if (element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return null;
+        }
+        try
+        {
+            return element.Deserialize<T>(JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryParseRetainedMode(string? value, out BrowserProfileMode mode)
+    {
+        switch (value)
+        {
+            case "persistent":
+                mode = BrowserProfileMode.Persistent;
+                return true;
+            case "application":
+                mode = BrowserProfileMode.Application;
+                return true;
+            default:
+                mode = BrowserProfileMode.Temporary;
+                return false;
+        }
+    }
+
+    private static BrowserNetworkProfileResponse ToNetworkResponse(BrowserNetworkProfile profile) => new(
+        profile.Key,
+        profile.RuntimeNetwork,
+        profile.ProxySecretReferenceId is not null,
+        profile.Revision);
+
+    private static BrowserProfileResponse ToProfileResponse(BrowserProfile profile) => new(
+        profile.ProfileId,
+        profile.DisplayName,
+        profile.Mode switch
+        {
+            BrowserProfileMode.Persistent => "persistent",
+            BrowserProfileMode.Application => "application",
+            _ => "temporary",
+        },
+        profile.NetworkProfileKey,
+        profile.StartUrl?.AbsoluteUri,
+        profile.ApplicationKey,
+        profile.Revision);
 
     private static InteractiveSessionRuntimePlan CreateRuntimePlan(
         string packageVersion,
