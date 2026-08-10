@@ -106,6 +106,8 @@ public static class PackageManagementServiceCollectionExtensions
             packageRoot));
         services.AddScoped<HostMetricsCapabilityProvider>();
         services.AddScoped<RemoteSessionCapabilityProvider>();
+        services.AddScoped(provider => new InteractiveProfilesCapabilityProvider(
+            provider.GetRequiredService<IPackageWorkerCommandDispatcher>()));
         services.AddScoped<CapabilityBroker>(provider =>
         {
             var broker = new CapabilityBroker(
@@ -117,6 +119,8 @@ public static class PackageManagementServiceCollectionExtensions
             broker.Register(remote.Descriptor.ProviderPackageId, remote);
             var interactive = provider.GetRequiredService<InteractiveSessionCapabilityProvider>();
             broker.Register(interactive.Descriptor.ProviderPackageId, interactive);
+            var interactiveProfiles = provider.GetRequiredService<InteractiveProfilesCapabilityProvider>();
+            broker.Register(interactiveProfiles.Descriptor.ProviderPackageId, interactiveProfiles);
             return broker;
         });
         services.AddScoped<ICapabilityClient>(

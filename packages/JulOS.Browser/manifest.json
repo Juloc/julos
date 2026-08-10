@@ -41,6 +41,12 @@
       "Direction": "requires",
       "ContractVersion": "1.0.0",
       "Required": true
+    },
+    {
+      "Name": "interactive.profiles",
+      "Direction": "requires",
+      "ContractVersion": "1.0.0",
+      "Required": false
     }
   ],
   "Migrations": [],

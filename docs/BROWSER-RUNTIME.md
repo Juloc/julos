@@ -70,6 +70,12 @@ Each profile contains:
 
 The selected network must also be reachable by the configured Remote presentation provider. For the current Browser runtime, the Remote network profile therefore needs the same runtime network, internal port `5900`, and the narrow target pattern `julos-interactive-*`. Remote policy accepts a trailing wildcard only in the `<dns-label>-*` form; arbitrary prefix wildcards remain invalid.
 
+## Managing profiles and network profiles
+
+Creating, listing and deleting profiles and network profiles is exposed through the generic `interactive.profiles/1.0.0` capability, which the Browser manifest requires. The Desktop sends an opaque Browser request to `POST /api/v1/packages/de.juloc.julos.browser/capabilities/interactive.profiles/{operation}` where `{operation}` is one of `create-network`, `list-networks`, `create`, `list` or `delete`. Core attaches the authenticated user and forwards the opaque payload only to the already-running Browser worker through the private package-worker command boundary; it never interprets the profile shape and holds no profile state of its own.
+
+The Browser worker enforces the policy above: user profiles are scoped to the authenticated owner, network-profile creation is bounded by the administrator `allowedNetworks` allowlist, temporary profiles are never persisted, and proxy secret references are never returned. `interactive.profiles` reuses the same Core-provider-dispatches-to-worker pattern as `interactive.session`, so no Browser-specific Core contract is introduced.
+
 ## Generic interactive-session boundary
 
 The Browser manifest requires `interactive.session/1.0.0`. The capability exposes generic create, read and terminate operations for package-owned interactive runtimes.
