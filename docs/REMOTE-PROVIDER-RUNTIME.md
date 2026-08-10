@@ -44,4 +44,10 @@ Built and run directly (outside Runtime Manager) against a real `linuxserver/ope
 - the bridge posted a correctly-shaped `connected` event carrying the deterministic `remote-{sessionId:N}` runtime ID and the `JULOS_REMOTE_EXPECTED_REVISION` value.
 - a raw WebSocket upgrade against the container's external port returned `101 Switching Protocols`, echoed the `guacamole` subprotocol, and streamed live guacd protocol bytes for the SSH target.
 
-Not yet done: wiring the image into a full JulOS deployment (`Remote:Providers`, `Remote:Display:ProviderEndpointTemplate`, Runtime Manager network) and validating through the real JulOS Server, Runtime Manager and Remote frontend end to end, for all three protocols. Publishing the image is likewise not yet done.
+## Published and wired
+
+The image is published to GHCR as `ghcr.io/juloc/julos-remote-provider:0.4.0-beta.4`, immutable index digest `sha256:e9c9d61adb82e56370a5fdaa76344dab686b4afd90a2ce41fc82cfe3a510b643` (its `linux/amd64` manifest is `sha256:3191f8115eddb13e27f50f190fe98e4f9a24d370b80fb9240340c21b72c8fb17`), with a provenance attestation that `gh attestation verify oci://ghcr.io/juloc/julos-remote-provider:0.4.0-beta.4 --owner juloc` accepts. It is built for `linux/amd64` only: `guacd` is compiled from source against the Ubuntu base, so `linux/arm64` is a deliberate, documented non-goal for this release rather than an oversight.
+
+The opt-in `remote` Compose profile wires the image into a full deployment through `deploy/compose/compose.remote.yaml` (`Remote__Providers__0__*` and `Remote__NetworkProfiles__0__*`, plus the `runtime-manager` service) layered over `deploy/compose/compose.yaml`; `deploy/compose/README.md` documents the invocation and the required `.env` values.
+
+Still open: end-to-end deployed validation through the real JulOS Server, Runtime Manager and Remote frontend for RDP (REM-006) and VNC (REM-007), the browser and Android display walkthrough (REM-005), and the SSH close-out (REM-008). Only SSH has been driven end to end so far (see `docs/REMOTE-HANDOVER.md`).
