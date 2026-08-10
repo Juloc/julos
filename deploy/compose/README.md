@@ -75,12 +75,12 @@ docker compose exec postgres psql --username julos --dbname julos
 The `runtime-manager` service and the `Remote__*` variables in `.env.example` are optional and disabled by default; Remote sessions fail closed with no configured provider until you set them. To enable Remote:
 
 1. Install the signed `de.juloc.julos.remote` package through the running server (`POST /api/v1/packages/install`).
-2. Build and publish (or build locally and reference by digest) the provider runtime image from `packages/JulOS.Remote/runtime/Dockerfile`; see `docs/REMOTE-PROVIDER-RUNTIME.md`.
-3. Fill in the Remote variables in `.env` (`openssl rand -hex 32` for both key values), pointing `JULOS_REMOTE_PROVIDER_0_IMAGE` at that digest-pinned image.
-4. Start the stack with the `remote` profile so `runtime-manager` also runs:
+2. The provider runtime image is already published, and `JULOS_REMOTE_PROVIDER_0_IMAGE` defaults (in `compose.remote.yaml`) to the digest-pinned published image (`ghcr.io/juloc/julos-remote-provider@sha256:e9c9d61...`, `linux/amd64`). Keep that digest aligned with the server image version; see `docs/REMOTE-PROVIDER-RUNTIME.md`. Override it only to run a locally built provider image from `packages/JulOS.Remote/runtime/Dockerfile`.
+3. Fill in the remaining Remote variables in `.env` (`openssl rand -hex 32` for both key values, plus the network-profile GUID and the allowed target pattern and port).
+4. Start the stack with the `remote` profile and the `compose.remote.yaml` overlay so both `runtime-manager` and the `Remote__*` configuration are applied:
 
 ```bash
-docker compose --profile remote up --build
+docker compose -f compose.yaml -f compose.remote.yaml --profile remote up --build
 ```
 
 `runtime-manager` needs the host's Docker socket to create the narrow, labeled containers it owns, so it is not part of the default profile.
