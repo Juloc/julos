@@ -162,17 +162,15 @@ Chromium runs as a non-root user. Runtime Manager drops all Linux capabilities a
 
 ## Publication
 
-`.github/workflows/publish-browser-runtime.yml` runs only for the integration branch.
+The image is published by the `browser-runtime` job in `.github/workflows/release.yml`, dispatched with the workflow input `target: browser-runtime`.
 
 It:
 
-1. validates the complete repository;
-2. builds the image and runs a lifecycle smoke test with Runtime Manager-equivalent limits;
-3. proves that missing credentials fail and no host port is bound;
-4. refuses to overwrite an existing version;
-5. builds Linux AMD64 and ARM64 images;
-6. publishes only the repository-version tag to GHCR;
-7. creates a GitHub provenance attestation for the image digest;
-8. uploads the exact digest reference as retained workflow evidence.
+1. refuses to overwrite an existing repository-version tag;
+2. builds Linux AMD64 and ARM64 images from `packages/JulOS.Browser/runtime/Dockerfile`;
+3. publishes only the repository-version tag to GHCR;
+4. creates a GitHub provenance attestation for the image digest and pushes it to the registry.
 
-No `latest` tag is created. The published `repository@sha256:digest` reference is configured as the Browser package `runtimeImage`; BRW-003 never depends on a mutable tag.
+No `latest` tag is created. The published multi-architecture image is pinned by digest in `release.yml` (`JULOS_BROWSER_RUNTIME_IMAGE`) and staged into the official package catalog as the Browser package `runtimeImage`, so BRW-003 never depends on a mutable tag.
+
+The current publish job does not run a container lifecycle smoke test (a superseded standalone workflow did). The runtime-behavior guarantees — a required eight-character display password checked before any display process starts, an unprivileged `10001:10001` user, a single exposed VNC port `5900`, and the health and cleanup logic above — are enforced by the image itself (`Dockerfile`, `browser-runtime.sh`, `browser-runtime-health.sh`) and confirmed by a deployed run. Restoring an automated lifecycle smoke test to the publish job is an open follow-up.
