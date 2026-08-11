@@ -184,7 +184,7 @@ jobs:
         with:
           context: .
           file: src/JulOS.Server/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}
           build-args: |
@@ -311,7 +311,7 @@ jobs:
         with:
           context: .
           file: packages/JulOS.Browser/runtime/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}
           build-args: |
@@ -379,7 +379,7 @@ jobs:
         with:
           context: .
           file: src/JulOS.RuntimeManager/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/juloc/julos-runtime-manager:${{ needs.validate.outputs.version }}
           build-args: |
