@@ -60,7 +60,8 @@ case "$runtime_kind" in
       -p:DebugSymbols=false \
       -p:DebugType=None \
       -p:Version="$package_version" \
-      -p:ContinuousIntegrationBuild=true
+      -p:ContinuousIntegrationBuild=true \
+      -p:IncludeSourceRevisionInInformationalVersion=false
     ;;
   none)
     ;;
