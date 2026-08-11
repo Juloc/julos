@@ -2,6 +2,7 @@
   class JulOsBrowserApp extends HTMLElement {
     launchTarget = null;
     #profiles = [];
+    #networks = [];
     #session = null;
     #pollTimer = null;
     #client = null;
@@ -16,6 +17,7 @@
       this.#render();
       this.#bind();
       void this.#loadProfiles();
+      void this.#loadNetworks();
       const initialUrl = this.launchTarget?.externalIdentity;
       if (typeof initialUrl === 'string' && initialUrl.length > 0) {
         this.#required('address').value = initialUrl;
@@ -45,6 +47,9 @@
           form { display: flex; gap: .5rem; padding: .6rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); }
           input, button, select { min-height: 2.35rem; border: 1px solid color-mix(in srgb,CanvasText 22%,transparent); border-radius: .45rem; font: inherit; }
           select { padding: .35rem .5rem; background: Canvas; color: CanvasText; max-width: 12rem; }
+          .header { display: flex; flex-direction: column; }
+          #new-profile { display: flex; gap: .5rem; align-items: center; padding: .6rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); }
+          #new-profile[hidden] { display: none; }
           input { flex: 1; min-width: 8rem; padding: .35rem .6rem; background: Canvas; color: CanvasText; }
           button { padding: .35rem .75rem; cursor: pointer; }
           button:disabled { opacity: .55; cursor: default; }
@@ -54,15 +59,24 @@
           .status[data-state='error'] { color: #b10e1e; }
         </style>
         <section class="browser">
-          <form id="toolbar">
-            <input id="address" type="url" required autocomplete="off" placeholder="https://example.org" aria-label="${de ? 'Adresse' : 'Address'}" />
-            <select id="profile" aria-label="${de ? 'Profil' : 'Profile'}">
-              <option value="">${de ? 'Temporär' : 'Temporary'}</option>
-            </select>
-            <button id="open" type="submit">${de ? 'Öffnen' : 'Open'}</button>
-            <button id="save" type="button">${de ? 'Als App' : 'Save app'}</button>
-            <button id="stop" type="button" disabled>${de ? 'Stop' : 'Stop'}</button>
-          </form>
+          <div class="header">
+            <form id="toolbar">
+              <input id="address" type="url" required autocomplete="off" placeholder="https://example.org" aria-label="${de ? 'Adresse' : 'Address'}" />
+              <select id="profile" aria-label="${de ? 'Profil' : 'Profile'}">
+                <option value="">${de ? 'Temporär' : 'Temporary'}</option>
+              </select>
+              <button id="new-toggle" type="button">${de ? 'Neu' : 'New'}</button>
+              <button id="open" type="submit">${de ? 'Öffnen' : 'Open'}</button>
+              <button id="save" type="button">${de ? 'Als App' : 'Save app'}</button>
+              <button id="stop" type="button" disabled>${de ? 'Stop' : 'Stop'}</button>
+            </form>
+            <form id="new-profile" hidden>
+              <input id="new-name" type="text" required maxlength="96" autocomplete="off" placeholder="${de ? 'Profilname' : 'Profile name'}" aria-label="${de ? 'Profilname' : 'Profile name'}" />
+              <select id="new-network" aria-label="${de ? 'Netzwerk' : 'Network'}"></select>
+              <button id="new-create" type="submit">${de ? 'Anlegen' : 'Create'}</button>
+              <button id="new-cancel" type="button">${de ? 'Abbrechen' : 'Cancel'}</button>
+            </form>
+          </div>
           <div id="stage" class="stage" tabindex="0" aria-label="${de ? 'Browseranzeige' : 'Browser display'}"></div>
           <p id="status" class="status" role="status">${de ? 'Bereit' : 'Ready'}</p>
         </section>`;
@@ -75,6 +89,12 @@
       });
       this.#required('save').addEventListener('click', () => void this.#saveApp());
       this.#required('stop').addEventListener('click', () => void this.#terminate());
+      this.#required('new-toggle').addEventListener('click', () => this.#toggleNewProfile());
+      this.#required('new-cancel').addEventListener('click', () => this.#toggleNewProfile(false));
+      this.#required('new-profile').addEventListener('submit', (event) => {
+        event.preventDefault();
+        void this.#createProfile();
+      });
     }
 
     async #saveApp() {
@@ -119,6 +139,76 @@
       return id.length === 0
         ? null
         : this.#profiles.find((profile) => profile.profileId === id) ?? null;
+    }
+
+    async #loadNetworks() {
+      let networks;
+      try {
+        networks = validateNetworkProfileList(
+          await context.invokeCapability('interactive.profiles', 'list-networks', {}),
+        );
+      } catch {
+        this.#networks = [];
+        return;
+      }
+      this.#networks = networks;
+      const select = this.shadowRoot?.getElementById('new-network');
+      if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      select.innerHTML = networks.length === 0
+        ? `<option value="">${context.language === 'de' ? 'Kein Netzwerk konfiguriert' : 'No network configured'}</option>`
+        : networks.map((network) => `<option value="${escapeHtml(network.key)}">${escapeHtml(network.key)}</option>`).join('');
+      const create = this.shadowRoot?.getElementById('new-create');
+      if (create instanceof HTMLButtonElement) {
+        create.disabled = networks.length === 0;
+      }
+    }
+
+    #toggleNewProfile(force) {
+      const form = this.shadowRoot?.getElementById('new-profile');
+      if (!(form instanceof HTMLElement)) {
+        return;
+      }
+      const show = force ?? form.hidden;
+      form.hidden = !show;
+      if (show) {
+        this.shadowRoot?.getElementById('new-name')?.focus?.();
+      }
+    }
+
+    async #createProfile() {
+      let request;
+      try {
+        const network = this.shadowRoot?.getElementById('new-network');
+        request = toCreateProfileRequest(
+          this.#required('new-name').value,
+          network instanceof HTMLSelectElement ? network.value : '',
+        );
+      } catch {
+        this.#setStatus(context.language === 'de' ? 'Profil ist ungültig.' : 'Profile is invalid.', 'error');
+        return;
+      }
+      let created;
+      try {
+        created = validateCreatedProfile(
+          await context.invokeCapability('interactive.profiles', 'create', request),
+        );
+      } catch {
+        this.#setStatus(
+          context.language === 'de' ? 'Profil konnte nicht angelegt werden.' : 'Profile could not be created.',
+          'error',
+        );
+        return;
+      }
+      this.#required('new-name').value = '';
+      this.#toggleNewProfile(false);
+      await this.#loadProfiles();
+      const select = this.shadowRoot?.getElementById('profile');
+      if (select instanceof HTMLSelectElement && this.#profiles.some((profile) => profile.profileId === created.profileId)) {
+        select.value = created.profileId;
+      }
+      this.#setStatus(context.language === 'de' ? 'Profil angelegt.' : 'Profile created.');
     }
 
     async #start(rawUrl) {
@@ -369,6 +459,52 @@ export function validateProfileList(value) {
     }
     return { profileId: profile.profileId, displayName: profile.displayName, mode: profile.mode };
   });
+}
+
+// Builds the opaque create-profile request. Slice 1b only creates persistent
+// profiles; application-mode creation (which also needs a fixed URL) is a later
+// slice. Trims and bounds the name and requires an existing network profile.
+export function toCreateProfileRequest(name, networkProfileKey) {
+  const displayName = typeof name === 'string' ? name.trim() : '';
+  const key = typeof networkProfileKey === 'string' ? networkProfileKey.trim() : '';
+  if (displayName.length === 0 || displayName.length > 96 || key.length === 0) {
+    throw new Error('Browser profile is invalid.');
+  }
+  return { displayName, mode: 'persistent', networkProfileKey: key };
+}
+
+// Validates the caller-safe list-networks response, returning only the fields the
+// create form needs. A proxy secret value is never present in this response.
+export function validateNetworkProfileList(value) {
+  const networks = value !== null && typeof value === 'object' ? value.networkProfiles : undefined;
+  if (!Array.isArray(networks)) {
+    throw new Error('Browser network profile list is invalid.');
+  }
+  return networks.map((network) => {
+    if (
+      network === null
+      || typeof network !== 'object'
+      || typeof network.key !== 'string'
+      || typeof network.runtimeNetwork !== 'string'
+    ) {
+      throw new Error('Browser network profile entry is invalid.');
+    }
+    return { key: network.key, runtimeNetwork: network.runtimeNetwork };
+  });
+}
+
+// Validates the single created-profile response returned by interactive.profiles/create.
+export function validateCreatedProfile(value) {
+  if (
+    value === null
+    || typeof value !== 'object'
+    || typeof value.profileId !== 'string'
+    || typeof value.displayName !== 'string'
+    || (value.mode !== 'persistent' && value.mode !== 'application')
+  ) {
+    throw new Error('Browser profile response is invalid.');
+  }
+  return { profileId: value.profileId, displayName: value.displayName, mode: value.mode };
 }
 
 // Escapes text before it is placed into option markup, so a user-chosen profile

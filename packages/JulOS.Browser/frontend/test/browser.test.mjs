@@ -4,7 +4,10 @@ import test from 'node:test';
 import {
   escapeHtml,
   normalizeUrl,
+  toCreateProfileRequest,
   toSessionRequest,
+  validateCreatedProfile,
+  validateNetworkProfileList,
   validateProfileList,
   validateSession,
 } from '../browser.js';
@@ -71,4 +74,35 @@ test('a session response must carry an identity, state and revision', () => {
   );
   assert.throws(() => validateSession({ sessionId: 's-1', state: 'connected', revision: 0 }));
   assert.throws(() => validateSession(null));
+});
+
+test('a create-profile request trims the name and requires a network', () => {
+  assert.deepEqual(toCreateProfileRequest('  Work  ', 'lan'), {
+    displayName: 'Work',
+    mode: 'persistent',
+    networkProfileKey: 'lan',
+  });
+  assert.throws(() => toCreateProfileRequest('', 'lan'));
+  assert.throws(() => toCreateProfileRequest('Work', ''));
+  assert.throws(() => toCreateProfileRequest('x'.repeat(97), 'lan'));
+});
+
+test('the network profile list keeps only well-formed entries', () => {
+  assert.deepEqual(
+    validateNetworkProfileList({
+      networkProfiles: [{ key: 'lan', runtimeNetwork: 'julos-lan', hasProxy: false, revision: 1 }],
+    }),
+    [{ key: 'lan', runtimeNetwork: 'julos-lan' }],
+  );
+  assert.throws(() => validateNetworkProfileList({}));
+  assert.throws(() => validateNetworkProfileList({ networkProfiles: [{ key: 'lan' }] }));
+});
+
+test('a created profile response must carry an identity, name and retained mode', () => {
+  assert.deepEqual(
+    validateCreatedProfile({ profileId: 'p-1', displayName: 'Work', mode: 'persistent', revision: 1 }),
+    { profileId: 'p-1', displayName: 'Work', mode: 'persistent' },
+  );
+  assert.throws(() => validateCreatedProfile({ profileId: 'p-1', displayName: 'Work', mode: 'temporary' }));
+  assert.throws(() => validateCreatedProfile(null));
 });
