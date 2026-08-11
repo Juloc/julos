@@ -19,6 +19,7 @@
       }
       this.#render();
       this.#bind();
+      this.#applyChromeMode();
       void this.#loadProfiles();
       void this.#loadNetworks();
       this.#newTab();
@@ -55,6 +56,17 @@
           .tab .label { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .tab .close { border: 0; background: transparent; color: inherit; padding: 0 .25rem; min-height: auto; cursor: pointer; }
           .tab-new { min-height: 2rem; padding: .2rem .6rem; }
+          #app-title, #full-browser { display: none; }
+          #app-title { flex: 1; align-self: center; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          [data-chrome='app'] #tabs,
+          [data-chrome='app'] #address,
+          [data-chrome='app'] #profile,
+          [data-chrome='app'] #new-toggle,
+          [data-chrome='app'] #save,
+          [data-chrome='app'] #open,
+          [data-chrome='app'] #new-profile { display: none; }
+          [data-chrome='app'] #app-title { display: inline-flex; }
+          [data-chrome='app'] #full-browser { display: inline-flex; }
           form { display: flex; gap: .5rem; padding: .6rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); }
           input, button, select { min-height: 2.35rem; border: 1px solid color-mix(in srgb,CanvasText 22%,transparent); border-radius: .45rem; font: inherit; }
           select { padding: .35rem .5rem; background: Canvas; color: CanvasText; max-width: 12rem; }
@@ -69,10 +81,11 @@
           .status { margin: 0; padding: .5rem .7rem; border-top: 1px solid color-mix(in srgb,CanvasText 12%,transparent); }
           .status[data-state='error'] { color: #b10e1e; }
         </style>
-        <section class="browser">
+        <section id="root" class="browser">
           <div id="tabs" class="tabs" role="tablist"></div>
           <div class="header">
             <form id="toolbar">
+              <span id="app-title"></span>
               <input id="address" type="url" required autocomplete="off" placeholder="https://example.org" aria-label="${de ? 'Adresse' : 'Address'}" />
               <select id="profile" aria-label="${de ? 'Profil' : 'Profile'}">
                 <option value="">${de ? 'Temporär' : 'Temporary'}</option>
@@ -81,6 +94,7 @@
               <button id="open" type="submit">${de ? 'Öffnen' : 'Open'}</button>
               <button id="save" type="button">${de ? 'Als App' : 'Save app'}</button>
               <button id="stop" type="button" disabled>${de ? 'Stop' : 'Stop'}</button>
+              <button id="full-browser" type="button">${de ? 'Vollständiger Browser' : 'Full browser'}</button>
             </form>
             <form id="new-profile" hidden>
               <input id="new-name" type="text" required maxlength="96" autocomplete="off" placeholder="${de ? 'Profilname' : 'Profile name'}" aria-label="${de ? 'Profilname' : 'Profile name'}" />
@@ -101,6 +115,7 @@
       });
       this.#required('save').addEventListener('click', () => void this.#saveApp());
       this.#required('stop').addEventListener('click', () => void this.#terminate());
+      this.#required('full-browser').addEventListener('click', () => this.#showFullChrome());
       this.#required('new-toggle').addEventListener('click', () => this.#toggleNewProfile());
       this.#required('new-cancel').addEventListener('click', () => this.#toggleNewProfile(false));
       this.#required('new-profile').addEventListener('submit', (event) => {
@@ -334,6 +349,28 @@
         + '</span>');
       parts.push(`<button type="button" id="tab-new" class="tab-new" aria-label="${fallback}">+</button>`);
       bar.innerHTML = parts.join('');
+    }
+
+    #applyChromeMode() {
+      const root = this.shadowRoot?.getElementById('root');
+      if (!(root instanceof HTMLElement)) {
+        return;
+      }
+      const mode = resolveChromeMode(this.launchTarget);
+      root.dataset.chrome = mode;
+      if (mode === 'app') {
+        const title = this.shadowRoot?.getElementById('app-title');
+        if (title instanceof HTMLElement) {
+          title.textContent = appLaunchTitle(this.launchTarget, context.language === 'de' ? 'Anwendung' : 'Application');
+        }
+      }
+    }
+
+    #showFullChrome() {
+      const root = this.shadowRoot?.getElementById('root');
+      if (root instanceof HTMLElement) {
+        root.dataset.chrome = 'full';
+      }
     }
 
     async #terminateSession(session) {
@@ -608,6 +645,29 @@ export function nextActiveTabId(tabs, closingId, activeId) {
     return null;
   }
   return remaining[Math.min(index < 0 ? 0 : index, remaining.length - 1)].id;
+}
+
+// Decides the toolbar chrome: a saved application launch target opens in the
+// minimal app chrome, everything else in the full browser chrome.
+export function resolveChromeMode(launchTarget) {
+  return launchTarget !== null
+    && launchTarget !== undefined
+    && typeof launchTarget.externalIdentity === 'string'
+    && launchTarget.externalIdentity.trim().length > 0
+    ? 'app'
+    : 'full';
+}
+
+// Title shown in the minimal app chrome: the saved display name, else the host.
+export function appLaunchTitle(launchTarget, fallback) {
+  if (launchTarget === null || launchTarget === undefined) {
+    return fallback;
+  }
+  const name = typeof launchTarget.displayName === 'string' ? launchTarget.displayName.trim() : '';
+  if (name.length > 0) {
+    return name;
+  }
+  return tabTitle(typeof launchTarget.externalIdentity === 'string' ? launchTarget.externalIdentity : '', fallback);
 }
 
 // Validates the caller-safe interactive.profiles list response and returns only

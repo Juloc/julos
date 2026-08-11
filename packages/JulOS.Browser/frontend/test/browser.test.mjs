@@ -2,9 +2,11 @@
 import test from 'node:test';
 
 import {
+  appLaunchTitle,
   escapeHtml,
   nextActiveTabId,
   normalizeUrl,
+  resolveChromeMode,
   tabTitle,
   toCreateProfileRequest,
   toSessionRequest,
@@ -125,4 +127,16 @@ test('closing a tab keeps the active one, or selects a neighbour when the active
   assert.equal(nextActiveTabId(tabs, 'c', 'c'), 'b');
   // Closing the only tab selects nothing.
   assert.equal(nextActiveTabId([{ id: 'a' }], 'a', 'a'), null);
+});
+
+test('a saved application target opens in app chrome, everything else in full chrome', () => {
+  assert.equal(resolveChromeMode({ externalIdentity: 'https://shop.test/' }), 'app');
+  assert.equal(resolveChromeMode(null), 'full');
+  assert.equal(resolveChromeMode({ externalIdentity: '   ' }), 'full');
+});
+
+test('the app title prefers the saved name and falls back to the host', () => {
+  assert.equal(appLaunchTitle({ externalIdentity: 'https://shop.test/', displayName: 'Shop' }, 'App'), 'Shop');
+  assert.equal(appLaunchTitle({ externalIdentity: 'https://shop.test/', displayName: '' }, 'App'), 'shop.test');
+  assert.equal(appLaunchTitle(null, 'App'), 'App');
 });
