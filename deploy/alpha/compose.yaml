@@ -7,7 +7,7 @@
 name: julos-alpha
 
 x-server: &server
-  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.3.0-alpha.11}
+  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.8}
   environment:
     ASPNETCORE_ENVIRONMENT: Production
     ASPNETCORE_HTTP_PORTS: 8080
@@ -51,7 +51,7 @@ services:
 
   migrate:
     <<: *server
-    command: ["--migrate-database"]
+    command: ["dotnet", "/application/JulOS.Server.dll", "--migrate-database"]
     depends_on:
       postgres:
         condition: service_healthy
