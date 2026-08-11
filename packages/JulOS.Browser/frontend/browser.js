@@ -1,6 +1,7 @@
 ﻿export async function register(context) {
   class JulOsBrowserApp extends HTMLElement {
     launchTarget = null;
+    #profiles = [];
     #session = null;
     #pollTimer = null;
     #client = null;
@@ -14,6 +15,7 @@
       }
       this.#render();
       this.#bind();
+      void this.#loadProfiles();
       const initialUrl = this.launchTarget?.externalIdentity;
       if (typeof initialUrl === 'string' && initialUrl.length > 0) {
         this.#required('address').value = initialUrl;
@@ -41,7 +43,8 @@
           * { box-sizing: border-box; }
           .browser { display: grid; grid-template-rows: auto minmax(20rem,1fr) auto; width: 100%; height: 100%; min-height: 24rem; background: Canvas; }
           form { display: flex; gap: .5rem; padding: .6rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); }
-          input, button { min-height: 2.35rem; border: 1px solid color-mix(in srgb,CanvasText 22%,transparent); border-radius: .45rem; font: inherit; }
+          input, button, select { min-height: 2.35rem; border: 1px solid color-mix(in srgb,CanvasText 22%,transparent); border-radius: .45rem; font: inherit; }
+          select { padding: .35rem .5rem; background: Canvas; color: CanvasText; max-width: 12rem; }
           input { flex: 1; min-width: 8rem; padding: .35rem .6rem; background: Canvas; color: CanvasText; }
           button { padding: .35rem .75rem; cursor: pointer; }
           button:disabled { opacity: .55; cursor: default; }
@@ -53,6 +56,9 @@
         <section class="browser">
           <form id="toolbar">
             <input id="address" type="url" required autocomplete="off" placeholder="https://example.org" aria-label="${de ? 'Adresse' : 'Address'}" />
+            <select id="profile" aria-label="${de ? 'Profil' : 'Profile'}">
+              <option value="">${de ? 'Temporär' : 'Temporary'}</option>
+            </select>
             <button id="open" type="submit">${de ? 'Öffnen' : 'Open'}</button>
             <button id="save" type="button">${de ? 'Als App' : 'Save app'}</button>
             <button id="stop" type="button" disabled>${de ? 'Stop' : 'Stop'}</button>
@@ -82,6 +88,39 @@
       }
     }
 
+    async #loadProfiles() {
+      let profiles;
+      try {
+        profiles = validateProfileList(await context.invokeCapability('interactive.profiles', 'list', {}));
+      } catch {
+        this.#profiles = [];
+        return;
+      }
+      this.#profiles = profiles;
+      const select = this.shadowRoot?.getElementById('profile');
+      if (!(select instanceof HTMLSelectElement)) {
+        return;
+      }
+      const temporary = context.language === 'de' ? 'Temporär' : 'Temporary';
+      const options = [`<option value="">${temporary}</option>`];
+      for (const profile of profiles) {
+        options.push(`<option value="${escapeHtml(profile.profileId)}">${escapeHtml(profile.displayName)}</option>`);
+      }
+      const previous = select.value;
+      select.innerHTML = options.join('');
+      if (profiles.some((profile) => profile.profileId === previous)) {
+        select.value = previous;
+      }
+    }
+
+    #profileSelection() {
+      const select = this.shadowRoot?.getElementById('profile');
+      const id = select instanceof HTMLSelectElement ? select.value : '';
+      return id.length === 0
+        ? null
+        : this.#profiles.find((profile) => profile.profileId === id) ?? null;
+    }
+
     async #start(rawUrl) {
       this.#stopPolling();
       this.#stopClient();
@@ -93,11 +132,7 @@
         this.#setStatus(context.language === 'de' ? 'Browsersitzung wird gestartet …' : 'Starting browser session …');
         const session = await context.invokeCapability('interactive.session', 'create', {
           operationKey: crypto.randomUUID(),
-          request: {
-            initialUrl: url,
-            profileMode: 'temporary',
-            profileId: null,
-          },
+          request: toSessionRequest(this.#profileSelection(), url),
         });
         await this.#consume(session);
       } catch (error) {
@@ -290,12 +325,61 @@ function loadGuacamole() {
   return guacamolePromise;
 }
 
-function normalizeUrl(value) {
+export function normalizeUrl(value) {
   const url = new URL(value.trim());
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Browser URL must use HTTP or HTTPS.');
   }
   return url.href;
+}
+
+// Maps the selected profile (or null for a temporary session) onto the opaque
+// Browser session request. A retained profile carries its stored mode and id;
+// no selection means a one-shot temporary session with no persistent volume.
+export function toSessionRequest(selection, url) {
+  if (selection === null || selection === undefined) {
+    return { initialUrl: url, profileMode: 'temporary', profileId: null };
+  }
+  if (
+    typeof selection !== 'object'
+    || typeof selection.profileId !== 'string'
+    || (selection.mode !== 'persistent' && selection.mode !== 'application')
+  ) {
+    throw new Error('Browser profile selection is invalid.');
+  }
+  return { initialUrl: url, profileMode: selection.mode, profileId: selection.profileId };
+}
+
+// Validates the caller-safe interactive.profiles list response and returns only
+// the fields the app needs, rejecting any malformed entry.
+export function validateProfileList(value) {
+  const profiles = value !== null && typeof value === 'object' ? value.profiles : undefined;
+  if (!Array.isArray(profiles)) {
+    throw new Error('Browser profile list is invalid.');
+  }
+  return profiles.map((profile) => {
+    if (
+      profile === null
+      || typeof profile !== 'object'
+      || typeof profile.profileId !== 'string'
+      || typeof profile.displayName !== 'string'
+      || (profile.mode !== 'persistent' && profile.mode !== 'application')
+    ) {
+      throw new Error('Browser profile entry is invalid.');
+    }
+    return { profileId: profile.profileId, displayName: profile.displayName, mode: profile.mode };
+  });
+}
+
+// Escapes text before it is placed into option markup, so a user-chosen profile
+// name can never inject markup into the toolbar.
+export function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function failureDetail(value) {
@@ -304,7 +388,7 @@ function failureDetail(value) {
     : null;
 }
 
-function validateSession(value) {
+export function validateSession(value) {
   if (
     value === null
     || typeof value !== 'object'

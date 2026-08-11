@@ -13,6 +13,7 @@ import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mj
 
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
 const remoteFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Remote', 'frontend');
+const browserFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Browser', 'frontend');
 const semanticVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 const passed = (detail) => ({ status: 'passed', detail });
@@ -207,6 +208,11 @@ const stages = [
     name: 'remote-frontend-test',
     title: 'Run Remote package frontend tests',
     run: () => run('npm', ['test'], remoteFrontendDirectory),
+  },
+  {
+    name: 'browser-frontend-test',
+    title: 'Run Browser package frontend tests',
+    run: () => run('npm', ['test'], browserFrontendDirectory),
   },
   {
     name: 'markdown-links',

@@ -76,6 +76,8 @@ Creating, listing and deleting profiles and network profiles is exposed through 
 
 The Browser worker enforces the policy above: user profiles are scoped to the authenticated owner, network-profile creation is bounded by the administrator `allowedNetworks` allowlist, temporary profiles are never persisted, and proxy secret references are never returned. `interactive.profiles` reuses the same Core-provider-dispatches-to-worker pattern as `interactive.session`, so no Browser-specific Core contract is introduced.
 
+The Browser application surfaces this capability as a profile selector in its toolbar: it lists the signed-in user's retained profiles and starts the session with the chosen profile, defaulting to a temporary session when none is selected. The selector's pure logic (session-request mapping, list validation and name escaping) is covered by `packages/JulOS.Browser/frontend/test`.
+
 ## Generic interactive-session boundary
 
 The Browser manifest requires `interactive.session/1.0.0`. The capability exposes generic create, read and terminate operations for package-owned interactive runtimes.
