@@ -3,6 +3,9 @@
     launchTarget = null;
     #profiles = [];
     #networks = [];
+    #tabs = [];
+    #activeId = null;
+    #tabSeq = 0;
     #session = null;
     #pollTimer = null;
     #client = null;
@@ -18,6 +21,7 @@
       this.#bind();
       void this.#loadProfiles();
       void this.#loadNetworks();
+      this.#newTab();
       const initialUrl = this.launchTarget?.externalIdentity;
       if (typeof initialUrl === 'string' && initialUrl.length > 0) {
         this.#required('address').value = initialUrl;
@@ -28,11 +32,12 @@
     disconnectedCallback() {
       this.#stopPolling();
       this.#stopClient();
-      if (this.#session !== null && !terminalStates.has(this.#session.state)) {
-        void context.invokeCapability('interactive.session', 'terminate', {
-          sessionId: this.#session.sessionId,
-          expectedRevision: this.#session.revision,
-        }).catch(() => {});
+      const active = this.#activeTab();
+      if (active !== undefined) {
+        active.session = this.#session;
+      }
+      for (const tab of this.#tabs) {
+        void this.#terminateSession(tab.session);
       }
     }
 
@@ -43,7 +48,13 @@
         <style>
           :host { display: block; width: 100%; height: 100%; min-height: 24rem; color: CanvasText; font: 14px/1.4 system-ui,sans-serif; }
           * { box-sizing: border-box; }
-          .browser { display: grid; grid-template-rows: auto minmax(20rem,1fr) auto; width: 100%; height: 100%; min-height: 24rem; background: Canvas; }
+          .browser { display: grid; grid-template-rows: auto auto minmax(20rem,1fr) auto; width: 100%; height: 100%; min-height: 24rem; background: Canvas; }
+          .tabs { display: flex; gap: .25rem; align-items: center; padding: .35rem .5rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); overflow-x: auto; }
+          .tab { display: inline-flex; align-items: center; gap: .35rem; max-width: 14rem; padding: .3rem .5rem; border: 1px solid color-mix(in srgb,CanvasText 18%,transparent); border-radius: .45rem; background: Canvas; color: CanvasText; cursor: pointer; }
+          .tab[data-active='true'] { background: color-mix(in srgb,CanvasText 12%,transparent); }
+          .tab .label { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .tab .close { border: 0; background: transparent; color: inherit; padding: 0 .25rem; min-height: auto; cursor: pointer; }
+          .tab-new { min-height: 2rem; padding: .2rem .6rem; }
           form { display: flex; gap: .5rem; padding: .6rem; border-bottom: 1px solid color-mix(in srgb,CanvasText 14%,transparent); }
           input, button, select { min-height: 2.35rem; border: 1px solid color-mix(in srgb,CanvasText 22%,transparent); border-radius: .45rem; font: inherit; }
           select { padding: .35rem .5rem; background: Canvas; color: CanvasText; max-width: 12rem; }
@@ -59,6 +70,7 @@
           .status[data-state='error'] { color: #b10e1e; }
         </style>
         <section class="browser">
+          <div id="tabs" class="tabs" role="tablist"></div>
           <div class="header">
             <form id="toolbar">
               <input id="address" type="url" required autocomplete="off" placeholder="https://example.org" aria-label="${de ? 'Adresse' : 'Address'}" />
@@ -94,6 +106,25 @@
       this.#required('new-profile').addEventListener('submit', (event) => {
         event.preventDefault();
         void this.#createProfile();
+      });
+      this.#required('tabs').addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const close = target.closest('[data-close-id]');
+        if (close instanceof HTMLElement) {
+          void this.#closeTab(close.dataset.closeId ?? '');
+          return;
+        }
+        if (target.closest('#tab-new') !== null) {
+          this.#newTab();
+          return;
+        }
+        const tab = target.closest('[data-tab-id]');
+        if (tab instanceof HTMLElement) {
+          this.#activateTab(tab.dataset.tabId ?? '');
+        }
       });
     }
 
@@ -211,9 +242,118 @@
       this.#setStatus(context.language === 'de' ? 'Profil angelegt.' : 'Profile created.');
     }
 
+    #activeTab() {
+      return this.#tabs.find((tab) => tab.id === this.#activeId);
+    }
+
+    #syncActiveTab() {
+      const active = this.#activeTab();
+      if (active !== undefined) {
+        active.session = this.#session;
+        active.address = this.#required('address').value;
+      }
+      this.#renderTabs();
+    }
+
+    #newTab() {
+      this.#tabSeq += 1;
+      const id = `tab-${this.#tabSeq}`;
+      this.#tabs.push({ id, address: '', session: null });
+      this.#activateTab(id);
+      this.#required('address').focus?.();
+    }
+
+    #activateTab(id) {
+      const target = this.#tabs.find((tab) => tab.id === id);
+      if (target === undefined) {
+        return;
+      }
+      const current = this.#activeTab();
+      if (current !== undefined && current.id !== id) {
+        current.session = this.#session;
+        current.address = this.#required('address').value;
+      }
+      this.#stopPolling();
+      this.#stopClient();
+      this.#activeId = id;
+      this.#session = target.session;
+      this.#required('address').value = target.address;
+      this.#renderTabs();
+      if (this.#session === null) {
+        this.#required('stop').disabled = true;
+        this.#setStatus(context.language === 'de' ? 'Bereit' : 'Ready');
+        return;
+      }
+      if (terminalStates.has(this.#session.state)) {
+        this.#required('stop').disabled = true;
+        this.#setStatus(this.#session.failure?.detail ?? this.#session.state, 'error');
+        return;
+      }
+      this.#required('stop').disabled = false;
+      void this.#read();
+    }
+
+    async #closeTab(id) {
+      const tab = this.#tabs.find((candidate) => candidate.id === id);
+      if (tab === undefined) {
+        return;
+      }
+      const wasActive = id === this.#activeId;
+      const nextId = nextActiveTabId(this.#tabs, id, this.#activeId);
+      const session = wasActive ? this.#session : tab.session;
+      if (wasActive) {
+        this.#stopPolling();
+        this.#stopClient();
+        this.#session = null;
+        this.#activeId = null;
+      }
+      this.#tabs = this.#tabs.filter((candidate) => candidate.id !== id);
+      void this.#terminateSession(session);
+      if (this.#tabs.length === 0) {
+        this.#newTab();
+        return;
+      }
+      if (wasActive && nextId !== null) {
+        this.#activateTab(nextId);
+        return;
+      }
+      this.#renderTabs();
+    }
+
+    #renderTabs() {
+      const bar = this.shadowRoot?.getElementById('tabs');
+      if (!(bar instanceof HTMLElement)) {
+        return;
+      }
+      const de = context.language === 'de';
+      const closeLabel = de ? 'Tab schließen' : 'Close tab';
+      const fallback = de ? 'Neuer Tab' : 'New tab';
+      const parts = this.#tabs.map((tab) => `<span class="tab" role="tab" data-tab-id="${escapeHtml(tab.id)}" data-active="${tab.id === this.#activeId}">`
+        + `<span class="label">${escapeHtml(tabTitle(tab.address, fallback))}</span>`
+        + `<button type="button" class="close" data-close-id="${escapeHtml(tab.id)}" aria-label="${closeLabel}">×</button>`
+        + '</span>');
+      parts.push(`<button type="button" id="tab-new" class="tab-new" aria-label="${fallback}">+</button>`);
+      bar.innerHTML = parts.join('');
+    }
+
+    async #terminateSession(session) {
+      if (session === null || terminalStates.has(session.state)) {
+        return;
+      }
+      try {
+        await context.invokeCapability('interactive.session', 'terminate', {
+          sessionId: session.sessionId,
+          expectedRevision: session.revision,
+        });
+      } catch {
+        // Best-effort teardown; the server-side idle timeout is the backstop.
+      }
+    }
+
     async #start(rawUrl) {
       this.#stopPolling();
       this.#stopClient();
+      void this.#terminateSession(this.#session);
       this.#session = null;
       this.#required('stop').disabled = false;
       try {
@@ -240,6 +380,7 @@
     async #consume(value) {
       const session = validateSession(value);
       this.#session = session;
+      this.#syncActiveTab();
       if (terminalStates.has(session.state)) {
         this.#stopPolling();
         this.#stopClient();
@@ -288,6 +429,7 @@
       this.#stopClient();
       this.#required('stop').disabled = true;
       this.#setStatus(context.language === 'de' ? 'Gestoppt' : 'Stopped');
+      this.#syncActiveTab();
     }
 
     async #attachDisplay(descriptor) {
@@ -438,6 +580,34 @@ export function toSessionRequest(selection, url) {
     throw new Error('Browser profile selection is invalid.');
   }
   return { initialUrl: url, profileMode: selection.mode, profileId: selection.profileId };
+}
+
+// Derives a tab label from its address: the host name, or a fallback for a
+// blank or not-yet-navigated tab.
+export function tabTitle(address, fallback) {
+  if (typeof address !== 'string' || address.trim().length === 0) {
+    return fallback;
+  }
+  try {
+    return new URL(address).hostname || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+// Chooses which tab becomes active after one is closed: the current active tab
+// stays active when a different tab closes; closing the active tab selects a
+// neighbour, or null when no tab remains.
+export function nextActiveTabId(tabs, closingId, activeId) {
+  if (closingId !== activeId) {
+    return activeId;
+  }
+  const index = tabs.findIndex((tab) => tab.id === closingId);
+  const remaining = tabs.filter((tab) => tab.id !== closingId);
+  if (remaining.length === 0) {
+    return null;
+  }
+  return remaining[Math.min(index < 0 ? 0 : index, remaining.length - 1)].id;
 }
 
 // Validates the caller-safe interactive.profiles list response and returns only

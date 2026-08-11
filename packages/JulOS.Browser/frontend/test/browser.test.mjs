@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   escapeHtml,
+  nextActiveTabId,
   normalizeUrl,
+  tabTitle,
   toCreateProfileRequest,
   toSessionRequest,
   validateCreatedProfile,
@@ -105,4 +107,22 @@ test('a created profile response must carry an identity, name and retained mode'
   );
   assert.throws(() => validateCreatedProfile({ profileId: 'p-1', displayName: 'Work', mode: 'temporary' }));
   assert.throws(() => validateCreatedProfile(null));
+});
+
+test('a tab title is the host name, with a fallback for a blank tab', () => {
+  assert.equal(tabTitle('https://example.test/path', 'New tab'), 'example.test');
+  assert.equal(tabTitle('', 'New tab'), 'New tab');
+  assert.equal(tabTitle('not a url', 'New tab'), 'New tab');
+});
+
+test('closing a tab keeps the active one, or selects a neighbour when the active closes', () => {
+  const tabs = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  // Closing a non-active tab leaves the active tab active.
+  assert.equal(nextActiveTabId(tabs, 'a', 'b'), 'b');
+  // Closing the active middle tab selects the tab that shifts into its slot.
+  assert.equal(nextActiveTabId(tabs, 'b', 'b'), 'c');
+  // Closing the active last tab selects the new last tab.
+  assert.equal(nextActiveTabId(tabs, 'c', 'c'), 'b');
+  // Closing the only tab selects nothing.
+  assert.equal(nextActiveTabId([{ id: 'a' }], 'a', 'a'), null);
 });

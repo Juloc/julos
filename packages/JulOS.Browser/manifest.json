@@ -52,7 +52,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/browser.js",
-    "Sha256": "64169de4b90109315ec5fddcd1b309ef733b90e9d2e656ef2a6eb5872aff6e80",
+    "Sha256": "855e0f01385d2afd7f1e6a8e21713c4338a12ac99970bb19a0f9ace63b46d318",
     "ExportedElements": [
       "julos-browser-app"
     ]
