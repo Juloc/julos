@@ -162,7 +162,7 @@ const stages = [
   {
     name: 'dotnet-test',
     title: 'Run .NET unit and architecture tests',
-    run: () => run('dotnet', ['test', '--solution', 'JulOS.slnx', '--no-build']),
+    run: () => run('dotnet', ['test', '--solution', 'JulOS.slnx', '--no-build', '--no-restore']),
   },
   {
     name: 'desktop-install',

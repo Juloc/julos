@@ -29,8 +29,8 @@ env:
   JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
 jobs:
-  validate:
-    name: Validate release source
+  validate-dotnet:
+    name: Validate .NET
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -102,13 +102,79 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Validate
-        run: sh tools/validate.sh
+      - name: Validate .NET
+        run: sh tools/validate.sh --stage version --stage restore --stage build --stage dotnet-test
+
+  validate-desktop:
+    name: Validate Desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+          cache: npm
+          cache-dependency-path: src/JulOS.Desktop/package-lock.json
+
+      - name: Validate Desktop
+        run: sh tools/validate.sh --stage desktop-install --stage desktop-typecheck --stage desktop-test --stage desktop-build
+
+  validate-frontends:
+    name: Validate package frontends
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Validate package frontends
+        run: sh tools/validate.sh --stage remote-frontend-install --stage remote-frontend-build --stage remote-frontend-test --stage browser-frontend-test
+
+  validate-meta:
+    name: Validate metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Validate metadata
+        run: sh tools/validate.sh --stage policy --stage markdown-links --stage package-manifests
+
+  validate-container:
+    name: Validate container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: src/JulOS.Desktop/.nvmrc
+
+      - name: Validate container build
+        run: sh tools/validate.sh --stage container-build
 
   prerelease:
     name: Publish prerelease
     if: inputs.target == 'prerelease'
-    needs: validate
+    needs: [validate-dotnet, validate-desktop, validate-frontends, validate-meta, validate-container]
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
@@ -172,7 +238,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}"
+          image="ghcr.io/juloc/julos-server:${{ needs.validate-dotnet.outputs.version }}"
           if docker manifest inspect "$image" >/dev/null 2>&1; then
             echo "Server image version already exists: $image" >&2
             exit 1
@@ -186,9 +252,9 @@ jobs:
           file: src/JulOS.Server/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/juloc/julos-server:${{ needs.validate.outputs.version }}
+          tags: ghcr.io/juloc/julos-server:${{ needs.validate-dotnet.outputs.version }}
           build-args: |
-            JULOS_VERSION=${{ needs.validate.outputs.version }}
+            JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
           cache-from: type=gha,scope=julos-server
           cache-to: type=gha,mode=max,scope=julos-server
           provenance: false
@@ -205,7 +271,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.validate-dotnet.outputs.version }}"
           mkdir -p release-files
           cp deploy/alpha/compose.sqlite.yaml release-files/julos-beta-compose.yaml
           cp deploy/alpha/.env.sqlite.example release-files/julos-beta.env.example
@@ -248,7 +314,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.validate-dotnet.outputs.version }}"
           gh release create "v$version" \
             --target "$GITHUB_REF_NAME" \
             --title "JulOS $version" \
@@ -260,17 +326,17 @@ jobs:
         shell: bash
         run: |
           {
-            echo "### JulOS ${{ needs.validate.outputs.version }}"
+            echo "### JulOS ${{ needs.validate-dotnet.outputs.version }}"
             echo
             echo "- Server: ghcr.io/juloc/julos-server@${{ steps.server.outputs.digest }}"
             echo "- Browser runtime pinned in package catalog: $JULOS_BROWSER_RUNTIME_IMAGE"
-            echo "- GitHub prerelease: v${{ needs.validate.outputs.version }}"
+            echo "- GitHub prerelease: v${{ needs.validate-dotnet.outputs.version }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   browser-runtime:
     name: Publish Browser Runtime
     if: inputs.target == 'browser-runtime'
-    needs: validate
+    needs: [validate-dotnet, validate-desktop, validate-frontends, validate-meta, validate-container]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -299,7 +365,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          image="ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}"
+          image="ghcr.io/juloc/julos-browser-runtime:${{ needs.validate-dotnet.outputs.version }}"
           if docker manifest inspect "$image" >/dev/null 2>&1; then
             echo "Browser runtime version already exists: $image" >&2
             exit 1
@@ -313,9 +379,11 @@ jobs:
           file: packages/JulOS.Browser/runtime/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/juloc/julos-browser-runtime:${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-browser-runtime
+          cache-to: type=gha,mode=max,scope=julos-browser-runtime
+          tags: ghcr.io/juloc/julos-browser-runtime:${{ needs.validate-dotnet.outputs.version }}
           build-args: |
-            JULOS_VERSION=${{ needs.validate.outputs.version }}
+            JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
           provenance: false
           sbom: false
 
@@ -334,7 +402,7 @@ jobs:
   session-runtimes:
     name: Publish session runtimes
     if: inputs.target == 'session-runtimes'
-    needs: validate
+    needs: [validate-dotnet, validate-desktop, validate-frontends, validate-meta, validate-container]
     runs-on: ubuntu-latest
     timeout-minutes: 70
     permissions:
@@ -363,7 +431,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.validate-dotnet.outputs.version }}"
           for image in \
             "ghcr.io/juloc/julos-runtime-manager:$version" \
             "ghcr.io/juloc/julos-remote-provider:$version"; do
@@ -381,9 +449,11 @@ jobs:
           file: src/JulOS.RuntimeManager/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/juloc/julos-runtime-manager:${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-runtime-manager
+          cache-to: type=gha,mode=max,scope=julos-runtime-manager
+          tags: ghcr.io/juloc/julos-runtime-manager:${{ needs.validate-dotnet.outputs.version }}
           build-args: |
-            JULOS_VERSION=${{ needs.validate.outputs.version }}
+            JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
           provenance: false
           sbom: true
 
@@ -402,9 +472,11 @@ jobs:
           file: packages/JulOS.Remote/runtime/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/juloc/julos-remote-provider:${{ needs.validate.outputs.version }}
+          cache-from: type=gha,scope=julos-remote-provider
+          cache-to: type=gha,mode=max,scope=julos-remote-provider
+          tags: ghcr.io/juloc/julos-remote-provider:${{ needs.validate-dotnet.outputs.version }}
           build-args: |
-            JULOS_VERSION=${{ needs.validate.outputs.version }}
+            JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
           provenance: false
           sbom: true
 
@@ -426,7 +498,7 @@ jobs:
   remote-transport:
     name: Publish Remote Transport
     if: inputs.target == 'remote-transport'
-    needs: validate
+    needs: [validate-dotnet, validate-desktop, validate-frontends, validate-meta, validate-container]
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
@@ -448,7 +520,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ needs.validate.outputs.version }}"
+          version="${{ needs.validate-dotnet.outputs.version }}"
           output="$RUNNER_TEMP/remote-transport-package"
           mkdir -p "$output"
           dotnet pack packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj \
@@ -499,4 +571,4 @@ jobs:
       - name: Package summary
         shell: bash
         run: |
-          echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Remote Transport: JulOS.Remote.Transport ${{ needs.validate-dotnet.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
