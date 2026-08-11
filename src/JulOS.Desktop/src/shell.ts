@@ -2,7 +2,7 @@
 import { applyAppearance, isMotionMode, isThemeMode } from './appearance.js';
 import { mapClientFailure, type ClientFailureState } from './client-failure.js';
 import { DesktopClientServices } from './client-services.js';
-import { DesktopRuntime } from './desktop-runtime.js';
+import { DesktopRuntime, type DesktopRuntimeOptions } from './desktop-runtime.js';
 import {
   normalizeLanguage,
   translate,
@@ -38,10 +38,15 @@ export class JulOsShell extends HTMLElement {
   #authenticationMode: AuthenticationViewMode | null = null;
   #authenticationSubmitting = false;
   #connected = false;
+  readonly #createRuntime: (options: DesktopRuntimeOptions) => DesktopRuntime;
 
-  public constructor(api = new ShellApiClient()) {
+  public constructor(
+    api = new ShellApiClient(),
+    createRuntime: (options: DesktopRuntimeOptions) => DesktopRuntime = (options) => new DesktopRuntime(options),
+  ) {
     super();
     this.#api = api;
+    this.#createRuntime = createRuntime;
   }
 
   public connectedCallback(): void {
@@ -184,7 +189,7 @@ export class JulOsShell extends HTMLElement {
       return;
     }
 
-    const runtime = new DesktopRuntime({
+    const runtime = this.#createRuntime({
       api: this.#api,
       elements: {
         windowLayer: this.#requiredElement<HTMLElement>('window-layer'),

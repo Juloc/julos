@@ -17,5 +17,9 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@types/jsdom": "30.0.0",
+    "jsdom": "30.0.1"
   }
 }
