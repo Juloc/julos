@@ -125,4 +125,12 @@ networks:
   # marked external so `docker compose up` creates it; an operator pointing
   # Remote at an existing network can override RuntimeNetworks and manage the
   # network outside Compose instead.
+  #
+  # The explicit name pins the on-host network to `julos-remote` instead of the
+  # Compose-default `<project>_julos-remote`. Runtime Manager launches runtimes
+  # with a bare `docker run --network julos-remote` (its AllowedNetworks value)
+  # against the host daemon, which has no knowledge of the Compose project
+  # prefix, so the literal name must match or every session launch fails closed
+  # with "network julos-remote not found".
   julos-remote:
+    name: julos-remote
