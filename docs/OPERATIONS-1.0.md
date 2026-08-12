@@ -54,3 +54,11 @@ Run `tools/diagnostics.sh`. The bundle contains version, kernel, health response
 ## Rollback
 
 Application image rollback is allowed only when database and package migrations are backward compatible. Otherwise restore the matching backup. Agent downgrade always requires explicit approval and a verified artifact digest.
+
+## Session runtimes (Browser and Remote)
+
+Interactive Browser and Remote sessions launch a per-session runtime and a Remote provider container through Runtime Manager. Those images are large (Browser runtime ~1.3 GB, Remote provider ~1.8 GB) and are pulled on first use.
+
+- Pre-pull the digest-pinned runtime images on the runtime host after deploy or image cleanup. Otherwise the first session's runtime create can exceed the request timeout and be cancelled; the provider's connect-callback then fails with `404` and the session never leaves "connecting". Once the images are cached, sessions connect in seconds. The digests are in `.github/workflows/release.yml` (`JULOS_BROWSER_RUNTIME_IMAGE`) and the Remote provider configuration (`Remote:Providers:0:Image`).
+- Give the runtime host enough CPU headroom. A Browser runtime that misses its 30-second display-startup grace under heavy load self-terminates with "The VNC display endpoint did not become ready" (exit 70) and the session fails to connect.
+- The runtime network (`julos-remote`) must resolve to the literal on-host name and route to whatever internal targets the session needs; see `docs/BROWSER-RUNTIME.md` for the Browser's persistent, same-origin access model.

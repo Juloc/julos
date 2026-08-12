@@ -109,6 +109,8 @@ The response contains only session ID, state, timestamps, same-origin display de
 
 The runtime identity is deterministic from authenticated user, caller package, operation key and opaque package request. A short generic creation lock prevents concurrent calls with the same idempotency key from racing runtime, secret and Remote-session creation. The durable Remote session remains the single session record; BRW-003 adds no Browser session table.
 
+The same-origin display descriptor is issued on demand rather than eagerly at connect: `interactive.session` `read` (and the idempotent create-recovery path) mint and persist a fresh descriptor for the owning caller once the session is connected, always bound to the session's current revision. The frontend polls `read` and attaches the display as soon as one is present, so a connected session is never handed a revision-stale descriptor that display authorization would refuse (a non-resume revision bump such as recorded activity would otherwise strand a stored descriptor). In the normal flow the frontend attaches on the first connected read and stops polling, so this issues once.
+
 ## Display credential
 
 The Browser worker generates a new eight-character printable Base64 credential for each runtime because the current x11vnc password mechanism is limited to eight characters.
@@ -167,6 +169,12 @@ The health probe requires all four processes and the local IPv4 display port. It
 ## Chromium sandbox boundary
 
 Chromium runs as a non-root user. Runtime Manager drops all Linux capabilities and enables `no-new-privileges`. Chromium's own setuid sandbox cannot initialize under that policy, so the launcher uses `--no-sandbox`. The security boundary is the dedicated unprivileged container, exact runtime network, resource limits and same-origin display proxy. Broad host networking, host mounts and host browser execution remain forbidden.
+
+## First-session image availability and persistent access
+
+The Browser runtime image and the Remote provider image are large (roughly 1.3 GB and 1.8 GB). Runtime Manager pulls the configured `runtimeImage` on the first session that needs it; until it is cached, that first `create` can exceed the caller's request timeout and be cancelled, leaving a stale runtime whose provider connect-callback then fails with `404` and the session never reaches connected. Pre-pull the digest-pinned runtime images on the runtime host so the first session connects promptly; once cached, subsequent sessions start in seconds. A runtime that starts under heavy host load can also self-terminate with "The VNC display endpoint did not become ready" (exit 70) when Xvfb/x11vnc miss the 30-second startup grace, so the runtime host needs enough CPU headroom for Chromium.
+
+The Browser is a server-side Chromium presented over the same-origin display, not an HTTP reverse proxy. It runs on the homelab runtime network, so it reaches internal services (for example a UniFi controller or other internal web apps) directly and behaves as a real browser: web-app APIs, WebSockets and same-site auth work without CORS handling or header rewriting. The session lives server-side, so signing in to JulOS from any device attaches to the same running session. For a durable, always-available browser, use a `Persistent` profile — so cookies and logins survive across sessions — and raise `idleTimeoutMinutes` (up to 1440); a `Temporary` session is discarded when its runtime ends.
 
 ## Publication
 
