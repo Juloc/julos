@@ -112,9 +112,10 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
             row.UpdatedAtUtc = now;
         }
 
-        foreach (var window in request.Windows.OrderBy(window => window.ZIndex))
+        var orderedWindows = request.Windows.OrderBy(window => window.ZIndex).ToList();
+        for (var zIndex = 0; zIndex < orderedWindows.Count; zIndex++)
         {
-            row.Windows.Add(ToRow(row.Id, window, now));
+            row.Windows.Add(ToRow(row.Id, orderedWindows[zIndex], zIndex, now));
         }
         foreach (var widget in request.Widgets)
         {
@@ -128,6 +129,7 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
     private static DesktopWindowRow ToRow(
         Guid layoutId,
         DesktopWindowContract window,
+        int zIndex,
         DateTimeOffset now) => new()
     {
         Id = window.WindowId,
@@ -143,7 +145,7 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
         RestoreY = window.RestoreY,
         RestoreWidth = window.RestoreWidth,
         RestoreHeight = window.RestoreHeight,
-        ZIndex = window.ZIndex,
+        ZIndex = zIndex,
         SessionReferenceId = window.SessionReferenceId,
         CreatedAtUtc = now,
         UpdatedAtUtc = now,
@@ -232,10 +234,10 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
             _ = ParseWindowState(window.State);
         }
 
-        if (!zIndexes.Order().SequenceEqual(Enumerable.Range(0, zIndexes.Count)))
-        {
-            throw new ArgumentException("Desktop window z-indexes must be gap-free.", nameof(request));
-        }
+        // Window z-indexes only need to be unique and non-negative here (checked above). The client's
+        // stacking order can leave gaps (for example after a window in the middle closes); SaveAsync
+        // re-packs the surviving windows into a dense 0..N-1 order by ascending z-index, so a gap is
+        // normalized rather than rejected. Rejecting it previously surfaced as an unhandled 500.
 
         var widgetIds = new HashSet<Guid>();
         foreach (var widget in request.Widgets)

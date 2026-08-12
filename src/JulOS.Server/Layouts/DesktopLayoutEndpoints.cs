@@ -46,12 +46,23 @@ internal static class DesktopLayoutEndpoints
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
-        var response = await service.SaveAsync(
-            CurrentUserId(context.User),
-            viewport,
-            request,
-            cancellationToken).ConfigureAwait(false);
-        return TypedResults.Ok(response);
+        try
+        {
+            var response = await service.SaveAsync(
+                CurrentUserId(context.User),
+                viewport,
+                request,
+                cancellationToken).ConfigureAwait(false);
+            return TypedResults.Ok(response);
+        }
+        catch (ArgumentException)
+        {
+            // A malformed layout document is a caller error, not a server fault: answer 400 rather than
+            // letting the exception surface as an unhandled 500.
+            return Results.Json(
+                new { code = "desktop.layout_invalid", detail = "The desktop layout document is invalid." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     private static Guid CurrentUserId(ClaimsPrincipal principal)
