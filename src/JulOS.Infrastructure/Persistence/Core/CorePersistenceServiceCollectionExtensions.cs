@@ -110,6 +110,7 @@ public static class CorePersistenceServiceCollectionExtensions
         if (database.Provider == CoreDatabaseProvider.Sqlite)
         {
             options.UseSqlite(database.ConnectionString);
+            options.AddInterceptors(SqlitePerformanceInterceptor.Instance);
             return;
         }
 

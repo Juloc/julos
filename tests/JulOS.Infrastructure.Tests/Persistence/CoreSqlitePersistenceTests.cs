@@ -31,6 +31,7 @@ public sealed class CoreSqlitePersistenceTests
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(directory, recursive: true);
         }
     }
@@ -64,7 +65,49 @@ public sealed class CoreSqlitePersistenceTests
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [TestMethod]
+    public async Task SqliteAppliesWalAndBusyTimeoutPragmas()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "julos-sqlite-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var databasePath = Path.Combine(directory, "julos.db");
+        var database = new CoreDatabaseConfiguration(
+            CoreDatabaseProvider.Sqlite,
+            $"Data Source={databasePath};Cache=Shared");
+
+        try
+        {
+            await CoreDatabaseMigrator.MigrateAsync(database);
+
+            var options = new DbContextOptionsBuilder<CoreDbContext>();
+            CorePersistenceServiceCollectionExtensions.Configure(options, database);
+            await using var context = new CoreDbContext(options.Options);
+            await context.Database.OpenConnectionAsync();
+
+            var journalMode = (await ExecuteScalarAsync(context, "PRAGMA journal_mode;"))?
+                .ToString()?.ToLowerInvariant();
+            var busyTimeout = (await ExecuteScalarAsync(context, "PRAGMA busy_timeout;"))?.ToString();
+
+            Assert.AreEqual("wal", journalMode);
+            Assert.AreEqual("5000", busyTimeout);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task<object?> ExecuteScalarAsync(CoreDbContext context, string sql)
+    {
+        var connection = context.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return await command.ExecuteScalarAsync();
     }
 }
