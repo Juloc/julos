@@ -11,6 +11,18 @@ internal static class RemoteDisplayEndpoints
 {
     private const int BufferSize = 16 * 1024;
 
+    private static readonly Action<ILogger, Uri, bool, Exception?> LogProviderWebSocketConnectionFailed =
+        LoggerMessage.Define<Uri, bool>(
+            LogLevel.Warning,
+            new EventId(1400, nameof(LogProviderWebSocketConnectionFailed)),
+            "Remote display provider WebSocket connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.");
+
+    private static readonly Action<ILogger, Uri, bool, Exception?> LogProviderHttpConnectionFailed =
+        LoggerMessage.Define<Uri, bool>(
+            LogLevel.Warning,
+            new EventId(1401, nameof(LogProviderHttpConnectionFailed)),
+            "Remote display provider HTTP connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.");
+
     internal static IEndpointRouteBuilder MapJulOsRemoteDisplay(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -101,11 +113,11 @@ internal static class RemoteDisplayEndpoints
         }
         catch (WebSocketException exception)
         {
-            logger.LogWarning(
-                exception,
-                "Remote display provider WebSocket connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.",
+            LogProviderWebSocketConnectionFailed(
+                logger,
                 providerEndpoint,
-                cancellationToken.IsCancellationRequested);
+                cancellationToken.IsCancellationRequested,
+                exception);
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_unavailable",
@@ -113,11 +125,11 @@ internal static class RemoteDisplayEndpoints
         }
         catch (HttpRequestException exception)
         {
-            logger.LogWarning(
-                exception,
-                "Remote display provider HTTP connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.",
+            LogProviderHttpConnectionFailed(
+                logger,
                 providerEndpoint,
-                cancellationToken.IsCancellationRequested);
+                cancellationToken.IsCancellationRequested,
+                exception);
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_unavailable",
