@@ -2,14 +2,18 @@
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 using JulOS.Application.Remote;
 using JulOS.Application.Secrets;
 using JulOS.Contracts.Authentication;
 using JulOS.Contracts.Remote;
 using JulOS.Contracts.Runtime;
+using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
+using JulOS.Infrastructure.Remote;
 using JulOS.Integration.Tests.Persistence;
+using JulOS.PackageSdk;
 
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +35,8 @@ public sealed class RemoteSessionConnectionTests
         AllowAutoRedirect = false,
         HandleCookies = true,
     };
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [TestMethod]
     public async Task ConnectRequiresExactRuntimeAndIsIdempotent()
@@ -241,6 +247,75 @@ public sealed class RemoteSessionConnectionTests
         }
     }
 
+    [TestMethod]
+    public async Task InteractiveReadIssuesDisplayForConnectedSession()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 6, 9, 0, 0, TimeSpan.Zero));
+        var runtime = new RecordingRuntimeManager();
+        var networkProfileId = Guid.Parse("99999999-9999-4999-8999-999999999999");
+        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var provisioned = await CreateProvisionedSessionAsync(
+            scope.ServiceProvider,
+            administrator.UserId,
+            networkProfileId,
+            clock,
+            "remote-provider-display").ConfigureAwait(false);
+        var runtimeId = $"remote-{provisioned.SessionId:N}";
+        var connections = scope.ServiceProvider.GetRequiredService<IRemoteSessionConnectionService>();
+        var connected = await connections.ConnectAsync(new ConnectRemoteSessionCommand(
+            provisioned.SessionId,
+            runtimeId,
+            provisioned.Revision)).ConfigureAwait(false);
+        Assert.AreEqual(RemoteSessionStates.Connected, connected.State);
+        Assert.IsNull(connected.Display);
+
+        var broker = scope.ServiceProvider.GetRequiredService<CapabilityBroker>();
+        broker.SetPackageGrants(CallerPackageId, [InteractiveSessionCapabilityContract.Name]);
+
+        var read = await ReadInteractiveAsync(broker, administrator.UserId, provisioned.SessionId)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(RemoteSessionStates.Connected, read.State);
+        Assert.IsNotNull(read.Display);
+        StringAssert.StartsWith(
+            read.Display.Endpoint,
+            $"/api/v1/remote/sessions/{provisioned.SessionId:D}/display?");
+        Assert.AreEqual(RemoteDisplayGateway.DisplayKind, read.Display.Kind);
+        Assert.AreEqual(clock.GetUtcNow().AddSeconds(60), read.Display.ExpiresAtUtc);
+        Assert.IsTrue(read.Revision > connected.Revision);
+
+        var reread = await ReadInteractiveAsync(broker, administrator.UserId, provisioned.SessionId)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(read.Revision, reread.Revision);
+        Assert.IsNotNull(reread.Display);
+        Assert.AreEqual(read.Display.Endpoint, reread.Display.Endpoint);
+    }
+
+    private static async Task<InteractiveSessionResponse> ReadInteractiveAsync(
+        CapabilityBroker broker,
+        Guid ownerUserId,
+        Guid sessionId)
+    {
+        var request = new CapabilityRequest(
+            InteractiveSessionCapabilityContract.Name,
+            InteractiveSessionCapabilityContract.Version,
+            InteractiveSessionCapabilityContract.ReadOperation,
+            Guid.NewGuid().ToString("N"),
+            JsonSerializer.SerializeToElement(new ReadInteractiveSessionRequest(sessionId)),
+            DateTimeOffset.UtcNow.AddSeconds(5));
+        var response = await broker.InvokeAsync(CallerPackageId, ownerUserId, request).ConfigureAwait(false);
+        Assert.IsTrue(response.Succeeded, response.ErrorCode);
+        var snapshot = response.Payload.Deserialize<InteractiveSessionResponse>(JsonOptions);
+        Assert.IsNotNull(snapshot);
+        return snapshot;
+    }
+
     private static ServerHost CreateHost(
         string connectionString,
         Guid networkProfileId,
@@ -329,6 +404,9 @@ public sealed class RemoteSessionConnectionTests
             ["Remote:NetworkProfiles:0:RuntimeNetworks:0"] = "julos-remote",
             ["Remote:NetworkProfiles:0:AllowedTargetPatterns:0"] = "*.example.test",
             ["Remote:NetworkProfiles:0:AllowedPorts:0"] = "3389",
+            ["Remote:Display:ProviderEndpointTemplate"] = "ws://julos-{runtimeId}:8081/",
+            ["Remote:Display:PublicOrigin"] = "https://localhost",
+            ["Remote:Display:GrantLifetimeSeconds"] = "60",
         };
 
     private static async Task<AuthenticatedUserResponse> SetupAdministratorAsync(HttpClient client)

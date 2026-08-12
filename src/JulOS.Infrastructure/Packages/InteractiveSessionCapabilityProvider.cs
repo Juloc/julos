@@ -96,12 +96,16 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
                     request.CorrelationId,
                     cancellationToken).ConfigureAwait(false),
                 InteractiveSessionCapabilityContract.ReadOperation => Success(ToResponse(
-                    await this.sessions.ReadAsync(
-                        new ReadRemoteSessionCommand(
-                            ownerUserId,
-                            request.Caller.PackageId,
-                            new ReadRemoteSessionRequest(
-                                Deserialize<ReadInteractiveSessionRequest>(request.Payload).SessionId)),
+                    await this.EnsureDisplayAsync(
+                        await this.sessions.ReadAsync(
+                            new ReadRemoteSessionCommand(
+                                ownerUserId,
+                                request.Caller.PackageId,
+                                new ReadRemoteSessionRequest(
+                                    Deserialize<ReadInteractiveSessionRequest>(request.Payload).SessionId)),
+                            cancellationToken).ConfigureAwait(false),
+                        ownerUserId,
+                        request.Caller.PackageId,
                         cancellationToken).ConfigureAwait(false))),
                 InteractiveSessionCapabilityContract.TerminateOperation => await this.TerminateAsync(
                     ownerUserId,
@@ -137,6 +141,43 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
         catch (SecretReferenceFailureException exception)
         {
             return Failure(exception.Code, exception.Message);
+        }
+    }
+
+    // A connected interactive session carries no presentation transport until one is issued on demand:
+    // the caller-safe display descriptor is short-lived and minted only through a Remote resume, never
+    // eagerly at connect. The interactive.session frontend polls read and attaches as soon as read
+    // surfaces a display, so read (and idempotent create-recovery) issues and persists a fresh descriptor
+    // for the owning caller once the session is connected. A stored, unexpired descriptor is returned as
+    // is so repeated reads stay idempotent; a resume refusal falls back to the plain snapshot so reads of
+    // a connected session never fail on presentation issuance alone.
+    private async Task<RemoteSessionResponse> EnsureDisplayAsync(
+        RemoteSessionResponse session,
+        Guid ownerUserId,
+        string callerPackageId,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(session.State, RemoteSessionStates.Connected, StringComparison.Ordinal))
+        {
+            return session;
+        }
+        if (session.Display is { } display && display.ExpiresAtUtc > this.timeProvider.GetUtcNow())
+        {
+            return session;
+        }
+
+        try
+        {
+            return await this.lifecycle.ResumeAsync(
+                new ResumeRemoteSessionCommand(
+                    ownerUserId,
+                    callerPackageId,
+                    new ResumeRemoteSessionRequest(session.SessionId, session.Revision)),
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (RemoteSessionServiceException)
+        {
+            return session;
         }
     }
 
@@ -185,7 +226,11 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
                     cancellationToken).ConfigureAwait(false);
             }
             return recovered.Failure is null
-                ? Success(ToResponse(recovered))
+                ? Success(ToResponse(await this.EnsureDisplayAsync(
+                    recovered,
+                    ownerUserId,
+                    callerPackageId,
+                    cancellationToken).ConfigureAwait(false)))
                 : Failure(recovered.Failure.Code, recovered.Failure.Detail);
         }
 
