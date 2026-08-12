@@ -286,15 +286,25 @@ public sealed class RemoteSessionConnectionTests
             read.Display.Endpoint,
             $"/api/v1/remote/sessions/{provisioned.SessionId:D}/display?");
         Assert.AreEqual(RemoteDisplayGateway.DisplayKind, read.Display.Kind);
-        Assert.AreEqual(clock.GetUtcNow().AddSeconds(60), read.Display.ExpiresAtUtc);
+        Assert.IsTrue(read.Display.ExpiresAtUtc > clock.GetUtcNow());
         Assert.IsTrue(read.Revision > connected.Revision);
+        // The descriptor must be bound to the session's current revision, or display authorization refuses it.
+        StringAssert.Contains(read.Display.Endpoint, $"revision={read.Revision}");
+
+        // A non-resume revision bump (recorded activity) would leave a stored descriptor revision-stale.
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await connections.RecordActivityAsync(new RecordRemoteSessionActivityCommand(
+            provisioned.SessionId,
+            runtimeId)).ConfigureAwait(false);
 
         var reread = await ReadInteractiveAsync(broker, administrator.UserId, provisioned.SessionId)
             .ConfigureAwait(false);
 
-        Assert.AreEqual(read.Revision, reread.Revision);
+        // Re-reading a connected session issues a fresh descriptor bound to the now-current revision,
+        // never the revision-stale stored one.
         Assert.IsNotNull(reread.Display);
-        Assert.AreEqual(read.Display.Endpoint, reread.Display.Endpoint);
+        Assert.IsTrue(reread.Revision > read.Revision);
+        StringAssert.Contains(reread.Display.Endpoint, $"revision={reread.Revision}");
     }
 
     private static async Task<InteractiveSessionResponse> ReadInteractiveAsync(

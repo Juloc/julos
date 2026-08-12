@@ -145,12 +145,16 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
     }
 
     // A connected interactive session carries no presentation transport until one is issued on demand:
-    // the caller-safe display descriptor is short-lived and minted only through a Remote resume, never
-    // eagerly at connect. The interactive.session frontend polls read and attaches as soon as read
-    // surfaces a display, so read (and idempotent create-recovery) issues and persists a fresh descriptor
-    // for the owning caller once the session is connected. A stored, unexpired descriptor is returned as
-    // is so repeated reads stay idempotent; a resume refusal falls back to the plain snapshot so reads of
-    // a connected session never fail on presentation issuance alone.
+    // the caller-safe display descriptor is short-lived, revision-bound and minted only through a Remote
+    // resume, never eagerly at connect. The interactive.session frontend polls read and attaches as soon
+    // as read surfaces a display, so read (and idempotent create-recovery) issues a fresh descriptor for
+    // the owning caller once the session is connected. It always re-issues rather than returning a stored
+    // descriptor: any non-resume revision bump (recorded activity, for example) leaves a stored descriptor
+    // revision-stale, and display authorization binds the descriptor to the session's current revision, so
+    // a stale descriptor would be refused. Re-issuing rebinds it to the current revision; in the normal
+    // flow the frontend attaches on the first connected read and stops polling, so this issues once. A
+    // resume refusal surfaces the connected session without a display so the caller simply reads again
+    // rather than receiving a descriptor that cannot authorize.
     private async Task<RemoteSessionResponse> EnsureDisplayAsync(
         RemoteSessionResponse session,
         Guid ownerUserId,
@@ -158,10 +162,6 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
         CancellationToken cancellationToken)
     {
         if (!string.Equals(session.State, RemoteSessionStates.Connected, StringComparison.Ordinal))
-        {
-            return session;
-        }
-        if (session.Display is { } display && display.ExpiresAtUtc > this.timeProvider.GetUtcNow())
         {
             return session;
         }
@@ -177,7 +177,7 @@ internal sealed class InteractiveSessionCapabilityProvider : ICapabilityProvider
         }
         catch (RemoteSessionServiceException)
         {
-            return session;
+            return session with { Display = null };
         }
     }
 
