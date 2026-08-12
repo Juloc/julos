@@ -216,15 +216,24 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
             },
         };
 
+        // Once a provider runtime is launched it will connect and post its callback
+        // regardless of whether the caller still waits, so the launch and the state
+        // commit that records it must not be tied to the caller's (short) request
+        // deadline. A client or reverse-proxy disconnect during a slow first-image
+        // pull would otherwise cancel provisioning and strand the started runtime,
+        // whose connected-callback then cannot match the torn-down session and fails
+        // with a 404. The Runtime Manager client still bounds this with its own
+        // create timeout, so the launch cannot block indefinitely.
+        var launch = CancellationToken.None;
         try
         {
-            _ = await this.runtimeManager.AllocateAndStartAsync(request, cancellationToken).ConfigureAwait(false);
+            _ = await this.runtimeManager.AllocateAndStartAsync(request, launch).ConfigureAwait(false);
         }
         catch (RemoteRuntimeManagerException)
         {
             try
             {
-                await this.runtimeManager.RemoveAsync(runtimeId, cancellationToken).ConfigureAwait(false);
+                await this.runtimeManager.RemoveAsync(runtimeId, launch).ConfigureAwait(false);
             }
             catch (RemoteRuntimeManagerException)
             {
@@ -237,7 +246,7 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
                 "No compatible Remote provider runtime is currently available.",
                 true,
                 command,
-                cancellationToken).ConfigureAwait(false);
+                launch).ConfigureAwait(false);
         }
 
         RemoteSessionContractValidator.ValidateTransition(row.State, RemoteSessionStates.Connecting);
@@ -246,8 +255,8 @@ public sealed class PostgresRemoteSessionProvisioner : IRemoteSessionProvisioner
         row.UpdatedAtUtc = now;
         row.LastActivityAtUtc = now;
         row.Revision = checked(row.Revision + 1);
-        await this.SaveAsync(cancellationToken).ConfigureAwait(false);
-        return await this.ReadAsync(command, cancellationToken).ConfigureAwait(false);
+        await this.SaveAsync(launch).ConfigureAwait(false);
+        return await this.ReadAsync(command, launch).ConfigureAwait(false);
     }
 
     private Task<RemoteSessionResponse> MarkCredentialUnavailableAsync(

@@ -297,6 +297,55 @@ public sealed class RemoteSessionLifecycleTests
         Assert.AreEqual(3, runtime.RemovalCount);
     }
 
+    [TestMethod]
+    public async Task ReconciliationKeepsRuntimeForStartingSessionThatIsNotDue()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 4, 19, 30, 0, TimeSpan.Zero));
+        var runtime = new RecordingRuntimeManager();
+        var networkProfileId = Guid.Parse("55555555-5555-4555-8555-555555555555");
+        using var host = CreateHost(database.ConnectionString, networkProfileId, runtime, clock);
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        Guid sessionId;
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var provisioned = await CreateProvisionedSessionAsync(
+                scope.ServiceProvider,
+                administrator.UserId,
+                networkProfileId,
+                clock,
+                "remote-starting-not-due").ConfigureAwait(false);
+            Assert.AreEqual(RemoteSessionStates.Connecting, provisioned.State);
+            sessionId = provisioned.SessionId;
+        }
+
+        // A slow-but-healthy connect: past the coarse 60s idle prefilter, but not past
+        // the 120s idle timeout or the 600s overall expiry. The provider runtime is
+        // legitimately starting, so reconciliation must leave it running rather than
+        // clean it (which would strand the started provider and 404 its callback).
+        clock.Advance(TimeSpan.FromSeconds(90));
+
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var lifecycle = scope.ServiceProvider.GetRequiredService<IRemoteSessionLifecycleService>();
+            var result = await lifecycle.ReconcileDueAsync(100).ConfigureAwait(false);
+            Assert.AreEqual(0, result.Expired);
+            Assert.AreEqual(0, result.Cleaned);
+            Assert.AreEqual(0, result.CleanupFailures);
+
+            var sessions = scope.ServiceProvider.GetRequiredService<IRemoteSessionService>();
+            var session = await sessions.ReadAsync(new ReadRemoteSessionCommand(
+                administrator.UserId,
+                CallerPackageId,
+                new ReadRemoteSessionRequest(sessionId))).ConfigureAwait(false);
+            Assert.AreEqual(RemoteSessionStates.Connecting, session.State);
+        }
+
+        Assert.AreEqual(0, runtime.RemovalCount);
+    }
+
     private static ServerHost CreateHost(
         string connectionString,
         Guid networkProfileId,

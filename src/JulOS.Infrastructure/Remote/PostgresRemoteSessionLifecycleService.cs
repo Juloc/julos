@@ -144,6 +144,17 @@ public sealed partial class PostgresRemoteSessionLifecycleService : IRemoteSessi
                 await this.PublishChangedAsync(row, cancellationToken).ConfigureAwait(false);
             }
 
+            if (!RemoteSessionStates.IsTerminal(row.State)
+                && !string.Equals(row.State, RemoteSessionStates.Disconnecting, StringComparison.Ordinal))
+            {
+                // The coarse idle prefilter can select a still-provisioning or still-
+                // connecting session that is not actually due (a slow first-image pull
+                // writes no activity for a while). Its runtime is legitimately starting,
+                // so leave it running. A genuinely idle or expired session becomes
+                // terminal in the block above and is cleaned on this same pass.
+                continue;
+            }
+
             if (row.RuntimeId is null)
             {
                 continue;

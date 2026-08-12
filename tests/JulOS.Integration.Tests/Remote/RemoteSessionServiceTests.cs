@@ -13,6 +13,7 @@ using JulOS.Infrastructure.Remote;
 using JulOS.Integration.Tests.Persistence;
 
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -322,6 +323,86 @@ public sealed class RemoteSessionServiceTests
         Assert.AreEqual(0, runtime.AllocationCount);
     }
 
+    [TestMethod]
+    public async Task ProvisionCompletesWhenCallerCancelsDuringRuntimeLaunch()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        using var cancellation = new CancellationTokenSource();
+        var runtime = new CallerCancellingRuntimeManager(cancellation);
+        var networkProfileId = Guid.Parse("33333333-3333-4333-8333-333333333333");
+        using var host = new ServerHost(
+            database.ConnectionString,
+            RuntimeSettings(networkProfileId),
+            services =>
+            {
+                services.RemoveAll<IRemoteRuntimeManager>();
+                services.AddSingleton<IRemoteRuntimeManager>(runtime);
+            });
+        using var client = host.CreateClient(ClientOptions);
+        var administrator = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+        await using var scope = host.Services.CreateAsyncScope();
+        var secret = await CreateCallerSecretAsync(scope, administrator.UserId, "remote-cancel-test")
+            .ConfigureAwait(false);
+
+        var service = scope.ServiceProvider.GetRequiredService<IRemoteSessionService>();
+        var request = CreateRequest("remote-provision-cancel", "server.example.test") with
+        {
+            SecretReferenceId = secret.SecretReferenceId,
+            NetworkProfileId = networkProfileId,
+        };
+        var created = await service.CreateAsync(new CreateRemoteSessionCommand(
+            administrator.UserId,
+            CallerPackageId,
+            request)).ConfigureAwait(false);
+
+        var provisioner = scope.ServiceProvider.GetRequiredService<IRemoteSessionProvisioner>();
+        var provisioned = await provisioner.ProvisionAsync(
+            new ProvisionRemoteSessionCommand(
+                administrator.UserId,
+                CallerPackageId,
+                created.SessionId,
+                created.Revision),
+            cancellation.Token).ConfigureAwait(false);
+
+        // The caller's token was cancelled mid-launch, but provisioning must run to a
+        // consistent Connecting state so the started provider's callback can match.
+        Assert.IsTrue(cancellation.IsCancellationRequested);
+        Assert.AreEqual(RemoteSessionStates.Connecting, provisioned.State);
+        Assert.AreEqual(1, runtime.AllocationCount);
+
+        var db = scope.ServiceProvider.GetRequiredService<CoreDbContext>();
+        var row = await db.RemoteSessions
+            .AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == created.SessionId)
+            .ConfigureAwait(false);
+        Assert.AreEqual($"remote-{created.SessionId:N}", row.RuntimeId);
+    }
+
+    private static async Task<SecretReferenceSnapshot> CreateCallerSecretAsync(
+        AsyncServiceScope scope,
+        Guid ownerUserId,
+        string correlationId)
+    {
+        var secretService = scope.ServiceProvider.GetRequiredService<ISecretReferenceService>();
+        var secretBytes = Encoding.UTF8.GetBytes("test-only-remote-password");
+        try
+        {
+            return await secretService.CreateAsync(new CreateSecretReferenceCommand(
+                ownerUserId,
+                SecretOwningScopeType.Package,
+                CallerPackageId,
+                "remote.password",
+                secretBytes,
+                correlationId,
+                RemoteAddress: null)).ConfigureAwait(false);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(secretBytes);
+        }
+    }
+
     private static Dictionary<string, string?> RuntimeSettings(Guid networkProfileId) =>
         new Dictionary<string, string?>
         {
@@ -342,6 +423,8 @@ public sealed class RemoteSessionServiceTests
     private sealed class RecordingRuntimeManager : IRemoteRuntimeManager
     {
         internal int AllocationCount { get; private set; }
+
+        internal int RemovalCount { get; private set; }
 
         internal CreatePackageRuntimeRequest? LastRequest { get; private set; }
 
@@ -365,8 +448,42 @@ public sealed class RemoteSessionServiceTests
         public Task RemoveAsync(string runtimeId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            this.RemovalCount++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class CallerCancellingRuntimeManager : IRemoteRuntimeManager
+    {
+        private readonly CancellationTokenSource cancellation;
+
+        internal CallerCancellingRuntimeManager(CancellationTokenSource cancellation) =>
+            this.cancellation = cancellation;
+
+        internal int AllocationCount { get; private set; }
+
+        public Task<PackageRuntimeResponse> AllocateAndStartAsync(
+            CreatePackageRuntimeRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            // Simulate the caller (client or reverse proxy) giving up while the
+            // provider runtime is still being launched, then honour whatever token
+            // the provisioner actually passed us.
+            this.cancellation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            this.AllocationCount++;
+            return Task.FromResult(new PackageRuntimeResponse(
+                request.InstanceId,
+                request.PackageId,
+                request.PackageVersion,
+                request.InstanceId,
+                request.Image,
+                "running",
+                DateTimeOffset.UtcNow));
+        }
+
+        public Task RemoveAsync(string runtimeId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private static CreateRemoteSessionRequest CreateRequest(string operationKey, string host)
