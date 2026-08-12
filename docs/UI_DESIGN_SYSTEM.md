@@ -1,6 +1,6 @@
 ﻿# JulOS UI Design System
 
-Status: Draft product direction based on the approved Ocean Breeze concept. The beta scope stays deliberately small while the shared shell remains extensible.
+Status: Accepted product direction for the next JulOS Desktop iteration. The first implementation scope stays deliberately small while the shared shell and state models remain extensible.
 
 ## 1. Product direction
 
@@ -9,7 +9,7 @@ JulOS must feel like its own desktop environment, not like a dashboard and not l
 The interaction model stays familiar:
 
 - desktop surface with wallpaper;
-- application shortcuts and widgets;
+- optional desktop shortcuts and modular widgets;
 - one global taskbar;
 - launcher/search;
 - multiple movable application windows;
@@ -17,28 +17,28 @@ The interaction model stays familiar:
 - global status, clock, notifications and settings;
 - package applications use the same shell rather than creating their own desktop chrome.
 
-Visual baseline: the Ocean Breeze concept. It uses soft surfaces, an airy blue/cyan accent, scenic wallpapers, compact status information and optional liquid-glass/Aero-like material effects.
+Visual baseline: the approved Ocean Breeze direction. It uses soft surfaces, blue/cyan accents, scenic wallpapers, compact status information and optional Liquid/Aero-like material effects.
 
-## 2. Beta scope
+## 2. First implementation scope
 
-Required for beta:
+Required for the first UI iteration:
 
 - one Desktop shell;
 - one Window Manager;
 - one Taskbar and Launcher model;
 - one token-based design system;
 - System, Light and Dark themes;
-- one accent-color system;
-- Liquid material on/off;
-- reduced-motion / no-animation support;
+- global accent-color system;
+- Full / Balanced / Simple appearance presets;
+- reduced-motion support;
 - wallpaper support;
 - reusable Widget Host and size system;
 - desktop layout persistence;
 - taskbar app identity and running/minimized/focused state;
 - quick status surface with clock, connectivity, notifications and Settings access;
-- existing Desktop/Tablet/Mobile responsive model.
+- Desktop, Tablet and Mobile support using the same application model.
 
-Not required for beta:
+Not required initially:
 
 - taskbar on every screen edge;
 - arbitrary per-component visual tuning;
@@ -51,16 +51,30 @@ Not required for beta:
 
 Future options must extend the same shell and state models rather than adding parallel implementations.
 
-## 3. Proposed defaults
+## 3. Accepted defaults
 
-### Theme
+### Theme and accent
 
-- Default: `System`.
-- Supported: `System`, `Light`, `Dark`.
+- Default theme: `System`.
+- Supported themes: `System`, `Light`, `Dark`.
 - Light uses soft neutral surfaces with cool blue depth.
 - Dark uses deep blue/graphite rather than pure black.
 - Default accent: Ocean Blue/Cyan.
-- Accent is token-driven globally.
+- Accent is token-driven globally and user-selectable.
+
+### Appearance presets
+
+Use exactly three top-level visual-effect presets:
+
+- `Full`: Liquid enabled, normal restrained motion, full elevation and material effects.
+- `Balanced`: reduced material intensity and restrained motion.
+- `Simple`: opaque surfaces, Liquid disabled, minimal shadows and reduced/non-essential motion removed.
+
+Default: `Full` when supported.
+
+The user can switch to Simple when transparency, Aero-style effects or animation are unwanted or too expensive.
+
+`prefers-reduced-motion` is always respected independently of the selected preset.
 
 ### Liquid material
 
@@ -72,7 +86,7 @@ Liquid ON:
 - restrained shadows/depth;
 - wallpaper color may softly influence material;
 - active window receives stronger focus/depth;
-- inactive windows use calmer, less transparent material for readability.
+- inactive windows remain readable and visually quieter.
 
 Liquid OFF:
 
@@ -81,39 +95,27 @@ Liquid OFF:
 - no backdrop blur;
 - restrained borders/shadows remain.
 
-Liquid is cosmetic only. No behavior or layout may depend on it.
-
-### Simple mode / performance
-
-Reserve three appearance presets:
-
-- `Full`: Liquid + normal restrained motion + full elevation effects.
-- `Balanced`: reduced material intensity and restrained motion.
-- `Simple`: Liquid off, opaque surfaces, minimal shadows, motion off/reduced.
-
-Beta may expose this as one quality preset plus the accessibility motion setting instead of many advanced switches.
-
-`prefers-reduced-motion` is always respected.
+Liquid is cosmetic only. No behavior, dimensions or layout may depend on it.
 
 ### Geometry
 
-Proposed baseline:
+Baseline:
 
 - Fluent-compatible system font stack;
 - compact desktop typography;
 - 4 px spacing grid;
 - 8-12 px normal radius;
 - 12-16 px major floating-surface radius;
-- subtle 1 px borders when material contrast is insufficient;
+- subtle 1 px borders when contrast requires them;
 - visible focus rings in every theme/material mode.
 
-Exact values must live in central design tokens.
+Exact values live in central design tokens.
 
 ## 4. Icon system
 
 System/navigation icons:
 
-- simple Fluent-like line icons;
+- simple Fluent-like line icons without copying Windows assets;
 - consistent stroke weight;
 - filled selected state only where useful;
 - neutral default color, accent for selection/state.
@@ -122,15 +124,15 @@ Application icons:
 
 - may be more colorful and identifiable;
 - one consistent rounded app-icon canvas for JulOS-owned icons;
-- package icons must obey shared sizing/padding rules.
+- package icons obey shared sizing/padding rules.
 
 Initial size tokens:
 
 - 16 px dense inline/status;
 - 20 px normal controls;
 - 24 px primary controls;
-- 32 px default taskbar application icon;
-- 48 px default desktop/launcher application icon;
+- taskbar sizes configurable in Settings;
+- 48 px default launcher application icon;
 - 64 px large launcher/accessibility option.
 
 Do not maintain separate Light/Dark icon sets unless a branded icon genuinely requires it.
@@ -149,9 +151,9 @@ Standard title bar:
 - maximize/restore + layout affordance;
 - close.
 
-Proposed beta defaults:
+Accepted first-scope behavior:
 
-- controls on the right;
+- controls remain on the right;
 - stable order: minimize, layout/maximize, close;
 - layout/maximize uses the existing snap model;
 - double-click title bar toggles maximize/restore;
@@ -159,7 +161,7 @@ Proposed beta defaults:
 - inactive windows remain readable and visually quieter;
 - geometry is identical between Liquid ON/OFF.
 
-Beta snap targets:
+Initial snap targets:
 
 - left half;
 - right half;
@@ -176,7 +178,12 @@ Future:
 
 ## 6. Taskbar
 
-Proposed beta default: bottom floating taskbar with JulOS-specific interaction and styling.
+Both forms are supported by one taskbar model:
+
+- floating compact taskbar;
+- full-width edge taskbar.
+
+Default: floating compact taskbar at the bottom.
 
 Contents:
 
@@ -189,28 +196,33 @@ Contents:
 7. Clock/date.
 8. Quick Settings/User menu.
 
-Proposed defaults:
+Accepted behavior:
 
-- bottom placement;
-- centered app section;
-- Medium size;
-- 32 px app icons;
+- bottom placement for the first scope;
+- centered app section by default;
+- taskbar size is configurable already in the first scope;
+- Small / Medium / Large sizes;
 - running/focused/minimized states visible without relying on color alone;
 - multiple windows use one app identity plus count/window picker.
 
 Future-compatible settings:
 
-- Small / Medium / Large;
 - left / center app alignment;
-- bottom / left / right placement;
+- left / right placement;
 - auto-hide;
 - optional labels.
 
 ## 7. Launcher and search
 
-Beta stays small:
+Both launcher presentations use the same app/search model:
 
 - compact launcher panel;
+- larger centered launcher.
+
+Default: compact launcher panel.
+
+Initial contents:
+
 - search at the top;
 - pinned/recent applications;
 - all installed applications;
@@ -223,20 +235,30 @@ The existing command/resource search contract remains available for later growth
 Desktop supports:
 
 - wallpaper or solid color;
-- approved application shortcuts;
+- optional application shortcuts;
 - widgets on a grid;
 - saved placement per viewport class;
 - explicit `Edit desktop` mode for move/resize/remove.
 
-Proposed beta behavior: widgets and shortcuts are locked during ordinary use to avoid accidental movement.
+Default desktop: no application shortcuts. The normal desktop starts visually clean and users add shortcuts if wanted.
+
+Widgets and shortcuts are locked during normal use.
+
+Desktop edit mode is entered through either:
+
+- a normal explicit `Edit desktop` command;
+- press-and-hold on an unused desktop area on touch/pointer devices.
+
+Press-and-hold must not conflict with normal application/window interaction and must have keyboard-accessible equivalent actions.
 
 Wallpaper foundation:
 
 - bundled JulOS wallpapers;
 - custom user image;
-- fit/fill behavior.
+- fit/fill behavior;
+- separate Light and Dark wallpaper selection.
 
-Future presentation-only options may include separate Light/Dark wallpapers, dimming, blur and parallax.
+Future presentation-only options may include dimming, blur and parallax.
 
 ## 9. Widget architecture
 
@@ -269,7 +291,7 @@ Core must not learn Docker, Proxmox, Caddy or other package-specific metric stru
 
 ### Widget sizes
 
-Keep the existing semantic model and map it to one responsive grid:
+Use one responsive grid with semantic sizes:
 
 - `Small`: one primary value/state;
 - `Medium`: value + secondary value/trend;
@@ -278,14 +300,14 @@ Keep the existing semantic model and map it to one responsive grid:
 
 A widget declares only sizes for which it has a deliberate layout.
 
-### Beta widgets
+### Initial widgets
 
-Keep the beta set intentionally small:
+Keep the initial set intentionally small:
 
-- Clock/Date only if useful beyond the taskbar;
 - Host Metrics widget from the Host Metrics package;
 - one package/application-status example widget;
-- notification/problem summary only if the shared host already supports it cleanly.
+- notification/problem summary only when it fits cleanly;
+- Clock/Date widget only if it adds value beyond the taskbar.
 
 Docker/Proxmox/Caddy/Files widgets arrive with their owning packages, not Core.
 
@@ -303,9 +325,16 @@ Every widget uses shared shell states:
 
 The Widget Host owns common chrome, focus and edit/resize affordances. Packages own domain content.
 
-## 10. Quick Settings and status
+## 10. Notifications, problems and status
 
-Proposed beta status area:
+Use both transient and persistent presentation:
+
+- short toast/popover for a newly arrived notification;
+- notification/problem panel for history, unresolved items and deeper inspection.
+
+Persistent operational faults belong in Problem Center rather than becoming endless toast spam.
+
+Status area:
 
 - time/date;
 - Agent/global connectivity summary;
@@ -317,13 +346,35 @@ Quick Settings initial scope:
 
 - Light/Dark/System;
 - accent color;
-- Liquid or appearance preset;
+- Full/Balanced/Simple appearance preset;
 - motion/reduced motion;
 - basic global status.
 
 Network, audio and brightness controls appear only when JulOS actually owns a meaningful capability for them. Do not add decorative fake OS controls.
 
-## 11. Motion
+## 11. Clock
+
+Default taskbar clock shows time only.
+
+Date and additional detail appear when opening the clock/status surface.
+
+Clock presentation is configurable so users may choose persistent time + date.
+
+Locale, 12/24-hour presentation and date formatting follow user/localization settings rather than being hard-coded.
+
+## 12. Density and scaling
+
+Default density: compact desktop, but not admin-console dense.
+
+Density is user-configurable from the first scope.
+
+The implementation must use shared density/size tokens rather than component-specific magic values.
+
+Taskbar size is independently configurable as Small / Medium / Large.
+
+Explicit broader UI scale presets may be added later after representative display testing.
+
+## 13. Motion
 
 Animation is functional and restrained.
 
@@ -341,21 +392,43 @@ Rules:
 - no long bounce effects;
 - no animation that harms technical-data readability;
 - reduced motion removes non-essential translation/scale;
-- duration/easing come from shared tokens.
+- duration/easing come from shared tokens;
+- Simple mode remains fully usable without animation.
 
-## 12. Responsive behavior
+## 14. Responsive and input behavior
 
-Reuse one application model:
+Desktop, Tablet and Mobile are first-class supported viewport classes.
 
-- Desktop: free multi-window desktop.
-- Tablet: larger targets, reduced placement freedom, simpler snap zones.
-- Mobile: one primary maximized app plus task switching and compact widgets.
+All essential functionality must be usable with the input methods reasonably available on each device.
 
-Do not create a second mobile shell/application model.
+### Desktop
 
-## 13. Accessibility baseline
+- full free multi-window desktop;
+- move/resize/snap;
+- keyboard and mouse operation;
+- launcher/taskbar/window actions keyboard-accessible.
 
-Beta requires:
+### Tablet
+
+- touch-safe controls;
+- larger interaction targets where needed;
+- multi-window remains available where screen size allows;
+- simplified snap zones are allowed;
+- press-and-hold can enter desktop edit mode.
+
+### Mobile
+
+- one primary maximized application at a time by default;
+- reliable task switching;
+- compact widgets where useful;
+- no tiny desktop controls merely scaled down from desktop;
+- all core user journeys remain accessible.
+
+Do not create a second mobile application model or separate mobile-only product shell.
+
+## 15. Accessibility baseline
+
+Initial scope requires:
 
 - keyboard access to launcher, taskbar, window controls and dialogs;
 - visible focus rings;
@@ -363,48 +436,52 @@ Beta requires:
 - reduced-motion support;
 - touch-safe targets;
 - semantic labels for icon-only controls;
-- shell must survive normal browser/UI scaling.
+- normal browser/UI scaling must remain usable;
+- no interaction that exists only through hover;
+- press-and-hold actions have discoverable non-gesture alternatives.
 
-Explicit JulOS UI-scale presets are future work until representative displays are measured.
+## 16. Settings structure
 
-## 14. Settings structure
-
-Proposed beta Appearance section:
+Initial Appearance/Desktop settings:
 
 - Theme: System / Light / Dark;
 - Accent color;
-- Visual effects: Full / Balanced / Simple, or Liquid On/Off depending final decision;
+- Visual effects: Full / Balanced / Simple;
 - Motion: Normal / Reduced;
-- Wallpaper.
+- Wallpaper: bundled/custom and separate Light/Dark selection;
+- Taskbar style: Floating / Full width;
+- Taskbar size: Small / Medium / Large;
+- Launcher style: Compact / Large centered;
+- Clock: Time only / Time + Date;
+- Density: Compact / Comfortable;
+- Desktop edit mode entry and desktop shortcut management.
 
 Future:
 
-- taskbar size/alignment/placement;
-- desktop shortcut behavior;
+- taskbar side placement/alignment/auto-hide;
 - material intensity controls;
 - window-control side;
-- UI scaling;
-- per-theme wallpaper;
-- advanced widget layout options.
+- broader UI scaling;
+- advanced widget layout options;
+- animated/parallax wallpapers;
+- virtual desktops and custom snap templates.
 
-## 15. Open product decisions
+## 17. Remaining product decisions
 
-1. Taskbar default: floating compact or full-width edge bar?
-2. Launcher: compact popover or larger centered app panel?
-3. Desktop shortcuts: enabled by default? Which Core apps should appear?
-4. Effects setting: `Full / Balanced / Simple` preset or independent `Liquid` and `Animations` toggles?
-5. Liquid default: enabled when supported or opt-in?
-6. Window controls: right side only for beta or expose left/right placement immediately?
-7. Widget editing: explicit `Edit desktop` mode or direct drag/resize?
-8. Notifications: right-side panel or compact anchored popover?
-9. Taskbar app icon default: 32 px Medium or another size?
-10. Clock: time only with date in popover, or always time + date?
-11. Desktop app icon default: 48 px or another size?
-12. Density: compact technical or more spacious consumer default?
+The major shell choices are now fixed. Remaining choices should be resolved before detailed visual implementation, but they do not require architecture changes:
 
-Until confirmed, these remain product questions rather than architecture requirements.
+1. Exact accent palette: fixed curated JulOS colors only, or also arbitrary custom color picker?
+2. Exact icon shape for JulOS-owned app icons: rounded square, squircle, circle, or mixed by app?
+3. Taskbar Small / Medium / Large exact heights and icon sizes.
+4. `Compact` versus `Comfortable` exact density token values.
+5. Exact desktop/widget grid unit and outer margins.
+6. Whether taskbar auto-hide should enter the first scope or remain later.
+7. Whether desktop shortcut labels are always visible or only on focus/hover in compact layouts.
+8. Whether widgets display common JulOS chrome by default or may opt into a borderless visual style.
 
-## 16. Future extension rules
+These are presentation decisions only. They must use the common token, taskbar, desktop and Widget Host models defined above.
+
+## 18. Future extension rules
 
 Future personalization extends the same design tokens and state models. It must not create alternate Desktop shells.
 
