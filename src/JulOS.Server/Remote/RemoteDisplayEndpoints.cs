@@ -29,6 +29,7 @@ internal static class RemoteDisplayEndpoints
         Guid sessionId,
         RemoteDisplayGateway gateway,
         PostgresRemoteDisplayAuthorizationService authorization,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!gateway.IsAllowedOrigin(context.Request.Headers.Origin.ToString()))
@@ -91,21 +92,32 @@ internal static class RemoteDisplayEndpoints
         }
 
         var subprotocol = requestedProtocols[0];
+        var logger = loggerFactory.CreateLogger("JulOS.Server.Remote.RemoteDisplayEndpoints");
         using var provider = new ClientWebSocket();
         provider.Options.AddSubProtocol(subprotocol);
         try
         {
             await provider.ConnectAsync(providerEndpoint, cancellationToken).ConfigureAwait(false);
         }
-        catch (WebSocketException)
+        catch (WebSocketException exception)
         {
+            logger.LogWarning(
+                exception,
+                "Remote display provider WebSocket connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.",
+                providerEndpoint,
+                cancellationToken.IsCancellationRequested);
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_unavailable",
                 "The Remote display provider is unavailable.");
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException exception)
         {
+            logger.LogWarning(
+                exception,
+                "Remote display provider HTTP connection failed for {ProviderEndpoint}; requestCancelled={RequestCancelled}.",
+                providerEndpoint,
+                cancellationToken.IsCancellationRequested);
             return Failure(
                 StatusCodes.Status502BadGateway,
                 "remote.display_provider_unavailable",
