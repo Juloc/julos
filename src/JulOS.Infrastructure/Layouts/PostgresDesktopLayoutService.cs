@@ -74,15 +74,25 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
             .ConfigureAwait(false);
         var now = this.timeProvider.GetUtcNow();
 
+        if (row is null && request.Revision != 0)
+        {
+            throw new ConcurrencyConflictException(
+                currentRevision: 0,
+                new InvalidOperationException("The viewport layout does not exist yet."));
+        }
+
+        if (row is not null && row.Revision != request.Revision)
+        {
+            throw new ConcurrencyConflictException(
+                row.Revision,
+                new InvalidOperationException("The desktop layout changed concurrently."));
+        }
+
+        await using var transaction = await this.context.Database
+            .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
         if (row is null)
         {
-            if (request.Revision != 0)
-            {
-                throw new ConcurrencyConflictException(
-                    currentRevision: 0,
-                    new InvalidOperationException("The viewport layout does not exist yet."));
-            }
-
             row = new DesktopLayoutRow
             {
                 Id = Guid.CreateVersion7(now),
@@ -97,19 +107,19 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
         }
         else
         {
-            if (row.Revision != request.Revision)
-            {
-                throw new ConcurrencyConflictException(
-                    row.Revision,
-                    new InvalidOperationException("The desktop layout changed concurrently."));
-            }
-
+            // Delete the existing children and flush before inserting the new set. A single
+            // SaveChanges does not guarantee the delete of an old (layout, z_index) row runs
+            // before the insert of the same z_index, so a stacking-order change (for example
+            // bringing a window to the front) would otherwise violate the unique index
+            // ux_desktop_windows_layout_z_index. Flushing the deletes first also detaches the
+            // old rows so the new rows may reuse the same window identifiers.
             this.context.DesktopWindows.RemoveRange(row.Windows);
             this.context.WidgetPlacements.RemoveRange(row.Widgets);
             row.Windows.Clear();
             row.Widgets.Clear();
             row.Revision = checked(row.Revision + 1);
             row.UpdatedAtUtc = now;
+            await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         var orderedWindows = request.Windows.OrderBy(window => window.ZIndex).ToList();
@@ -123,6 +133,7 @@ internal sealed class PostgresDesktopLayoutService : IDesktopLayoutService
         }
 
         await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return ToResponse(row);
     }
 
