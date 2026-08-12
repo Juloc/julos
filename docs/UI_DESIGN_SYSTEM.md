@@ -295,7 +295,8 @@ WidgetDefinition owns:
 - supported sizes;
 - configuration schema;
 - data/action contract;
-- refresh/event behavior.
+- refresh/event behavior;
+- supported presentation styles.
 
 WidgetInstance owns user presentation state only:
 
@@ -304,6 +305,7 @@ WidgetInstance owns user presentation state only:
 - desktop/viewport identity;
 - grid position;
 - selected size;
+- selected presentation style;
 - user configuration.
 
 Core must not learn Docker, Proxmox, Caddy or other package-specific metric structures.
@@ -327,6 +329,23 @@ Use one responsive grid with semantic sizes:
 - `Large`: richer summary/problem list.
 
 A widget declares only sizes for which it has a deliberate layout.
+
+### Widget presentation
+
+Two shared presentation styles are supported:
+
+- `Card`: default. The Widget Host provides the common JulOS surface, radius, border, elevation and Liquid/opaque material behavior.
+- `Borderless`: optional. Widget content sits directly on the desktop without the normal card surface, useful for clocks, dates, weather and similarly lightweight content.
+
+Rules:
+
+- every widget supports `Card` unless there is a documented reason not to;
+- a widget may advertise `Borderless` only when it has a deliberate readable layout for that style;
+- users may switch between the styles only when the widget declares both;
+- packages provide content, not arbitrary outer chrome or global CSS;
+- the Widget Host owns contrast handling, focus/edit affordances and accessibility in both styles;
+- Borderless widgets must remain readable across user wallpapers and Light/Dark modes;
+- Liquid affects `Card` material only and never changes widget behavior or geometry.
 
 ### Initial widgets
 
@@ -488,7 +507,8 @@ Initial Appearance/Desktop settings:
 - Clock: Time only / Time + Date;
 - Density: Compact / Comfortable;
 - Desktop shortcut labels: Always / On focus-hover;
-- Desktop edit mode entry and desktop shortcut management.
+- Desktop edit mode entry and desktop shortcut management;
+- per-widget presentation style: Card / Borderless when supported by that widget.
 
 Future:
 
@@ -500,13 +520,11 @@ Future:
 - animated/parallax wallpapers;
 - virtual desktops and custom snap templates.
 
-## 17. Remaining product decision
+## 17. Product decisions complete for initial visual implementation
 
-The major shell choices are fixed. One visual widget decision remains before detailed implementation:
+The major shell and presentation decisions required for the first visual implementation are now accepted.
 
-- whether widgets always use common JulOS card/glass chrome, or whether widgets may also use a borderless presentation where the widget content sits directly on the desktop.
-
-This is a presentation decision only. It must use the common Widget Host and design-token model and must not allow packages to inject arbitrary global styling.
+Remaining numerical values such as exact spacing, density, grid-unit size and material intensity are implementation tokens. They may be tuned through real desktop, tablet and mobile testing without changing the accepted component architecture or user-facing model.
 
 ## 18. Future extension rules
 
