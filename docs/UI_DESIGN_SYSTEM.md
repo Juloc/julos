@@ -61,6 +61,9 @@ Future options must extend the same shell and state models rather than adding pa
 - Dark uses deep blue/graphite rather than pure black.
 - Default accent: Ocean Blue/Cyan.
 - Accent is token-driven globally and user-selectable.
+- JulOS ships a small curated accent palette for fast selection.
+- A custom color picker is also supported for arbitrary user-selected accent colors.
+- Custom colors must be normalized through the same contrast/readability rules as curated accents.
 
 ### Appearance presets
 
@@ -123,8 +126,10 @@ System/navigation icons:
 Application icons:
 
 - may be more colorful and identifiable;
-- one consistent rounded app-icon canvas for JulOS-owned icons;
-- package icons obey shared sizing/padding rules.
+- package icons obey shared sizing/padding rules;
+- JulOS-owned apps support two shared icon canvases: squircle and circle;
+- default JulOS-owned app-icon canvas: squircle;
+- users may choose circle as an appearance preference without changing icon identity or package metadata.
 
 Initial size tokens:
 
@@ -202,14 +207,21 @@ Accepted behavior:
 - centered app section by default;
 - taskbar size is configurable already in the first scope;
 - Small / Medium / Large sizes;
+- auto-hide is included in the first scope;
 - running/focused/minimized states visible without relying on color alone;
 - multiple windows use one app identity plus count/window picker.
+
+Initial taskbar size tokens are deliberately easy to retune after real-device testing:
+
+- `Small`: 40 px bar / 24 px app icon;
+- `Medium`: 48 px bar / 32 px app icon;
+- `Large`: 60 px bar / 40 px app icon;
+- default: `Medium`.
 
 Future-compatible settings:
 
 - left / center app alignment;
 - left / right placement;
-- auto-hide;
 - optional labels.
 
 ## 7. Launcher and search
@@ -251,6 +263,13 @@ Desktop edit mode is entered through either:
 
 Press-and-hold must not conflict with normal application/window interaction and must have keyboard-accessible equivalent actions.
 
+Desktop shortcuts use configurable labels:
+
+- `Always`: label is always shown below the shortcut;
+- `On focus/hover`: label stays compact until pointer hover or keyboard focus/selection;
+- default: `Always`;
+- touch interaction must never depend on hover to reveal the app identity.
+
 Wallpaper foundation:
 
 - bundled JulOS wallpapers;
@@ -288,6 +307,15 @@ WidgetInstance owns user presentation state only:
 - user configuration.
 
 Core must not learn Docker, Proxmox, Caddy or other package-specific metric structures.
+
+### Widget grid
+
+Use a relatively fine shared desktop grid rather than large phone-style tiles.
+
+- widgets remain aligned and collision-aware;
+- the fine grid allows visually flexible placement;
+- widgets still use semantic supported sizes rather than arbitrary pixel dimensions;
+- exact grid-unit size and outer margins are design tokens and may be tuned after real-device testing.
 
 ### Widget sizes
 
@@ -364,13 +392,16 @@ Locale, 12/24-hour presentation and date formatting follow user/localization set
 
 ## 12. Density and scaling
 
-Default density: compact desktop, but not admin-console dense.
+Two density presets are included:
 
-Density is user-configurable from the first scope.
+- `Compact`: default; technical and space-efficient without becoming an admin-console layout;
+- `Comfortable`: larger spacing and controls for users who prefer a more relaxed layout.
 
 The implementation must use shared density/size tokens rather than component-specific magic values.
 
 Taskbar size is independently configurable as Small / Medium / Large.
+
+Exact Compact/Comfortable token values may be retuned after representative desktop, tablet and mobile testing without changing the component model.
 
 Explicit broader UI scale presets may be added later after representative display testing.
 
@@ -445,20 +476,23 @@ Initial scope requires:
 Initial Appearance/Desktop settings:
 
 - Theme: System / Light / Dark;
-- Accent color;
+- Accent: curated JulOS palette + custom color picker;
+- App icon shape: Squircle / Circle;
 - Visual effects: Full / Balanced / Simple;
 - Motion: Normal / Reduced;
 - Wallpaper: bundled/custom and separate Light/Dark selection;
 - Taskbar style: Floating / Full width;
 - Taskbar size: Small / Medium / Large;
+- Taskbar auto-hide: On / Off;
 - Launcher style: Compact / Large centered;
 - Clock: Time only / Time + Date;
 - Density: Compact / Comfortable;
+- Desktop shortcut labels: Always / On focus-hover;
 - Desktop edit mode entry and desktop shortcut management.
 
 Future:
 
-- taskbar side placement/alignment/auto-hide;
+- taskbar side placement/alignment;
 - material intensity controls;
 - window-control side;
 - broader UI scaling;
@@ -466,20 +500,13 @@ Future:
 - animated/parallax wallpapers;
 - virtual desktops and custom snap templates.
 
-## 17. Remaining product decisions
+## 17. Remaining product decision
 
-The major shell choices are now fixed. Remaining choices should be resolved before detailed visual implementation, but they do not require architecture changes:
+The major shell choices are fixed. One visual widget decision remains before detailed implementation:
 
-1. Exact accent palette: fixed curated JulOS colors only, or also arbitrary custom color picker?
-2. Exact icon shape for JulOS-owned app icons: rounded square, squircle, circle, or mixed by app?
-3. Taskbar Small / Medium / Large exact heights and icon sizes.
-4. `Compact` versus `Comfortable` exact density token values.
-5. Exact desktop/widget grid unit and outer margins.
-6. Whether taskbar auto-hide should enter the first scope or remain later.
-7. Whether desktop shortcut labels are always visible or only on focus/hover in compact layouts.
-8. Whether widgets display common JulOS chrome by default or may opt into a borderless visual style.
+- whether widgets always use common JulOS card/glass chrome, or whether widgets may also use a borderless presentation where the widget content sits directly on the desktop.
 
-These are presentation decisions only. They must use the common token, taskbar, desktop and Widget Host models defined above.
+This is a presentation decision only. It must use the common Widget Host and design-token model and must not allow packages to inject arbitrary global styling.
 
 ## 18. Future extension rules
 
