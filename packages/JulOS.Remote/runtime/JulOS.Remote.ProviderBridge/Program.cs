@@ -7,31 +7,47 @@ using System.Text.Json;
 using JulOS.Remote.Transport;
 
 const int JsonSecretKeyBytes = 16;
+const int GuacamoleTokenRequestTimeoutSeconds = 5;
+const string GuacamoleTokenEndpoint = "http://127.0.0.1:8080/api/tokens";
 
-if (args.Length < 2)
+if (args.Length == 0)
 {
-    Console.Error.WriteLine("Usage: JulOS.Remote.ProviderBridge <generate-key|finalize> <key-file> [nginx-token-file]");
+    Console.Error.WriteLine("Usage: JulOS.Remote.ProviderBridge <generate-key|finalize|connected> [arguments]");
     return 64;
 }
 
 var command = args[0];
-var keyFilePath = args[1];
 
 try
 {
     switch (command)
     {
         case "generate-key":
-            GenerateKey(keyFilePath);
-            return 0;
-        case "finalize":
-            if (args.Length < 3)
+            if (args.Length != 2)
             {
-                Console.Error.WriteLine("The finalize command requires an nginx token output path.");
+                Console.Error.WriteLine("The generate-key command requires a key output path.");
                 return 64;
             }
 
-            await FinalizeAsync(keyFilePath, args[2]).ConfigureAwait(false);
+            GenerateKey(args[1]);
+            return 0;
+        case "finalize":
+            if (args.Length != 3)
+            {
+                Console.Error.WriteLine("The finalize command requires a key file and nginx token output path.");
+                return 64;
+            }
+
+            await FinalizeAsync(args[1], args[2]).ConfigureAwait(false);
+            return 0;
+        case "connected":
+            if (args.Length != 1)
+            {
+                Console.Error.WriteLine("The connected command does not accept additional arguments.");
+                return 64;
+            }
+
+            await ReportConnectedAsync(RequireEnvironment("JULOS_REMOTE_SESSION_ID")).ConfigureAwait(false);
             return 0;
         default:
             Console.Error.WriteLine($"Unknown command '{command}'.");
@@ -93,12 +109,79 @@ static async Task FinalizeAsync(string keyFilePath, string nginxTokenFilePath)
             exception);
     }
 
-    // nginx cannot base64url-decode at proxy time, so the token is embedded directly
-    // as a fixed upstream query string; the browser-facing listener never sees it.
-    var tokenLine = $"set $julos_guac_token \"{token.EncryptedData}\";" + Environment.NewLine;
-    File.WriteAllText(nginxTokenFilePath, tokenLine);
+    var authToken = await ExchangeGuacamoleAuthTokenAsync(token.EncryptedData).ConfigureAwait(false);
 
-    await ReportConnectedAsync(sessionId).ConfigureAwait(false);
+    // The browser-facing listener never sees either the encrypted JSON-auth data or
+    // Guacamole's authentication token. nginx injects only the URI-encoded auth token
+    // into its private upstream tunnel request.
+    var tokenLine = $"set $julos_guac_auth_token \"{Uri.EscapeDataString(authToken)}\";" + Environment.NewLine;
+    File.WriteAllText(nginxTokenFilePath, tokenLine);
+}
+
+static async Task<string> ExchangeGuacamoleAuthTokenAsync(string encryptedData)
+{
+    using var client = new HttpClient
+    {
+        Timeout = TimeSpan.FromSeconds(GuacamoleTokenRequestTimeoutSeconds),
+    };
+    using var content = new FormUrlEncodedContent(
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["data"] = encryptedData,
+        });
+
+    HttpResponseMessage response;
+    try
+    {
+        response = await client.PostAsync(GuacamoleTokenEndpoint, content).ConfigureAwait(false);
+    }
+    catch (HttpRequestException exception)
+    {
+        throw new ProviderBridgeException(
+            "remote.provider_auth_exchange_unavailable",
+            "The Guacamole authentication endpoint is unavailable.",
+            exception);
+    }
+    catch (TaskCanceledException exception)
+    {
+        throw new ProviderBridgeException(
+            "remote.provider_auth_exchange_timeout",
+            "The Guacamole authentication exchange timed out.",
+            exception);
+    }
+
+    using (response)
+    {
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new ProviderBridgeException(
+                "remote.provider_auth_exchange_failed",
+                $"The Guacamole authentication exchange failed with status {(int)response.StatusCode}.");
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+            if (!document.RootElement.TryGetProperty("authToken", out var authTokenElement)
+                || authTokenElement.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(authTokenElement.GetString()))
+            {
+                throw new ProviderBridgeException(
+                    "remote.provider_auth_exchange_invalid",
+                    "The Guacamole authentication response did not contain an auth token.");
+            }
+
+            return authTokenElement.GetString()!;
+        }
+        catch (JsonException exception)
+        {
+            throw new ProviderBridgeException(
+                "remote.provider_auth_exchange_invalid",
+                "The Guacamole authentication response was invalid.",
+                exception);
+        }
+    }
 }
 
 static ProviderCredential ParseCredential(string credentialBase64, string protocol)

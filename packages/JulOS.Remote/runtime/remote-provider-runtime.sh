@@ -128,6 +128,11 @@ while ! nc -z 127.0.0.1 "$JULOS_PROVIDER_LISTEN_PORT"; do
     sleep 0.2
 done
 
+if ! "/opt/julos-remote-provider/bridge/JulOS.Remote.ProviderBridge" connected; then
+    echo "The provider bridge failed to report Remote display readiness." >&2
+    exit 70
+fi
+
 set +e
 wait "$(cat "$nginx_pid_file")"
 exit_code=$?
