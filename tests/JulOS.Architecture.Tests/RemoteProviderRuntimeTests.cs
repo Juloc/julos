@@ -4,7 +4,7 @@
 public sealed class RemoteProviderRuntimeTests
 {
     [TestMethod]
-    public void ProviderExchangesJsonAuthDataBeforeOpeningTheTunnel()
+    public void ProviderExchangesJsonAuthDataAndSelectsJsonConnection()
     {
         var runtimeDirectory = Path.Combine(
             Repository.Root,
@@ -14,6 +14,7 @@ public sealed class RemoteProviderRuntimeTests
         var bridge = File.ReadAllText(
             Path.Combine(runtimeDirectory, "JulOS.Remote.ProviderBridge", "Program.cs"));
         var nginx = File.ReadAllText(Path.Combine(runtimeDirectory, "nginx.conf.template"));
+        var launcher = File.ReadAllText(Path.Combine(runtimeDirectory, "remote-provider-runtime.sh"));
 
         StringAssert.Contains(bridge, "http://127.0.0.1:8080/api/tokens");
         StringAssert.Contains(bridge, "new FormUrlEncodedContent");
@@ -22,14 +23,19 @@ public sealed class RemoteProviderRuntimeTests
         StringAssert.Contains(bridge, "\"authToken\"");
         StringAssert.Contains(bridge, "Uri.EscapeDataString(authToken)");
         StringAssert.Contains(bridge, "set $julos_guac_auth_token");
+        StringAssert.Contains(bridge, "ConnectionName: sessionId");
         Assert.IsFalse(
             bridge.Contains(
                 "set $julos_guac_token \\\"{token.EncryptedData}\\\"",
                 StringComparison.Ordinal),
             "Encrypted JSON-auth data must never be used as the WebSocket tunnel token.");
         StringAssert.Contains(
-            nginx,
-            "proxy_pass http://127.0.0.1:8080/websocket-tunnel?token=$julos_guac_auth_token;");
+            launcher,
+            "envsubst '${JULOS_PROVIDER_LISTEN_PORT} ${JULOS_REMOTE_SESSION_ID}'");
+        StringAssert.Contains(nginx, "token=$julos_guac_auth_token");
+        StringAssert.Contains(nginx, "GUAC_DATA_SOURCE=json");
+        StringAssert.Contains(nginx, "GUAC_ID=${JULOS_REMOTE_SESSION_ID}");
+        StringAssert.Contains(nginx, "GUAC_TYPE=c");
     }
 
     [TestMethod]

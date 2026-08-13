@@ -110,7 +110,7 @@ fi
 
 JULOS_PROVIDER_LISTEN_PORT=${JULOS_PROVIDER_LISTEN_PORT:-8081}
 export JULOS_PROVIDER_LISTEN_PORT
-envsubst '${JULOS_PROVIDER_LISTEN_PORT}' \
+envsubst '${JULOS_PROVIDER_LISTEN_PORT} ${JULOS_REMOTE_SESSION_ID}' \
     < /opt/julos-remote-provider/nginx.conf.template \
     > "$nginx_config"
 

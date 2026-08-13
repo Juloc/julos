@@ -17,7 +17,7 @@ http {
 
         location / {
             include /tmp/julos-remote-provider/nginx-token.conf;
-            proxy_pass http://127.0.0.1:8080/websocket-tunnel?token=$julos_guac_auth_token;
+            proxy_pass http://127.0.0.1:8080/websocket-tunnel?token=$julos_guac_auth_token&GUAC_DATA_SOURCE=json&GUAC_ID=${JULOS_REMOTE_SESSION_ID}&GUAC_TYPE=c;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
