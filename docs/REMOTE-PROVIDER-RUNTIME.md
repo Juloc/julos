@@ -22,16 +22,18 @@ The provider runtime is one container image, launched once per Remote session by
 2. Generates a random 16-byte JSON-auth secret key, local to this one container's lifetime. It is never shared with or coordinated with JulOS.Server; nothing outside the container needs to construct provider authentication material, because the container serves exactly one session against exactly one target.
 3. Starts `guacd` on `127.0.0.1:4822` and waits for it.
 4. Runs the official `/opt/guacamole/bin/entrypoint.sh` in the background (unmodified) and waits for Tomcat to listen on `8080`.
-5. Runs the bridge's `finalize` command. The bridge decodes the opaque `JULOS_REMOTE_TARGET_CREDENTIAL` secret (D030), builds a `GuacamoleLaunchRequest`, and uses `GuacamoleJsonLaunchEncoder` to create the encrypted JSON-auth `data` value.
+5. Runs the bridge's `finalize` command. The bridge decodes the opaque `JULOS_REMOTE_TARGET_CREDENTIAL` secret (D030), builds a `GuacamoleLaunchRequest`, and uses `GuacamoleJsonLaunchEncoder` to create the encrypted JSON-auth `data` value. The JSON connection name is the exact `JULOS_REMOTE_SESSION_ID`.
 6. The bridge submits that encrypted `data` locally as form data to `http://127.0.0.1:8080/api/tokens` and requires a successful JSON response containing `authToken`. The encrypted JSON-auth `data` is never used directly as the WebSocket tunnel `token`.
-7. The bridge writes only the URI-encoded Guacamole `authToken` into the private nginx include. The runtime then renders `nginx.conf` and starts nginx on `JULOS_PROVIDER_LISTEN_PORT` (`8081`).
+7. The bridge writes only the URI-encoded Guacamole `authToken` into the private nginx include. The runtime then renders `nginx.conf`, substituting the non-secret `JULOS_REMOTE_SESSION_ID`, and starts nginx on `JULOS_PROVIDER_LISTEN_PORT` (`8081`). nginx injects the returned Guacamole `authToken` plus `GUAC_DATA_SOURCE=json`, `GUAC_ID=<JULOS_REMOTE_SESSION_ID>` and `GUAC_TYPE=c` into the private upstream `/websocket-tunnel` request so Guacamole selects the connection created by JSON authentication.
 8. The launcher waits until nginx is actually accepting connections on `8081`. Only after that readiness check succeeds does it invoke the bridge's `connected` command, which reports the provider event to `JULOS_REMOTE_CALLBACK_ENDPOINT`.
 
-`connected` therefore means the complete provider-facing display path is ready: guacd is listening, the Guacamole web application has issued a valid auth token, and the same-origin provider listener is accepting connections. Preparing JSON-auth data alone is not a connected state.
+`connected` therefore means the complete provider-facing display path is ready: guacd is listening, the Guacamole web application has issued a valid auth token, the JSON connection selector is configured, and the same-origin provider listener is accepting connections. Preparing JSON-auth data alone is not a connected state.
 
-`RemoteDisplayGateway.ProviderEndpoint` resolves one fixed `wss://{runtimeId}/...` template with no room for a per-session query string (by design: JulOS.Server proxies this connection itself and never exposes it to the browser). nginx reconciles this with Tomcat's token-based WebSocket tunnel: its single `location /` block injects the returned Guacamole `authToken` as a fixed private upstream query string and forwards the negotiated WebSocket subprotocol unchanged.
+`RemoteDisplayGateway.ProviderEndpoint` resolves one fixed `wss://{runtimeId}/...` template with no room for a per-session query string (by design: JulOS.Server proxies this connection itself and never exposes it to the browser). The browser descriptor's `package`, `revision` and `expires` query is consumed by JulOS.Server and is not forwarded to Guacamole. nginx reconciles this with Tomcat's WebSocket tunnel by injecting the provider-private authentication token and the required Guacamole connection selectors into the upstream query string while forwarding the negotiated WebSocket subprotocol unchanged.
 
-The encrypted JSON-auth `data`, Guacamole `authToken`, target credential and callback token remain runtime-private and are never returned through the JulOS browser API or written to normal logs. The token exchange has a bounded timeout and fails the runtime with a stable provider error instead of falling through to a tunnel that can only exchange keepalive traffic.
+Apache Guacamole requires `GUAC_DATA_SOURCE`, `GUAC_ID` and `GUAC_TYPE` to resolve the requested connection. A valid `token` without those selectors can still establish the WebSocket transport and exchange keepalive `ping` traffic without starting the JSON-auth connection. The deployed symptom of only keepalive `ping` traffic therefore identifies an incomplete tunnel-selection request rather than proof of a working display session.
+
+The encrypted JSON-auth `data`, Guacamole `authToken`, target credential and callback token remain runtime-private and are never returned through the JulOS browser API or written to normal logs. The session ID used as `GUAC_ID` is non-secret runtime identity. The token exchange has a bounded timeout and fails the runtime with a stable provider error instead of falling through to a tunnel that can only exchange keepalive traffic.
 
 ## Credential shape
 
@@ -47,17 +49,19 @@ Repository regression coverage in `tests/JulOS.Architecture.Tests/RemoteProvider
 
 - JSON-auth `EncryptedData` must be exchanged through `/api/tokens`;
 - the response must provide `authToken`, and nginx must use that token rather than `EncryptedData`;
+- the JSON connection name must remain the session ID;
+- nginx must supply `GUAC_DATA_SOURCE=json`, `GUAC_ID=<session ID>` and `GUAC_TYPE=c` to the private Guacamole tunnel;
 - `FinalizeAsync` must not report `connected`;
 - the launcher must report `connected` only after the `8081` readiness loop has completed.
 
-A WebSocket `101 Switching Protocols` or Guacamole `ping` frames alone are not functional display acceptance. Deployed acceptance requires actual Guacamole protocol/display traffic and a rendered target session. RDP, VNC, browser/Android display and SSH re-confirmation remain deployment gates after a provider image containing this fix is published.
+A WebSocket `101 Switching Protocols` or Guacamole `ping` frames alone are not functional display acceptance. Deployed acceptance requires actual Guacamole protocol/display traffic and a rendered target session. RDP, VNC, browser/Android display and SSH re-confirmation remain deployment gates after a provider image containing the complete token-exchange and tunnel-selector correction is published.
 
 ## Published and wired
 
-The previously published image is `ghcr.io/juloc/julos-remote-provider:0.4.0-beta.4`, immutable index digest `sha256:e9c9d61adb82e56370a5fdaa76344dab686b4afd90a2ce41fc82cfe3a510b643` (its `linux/amd64` manifest is `sha256:3191f8115eddb13e27f50f190fe98e4f9a24d370b80fb9240340c21b72c8fb17`), with a provenance attestation that `gh attestation verify oci://ghcr.io/juloc/julos-remote-provider:0.4.0-beta.4 --owner juloc` accepts. It is built for `linux/amd64` only: `guacd` is compiled from source against the Ubuntu base, so `linux/arm64` is a deliberate, documented non-goal for this release rather than an oversight.
+The provider publication started after the `/api/tokens` correction confirmed that the corrected authentication exchange was deployed, but the resulting session still emitted only Guacamole keepalive `ping` traffic. That test exposed the second provider defect documented above: the private upstream tunnel contained a valid `authToken` but omitted the required JSON connection selectors. That publication must not be treated as rendered-display evidence.
 
-That published digest predates the `/api/tokens` exchange/readiness correction described above and must not be treated as evidence that the corrected display-authentication path is deployed.
+The next provider image must include the `GUAC_DATA_SOURCE=json`, `GUAC_ID=<session ID>` and `GUAC_TYPE=c` tunnel-selector correction. After that image is published and pinned, validation must use a newly created provider/session and require non-keepalive Guacamole instruction traffic plus an actually rendered target display.
 
 The opt-in `remote` Compose profile wires the image into a full deployment through `deploy/compose/compose.remote.yaml` (`Remote__Providers__0__*` and `Remote__NetworkProfiles__0__*`, plus the `runtime-manager` service) layered over `deploy/compose/compose.yaml`; `deploy/compose/README.md` documents the invocation and the required `.env` values.
 
-Still open: publish a provider image containing this correction, then repeat end-to-end deployed validation through the real JulOS Server, Runtime Manager and Remote frontend for RDP (REM-006), VNC (REM-007), browser/Android display (REM-005) and SSH close-out (REM-008).
+Still open: publish a provider image containing this complete correction, then repeat end-to-end deployed validation through the real JulOS Server, Runtime Manager and Remote frontend for RDP (REM-006), VNC (REM-007), browser/Android display (REM-005) and SSH close-out (REM-008).
