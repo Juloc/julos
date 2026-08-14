@@ -5,6 +5,7 @@ using System.Text;
 
 using JulOS.Contracts.Authentication;
 using JulOS.Contracts.WebApps;
+using JulOS.Infrastructure.WebApps;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -182,6 +183,92 @@ public sealed class WebAppProxyEndpointTests
         }
     }
 
+    [TestMethod]
+    public async Task DynamicHostForwardsToTheDecodedUpstreamAndRewritesCookieAndRedirect()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using (var forward = DynamicRequest(encodedHost, "/panel?x=1", cookie))
+            using (var response = await client.SendAsync(forward).ConfigureAwait(false))
+            {
+                Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+                Assert.AreEqual("UPSTREAM-OK:/panel", await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+                Assert.IsFalse(response.Headers.Contains("X-Frame-Options"));
+                Assert.AreEqual(new Uri(upstream.Urls.First()).Authority, Single(response, "X-Echo-Host"));
+            }
+
+            using (var redirect = DynamicRequest(encodedHost, "/redirect", cookie))
+            using (var response = await client.SendAsync(redirect).ConfigureAwait(false))
+            {
+                Assert.AreEqual(HttpStatusCode.Redirect, response.StatusCode);
+                Assert.AreEqual($"http://{encodedHost}/dashboard", Single(response, "Location"));
+                var setCookie = Single(response, "Set-Cookie");
+                Assert.IsFalse(setCookie.Contains("domain", StringComparison.OrdinalIgnoreCase), setCookie);
+                StringAssert.Contains(setCookie, "app=1");
+            }
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task RejectsADynamicHostForAPublicUpstreamOrigin()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(EncodedHost("https://youtube.com"), "/", cookie);
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    private static string EncodedHost(string upstreamUrl) =>
+        WebAppOriginCodec.EncodeHost(new Uri(upstreamUrl), "p.localtest.me")!;
+
+    private static ServerHost CreateDynamicHost(string databasePath) =>
+        new(
+            $"Data Source={databasePath};Cache=Shared",
+            new Dictionary<string, string?>
+            {
+                ["Database:Provider"] = "sqlite",
+                ["Authentication:CookieDomain"] = ".localtest.me",
+                ["WebApps:Dynamic:Enabled"] = "true",
+                ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+                ["WebApps:Dynamic:AllowedHosts:0"] = "127.0.0.0/8",
+                ["WebApps:AllowInvalidUpstreamCertificates"] = "true",
+            });
+
+    private static HttpRequestMessage DynamicRequest(string encodedHost, string pathAndQuery, string cookie)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"http://{encodedHost}{pathAndQuery}");
+        request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        return request;
+    }
+
     private static string Single(HttpResponseMessage response, string header) =>
         response.Headers.TryGetValues(header, out var values) ? string.Concat(values) : string.Empty;
 
@@ -232,6 +319,15 @@ public sealed class WebAppProxyEndpointTests
             if (context.WebSockets.IsWebSocketRequest)
             {
                 await EchoWebSocketAsync(context).ConfigureAwait(false);
+                return;
+            }
+
+            if (context.Request.Path == "/redirect")
+            {
+                context.Response.StatusCode = StatusCodes.Status302Found;
+                context.Response.Headers.Location =
+                    $"{context.Request.Scheme}://{context.Request.Host}/dashboard";
+                context.Response.Headers.SetCookie = "app=1; Domain=127.0.0.1; Path=/; SameSite=Lax";
                 return;
             }
 

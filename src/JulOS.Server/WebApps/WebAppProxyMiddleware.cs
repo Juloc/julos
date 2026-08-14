@@ -144,7 +144,14 @@ internal sealed class WebAppProxyMiddleware
         using (upstreamResponse)
         {
             context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-            CopyResponseHeaders(upstreamResponse, context.Response);
+            CopyResponseHeaders(
+                upstreamResponse,
+                context.Response,
+                new WebAppResponseContext(
+                    target.Upstream,
+                    context.Request.Scheme,
+                    context.Request.Host.Value ?? string.Empty,
+                    context.Request.IsHttps));
             await upstreamResponse.Content
                 .CopyToAsync(context.Response.Body, context.RequestAborted)
                 .ConfigureAwait(false);
@@ -217,20 +224,27 @@ internal sealed class WebAppProxyMiddleware
         return builder.Uri;
     }
 
-    private static void CopyResponseHeaders(HttpResponseMessage upstreamResponse, HttpResponse response)
+    private static void CopyResponseHeaders(
+        HttpResponseMessage upstreamResponse,
+        HttpResponse response,
+        WebAppResponseContext context)
     {
         foreach (var header in upstreamResponse.Headers)
         {
-            CopyResponseHeader(response, header.Key, header.Value);
+            CopyResponseHeader(response, header.Key, header.Value, context);
         }
 
         foreach (var header in upstreamResponse.Content.Headers)
         {
-            CopyResponseHeader(response, header.Key, header.Value);
+            CopyResponseHeader(response, header.Key, header.Value, context);
         }
     }
 
-    private static void CopyResponseHeader(HttpResponse response, string name, IEnumerable<string> values)
+    private static void CopyResponseHeader(
+        HttpResponse response,
+        string name,
+        IEnumerable<string> values,
+        WebAppResponseContext context)
     {
         if (WebAppResponsePolicy.IsSuppressedResponseHeader(name))
         {
@@ -249,8 +263,35 @@ internal sealed class WebAppProxyMiddleware
             return;
         }
 
+        if (string.Equals(name, "Set-Cookie", StringComparison.OrdinalIgnoreCase))
+        {
+            response.Headers.SetCookie = values
+                .Select(value => WebAppResponsePolicy.RewriteSetCookie(value, context.RequestIsHttps))
+                .ToArray();
+            return;
+        }
+
+        if (string.Equals(name, "Location", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "Content-Location", StringComparison.OrdinalIgnoreCase))
+        {
+            response.Headers[name] = values
+                .Select(value => WebAppResponsePolicy.RewriteRedirect(
+                    value,
+                    context.Upstream,
+                    context.RequestScheme,
+                    context.RequestHost))
+                .ToArray();
+            return;
+        }
+
         response.Headers[name] = values.ToArray();
     }
+
+    private readonly record struct WebAppResponseContext(
+        Uri Upstream,
+        string RequestScheme,
+        string RequestHost,
+        bool RequestIsHttps);
 
     private static async Task PumpWebSocketAsync(
         WebSocket browser,

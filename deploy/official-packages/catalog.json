@@ -1,0 +1,53 @@
+﻿{
+  "schemaVersion": "1",
+  "publisherId": "juloc-official",
+  "keyId": "official-alpha-2026",
+  "publicKeyFile": "juloc-package-signing-public.pem",
+  "packages": [
+    {
+      "packageId": "de.juloc.julos.browser",
+      "version": "1.0.3",
+      "displayNameEn": "Browser",
+      "displayNameDe": "Browser",
+      "descriptionEn": "Isolated Chromium sessions and saved URL applications.",
+      "descriptionDe": "Isolierte Chromium-Sitzungen und gespeicherte URL-Apps.",
+      "artifactFile": "JulOS.Browser-1.0.3.zip",
+      "signatureFile": "JulOS.Browser-1.0.3.zip.sig",
+      "sha256": "035b0e571a5c79d343f2776544f7241233eaba9c30fa240c273c687656ec137e",
+      "defaultConfiguration": {
+        "idleTimeoutMinutes": "30",
+        "allowDownloads": "false",
+        "allowedNetworks": "julos-remote",
+        "defaultNetwork": "julos-remote",
+        "runtimeImage": "ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a"
+      }
+    },
+    {
+      "packageId": "de.juloc.julos.remote",
+      "version": "1.0.3",
+      "displayNameEn": "Remote",
+      "displayNameDe": "Remote",
+      "descriptionEn": "Saved RDP, SSH and VNC connections as JulOS applications.",
+      "descriptionDe": "Gespeicherte RDP-, SSH- und VNC-Verbindungen als JulOS-Apps.",
+      "artifactFile": "JulOS.Remote-1.0.3.zip",
+      "signatureFile": "JulOS.Remote-1.0.3.zip.sig",
+      "sha256": "abbccf375ad1308955bcf557c14f43277428c7f0dbcf7f27b084131995b7dd50",
+      "defaultConfiguration": {
+        "idleTimeoutMinutes": "30",
+        "maximumSessionMinutes": "480"
+      }
+    },
+    {
+      "packageId": "de.juloc.julos.hostmetrics",
+      "version": "1.0.3",
+      "displayNameEn": "Host Metrics",
+      "displayNameDe": "Host-Metriken",
+      "descriptionEn": "Core host status and metrics surfaces.",
+      "descriptionDe": "Status- und Metrikansichten für JulOS-Hosts.",
+      "artifactFile": "JulOS.HostMetrics-1.0.3.zip",
+      "signatureFile": "JulOS.HostMetrics-1.0.3.zip.sig",
+      "sha256": "bdd1245fcb4663874404ea8428d71062da9a87037377dd71b8151a68f6b87045",
+      "defaultConfiguration": {}
+    }
+  ]
+}

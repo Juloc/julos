@@ -105,6 +105,82 @@ public static class WebAppResponsePolicy
         return kept.Count == 0 ? null : string.Join("; ", kept);
     }
 
+    /// <summary>
+    /// Rewrites an upstream <c>Set-Cookie</c> so the target application's cookie is accepted on the
+    /// encoded proxy host: the <c>Domain</c> attribute is dropped (host-only), <c>Secure</c> is
+    /// present only over HTTPS (so a plain-HTTP development deployment still receives the cookie),
+    /// and every other attribute — <c>Path</c>, <c>SameSite</c>, <c>HttpOnly</c>, <c>Max-Age</c>,
+    /// <c>Expires</c> — is preserved verbatim.
+    /// </summary>
+    public static string RewriteSetCookie(string value, bool requestIsHttps)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        // Set-Cookie separates attributes with ';'; a comma only appears inside an Expires value,
+        // so splitting on ';' is safe and keeps the name=value pair (which may contain '=') intact.
+        var segments = value.Split(';');
+        var kept = new List<string> { segments[0].Trim() };
+        for (var index = 1; index < segments.Length; index++)
+        {
+            var attribute = segments[index].Trim();
+            if (attribute.Length == 0)
+            {
+                continue;
+            }
+
+            var name = AttributeName(attribute);
+            if (name.Equals("domain", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("secure", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            kept.Add(attribute);
+        }
+
+        if (requestIsHttps)
+        {
+            kept.Add("Secure");
+        }
+
+        return string.Join("; ", kept);
+    }
+
+    /// <summary>
+    /// Rewrites a redirect target header (<c>Location</c> or <c>Content-Location</c>) that points at
+    /// the upstream origin so navigation stays on the proxy host. A relative target, or a target to
+    /// a different origin, is returned unchanged.
+    /// </summary>
+    public static string RewriteRedirect(string value, Uri upstream, string requestScheme, string requestHost)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        ArgumentNullException.ThrowIfNull(upstream);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestScheme);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestHost);
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var target)
+            || target.Scheme is not ("http" or "https"))
+        {
+            return value;
+        }
+
+        if (!string.Equals(
+                target.GetLeftPart(UriPartial.Authority),
+                upstream.GetLeftPart(UriPartial.Authority),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return string.Concat(requestScheme, "://", requestHost, target.PathAndQuery, target.Fragment);
+    }
+
+    private static string AttributeName(string attribute)
+    {
+        var separator = attribute.IndexOf('=', StringComparison.Ordinal);
+        return separator >= 0 ? attribute[..separator].Trim() : attribute;
+    }
+
     private static bool IsFrameAncestors(string directive)
     {
         var name = directive.AsSpan();

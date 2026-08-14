@@ -124,4 +124,64 @@ public sealed class WebAppTargetRegistryTests
 
         Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
     }
+
+    private static Dictionary<string, string?> DynamicConfig(string allowedHost) => new()
+    {
+        ["Authentication:CookieDomain"] = ".localtest.me",
+        ["WebApps:Dynamic:Enabled"] = "true",
+        ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+        ["WebApps:Dynamic:AllowedHosts:0"] = allowedHost,
+    };
+
+    [TestMethod]
+    public void ResolvesAnEncodedAllowedDynamicHost()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig("192.168.0.0/16")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10:8443"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        Assert.AreEqual(new Uri("https://192.168.1.10:8443/"), target.Upstream);
+        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
+    }
+
+    [TestMethod]
+    public void ResolvesAnEncodedAllowedDynamicHostByDnsSuffix()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig(".lan")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("https://grafana.lan:3000"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        Assert.AreEqual(new Uri("https://grafana.lan:3000/"), target.Upstream);
+    }
+
+    [TestMethod]
+    public void RejectsADynamicHostThatIsNotOnTheAllowlist()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig("10.0.0.0/8")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10:8443"), "p.localtest.me")!;
+
+        Assert.IsFalse(registry.TryResolve(host, out _));
+    }
+
+    [TestMethod]
+    public void DoesNotResolveDynamicHostsWhenDisabled()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration([]));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10:8443"), "p.localtest.me")!;
+
+        Assert.IsFalse(registry.TryResolve(host, out _));
+    }
+
+    [TestMethod]
+    public void ThrowsWhenTheProxyZoneIsNotUnderTheCookieDomain()
+    {
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["Authentication:CookieDomain"] = ".os.juloc.de",
+            ["WebApps:Dynamic:Enabled"] = "true",
+            ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+        });
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
+    }
 }

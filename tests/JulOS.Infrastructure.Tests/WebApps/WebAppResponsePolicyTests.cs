@@ -120,4 +120,65 @@ public sealed class WebAppResponsePolicyTests
     {
         Assert.AreEqual("a=1; b=2", WebAppResponsePolicy.FilterForwardedCookies("a=1; b=2"));
     }
+
+    [TestMethod]
+    public void RewriteSetCookieDropsDomainAndSecureOverHttp()
+    {
+        Assert.AreEqual(
+            "session=abc; Path=/; SameSite=Lax; HttpOnly",
+            WebAppResponsePolicy.RewriteSetCookie(
+                "session=abc; Domain=.unifi.local; Path=/; SameSite=Lax; HttpOnly; Secure",
+                requestIsHttps: false));
+    }
+
+    [TestMethod]
+    public void RewriteSetCookieAddsSecureOverHttps()
+    {
+        Assert.AreEqual(
+            "session=abc; Path=/; Secure",
+            WebAppResponsePolicy.RewriteSetCookie("session=abc; Path=/", requestIsHttps: true));
+    }
+
+    [TestMethod]
+    public void RewriteSetCookiePreservesExpiresCommaAndAnEqualsInTheValue()
+    {
+        Assert.AreEqual(
+            "token=a=b=c; Expires=Wed, 09 Jun 2027 10:18:14 GMT; Path=/app",
+            WebAppResponsePolicy.RewriteSetCookie(
+                "token=a=b=c; Expires=Wed, 09 Jun 2027 10:18:14 GMT; Domain=x.local; Path=/app",
+                requestIsHttps: false));
+    }
+
+    [TestMethod]
+    public void RewriteRedirectLeavesRelativeTargetsUnchanged()
+    {
+        Assert.AreEqual(
+            "/dashboard?tab=1",
+            WebAppResponsePolicy.RewriteRedirect(
+                "/dashboard?tab=1", new Uri("https://10.0.0.5:8443"), "https", "wa123.p.localtest.me"));
+    }
+
+    [TestMethod]
+    public void RewriteRedirectRewritesAnUpstreamOriginToTheProxyHost()
+    {
+        Assert.AreEqual(
+            "https://wa123.p.localtest.me/dashboard?tab=1",
+            WebAppResponsePolicy.RewriteRedirect(
+                "https://10.0.0.5:8443/dashboard?tab=1",
+                new Uri("https://10.0.0.5:8443"),
+                "https",
+                "wa123.p.localtest.me"));
+    }
+
+    [TestMethod]
+    public void RewriteRedirectLeavesADifferentOriginUnchanged()
+    {
+        Assert.AreEqual(
+            "https://accounts.google.com/o/oauth2",
+            WebAppResponsePolicy.RewriteRedirect(
+                "https://accounts.google.com/o/oauth2",
+                new Uri("https://10.0.0.5:8443"),
+                "https",
+                "wa123.p.localtest.me"));
+    }
 }
