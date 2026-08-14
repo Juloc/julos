@@ -27,6 +27,7 @@ This directory is the authoritative specification for JulOS. Code, issues and co
 Supporting documents:
 
 - [`REMOTE-SESSION-CONTRACT.md`](REMOTE-SESSION-CONTRACT.md) — implemented REM-001 contract boundary
+- [`WEB-APP-RENDERING.md`](WEB-APP-RENDERING.md) — local-versus-streamed web application rendering plan (decision D035)
 - [`RELEASE_NOTES_TEMPLATE.md`](RELEASE_NOTES_TEMPLATE.md) — shape of every release note
 
 ## Source-of-truth rule
