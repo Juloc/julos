@@ -1,0 +1,5 @@
+# Release CI stages signed official packages here; local builds keep them
+# out of version control (see src/JulOS.Server/Dockerfile).
+*
+!.gitkeep
+!.gitignore
