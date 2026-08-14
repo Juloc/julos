@@ -134,6 +134,7 @@ app.MapJulOsAgents();
 app.MapJulOsRealtimeEvents();
 app.MapJulOsRemoteProviderEvents();
 app.MapJulOsRemoteDisplay();
+app.MapJulOsWebApps();
 
 app.MapGet(
     "/api/v1/system/version",

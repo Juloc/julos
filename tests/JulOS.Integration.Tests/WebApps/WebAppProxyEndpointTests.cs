@@ -2,6 +2,7 @@
 using System.Net.Http.Json;
 
 using JulOS.Contracts.Authentication;
+using JulOS.Contracts.WebApps;
 using JulOS.Server.WebApps;
 
 using Microsoft.AspNetCore.Builder;
@@ -67,6 +68,35 @@ public sealed class WebAppProxyEndpointTests
             using var response = await client.SendAsync(request).ConfigureAwait(false);
 
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ListsConfiguredProxyTargetsForAnAuthenticatedUser()
+    {
+        var databasePath = CreateDatabasePath();
+        using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            using var host = CreateHost(databasePath, upstream);
+            using var client = host.CreateClient();
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/v1/webapps");
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            var summaries = await response.Content
+                .ReadFromJsonAsync<WebAppSummaryResponse[]>()
+                .ConfigureAwait(false);
+            Assert.IsNotNull(summaries);
+            Assert.AreEqual(1, summaries!.Length);
+            Assert.AreEqual(TargetHost, summaries[0].Host);
         }
         finally
         {

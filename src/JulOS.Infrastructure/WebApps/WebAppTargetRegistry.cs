@@ -83,6 +83,14 @@ public sealed class WebAppTargetRegistry
         return true;
     }
 
+    /// <summary>Lists the hosts of every locally proxied target, ordered for a stable presentation.</summary>
+    public IReadOnlyList<string> ProxiedHosts() =>
+        this.targetsByHost.Values
+            .Where(target => target.RenderingMode != WebAppRenderingMode.Streamed)
+            .Select(target => target.Host)
+            .OrderBy(host => host, StringComparer.Ordinal)
+            .ToList();
+
     private static string? NormalizeRequestHost(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
