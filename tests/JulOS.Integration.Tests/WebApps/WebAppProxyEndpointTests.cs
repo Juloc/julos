@@ -9,6 +9,7 @@ using JulOS.Contracts.WebApps;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
@@ -143,6 +144,37 @@ public sealed class WebAppProxyEndpointTests
             Assert.IsNotNull(summaries);
             Assert.AreEqual(1, summaries!.Length);
             Assert.AreEqual(TargetHost, summaries[0].Host);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ScopesTheSessionCookieToTheConfiguredParentDomain()
+    {
+        var databasePath = CreateDatabasePath();
+        try
+        {
+            using var host = new ServerHost(
+                $"Data Source={databasePath};Cache=Shared",
+                new Dictionary<string, string?>
+                {
+                    ["Database:Provider"] = "sqlite",
+                    ["Authentication:CookieDomain"] = ".example.test",
+                });
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+
+            using var response = await client.PostAsJsonAsync(
+                "/api/v1/auth/setup",
+                new InitialAdministratorRequest("admin", "Administrator", AdministratorPassword))
+                .ConfigureAwait(false);
+            Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
+
+            var session = response.Headers.GetValues("Set-Cookie")
+                .Single(value => value.StartsWith(".JulOS.Session=", StringComparison.Ordinal));
+            StringAssert.Contains(session.ToLowerInvariant(), "domain=.example.test");
         }
         finally
         {

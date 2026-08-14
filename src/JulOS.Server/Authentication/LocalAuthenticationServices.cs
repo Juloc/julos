@@ -29,6 +29,10 @@ internal static class LocalAuthenticationServices
         services.AddSingleton(localOptions);
         services.AddSingleton(TimeProvider.System);
 
+        // Optional parent-domain scope so the session reaches web-application target subdomains
+        // (see docs/WEB-APP-RENDERING.md). Unset by default, which keeps the cookies host-only.
+        var cookieDomain = ReadCookieDomain(configuration);
+
         services
             .AddIdentity<LocalUser, LocalRole>(identity =>
             {
@@ -62,6 +66,11 @@ internal static class LocalAuthenticationServices
             cookie.Cookie.IsEssential = true;
             cookie.Cookie.SameSite = SameSiteMode.Strict;
             cookie.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            if (cookieDomain is not null)
+            {
+                cookie.Cookie.Domain = cookieDomain;
+            }
+
             cookie.ExpireTimeSpan = TimeSpan.FromMinutes(localOptions.SessionTimeoutMinutes);
             cookie.SlidingExpiration = true;
 
@@ -85,6 +94,10 @@ internal static class LocalAuthenticationServices
             options.Cookie.IsEssential = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            if (cookieDomain is not null)
+            {
+                options.Cookie.Domain = cookieDomain;
+            }
         });
 
         services.AddRateLimiter(options =>
@@ -139,5 +152,24 @@ internal static class LocalAuthenticationServices
         });
 
         return services;
+    }
+
+    private static string? ReadCookieDomain(IConfiguration configuration)
+    {
+        var value = configuration["Authentication:CookieDomain"]?.Trim();
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        if (value.Contains("://", StringComparison.Ordinal)
+            || value.Contains('/', StringComparison.Ordinal)
+            || value.Any(char.IsWhiteSpace))
+        {
+            throw new InvalidOperationException(
+                "Authentication:CookieDomain must be a bare cookie domain such as '.os.juloc.de'.");
+        }
+
+        return value;
     }
 }

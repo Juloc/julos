@@ -83,6 +83,8 @@ Fallback is an explicit, observable transition, not a hidden retry (see the no-s
 
 Local mode depends on wildcard DNS for `*.<julos-domain>` and a wildcard TLS certificate, issued and renewed through the Caddy integration and a supported DNS-provider API. Where wildcard hostnames are unavailable, only streamed mode is offered until the prerequisite is met. A path-based proxy is not adopted as a substitute, because it cannot serve the target applications reliably.
 
+The JulOS session cookie must also be scoped to the deployment's parent domain (`Authentication:CookieDomain`, for example `.os.juloc.de`) so the authenticated session reaches each target subdomain. It is host-only by default, and without the parent-domain scope the embedded target would receive no session and the proxy would reject it.
+
 ## 9. Milestones
 
 - **M0** — Accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
@@ -101,6 +103,7 @@ WebApps:Targets:0:Host           unifi.os.juloc.de
 WebApps:Targets:0:Upstream       https://10.0.0.5:8443
 WebApps:Targets:0:RenderingMode  local            # local (default) | streamed | auto
 WebApps:AllowInvalidUpstreamCertificates  false   # opt-in for self-signed internal upstreams
+Authentication:CookieDomain      .os.juloc.de     # parent-domain scope so the session reaches target subdomains
 ```
 
 As environment variables the same keys use the double-underscore form, for example
