@@ -8,7 +8,7 @@ This document turns the architecture into concrete implementation rules. Changin
 
 - .NET 10 with the exact SDK pinned in `global.json`
 - ASP.NET Core for HTTP APIs, authentication, SignalR and hosted services
-- PostgreSQL for core and package-owned persistent state
+- SQLite by default for core and package-owned persistent state; PostgreSQL is opt-in for larger or multi-instance deployments (D033)
 - Entity Framework Core for migrations and core persistence
 - structured JSON logging through the built-in logging abstractions
 - OpenTelemetry-compatible trace and metric boundaries without requiring an external collector for basic operation
@@ -147,7 +147,7 @@ Contracts contain no persistence annotations or implementation behavior.
 
 Contains core persistence, the ASP.NET Core Identity stores for local users and roles, secret storage, external identity integration and infrastructure adapters required by the control plane. Product-specific adapters remain in packages.
 
-Secret storage is a Core-backed Infrastructure adapter. AES-256-GCM ciphertext, nonce, tag and key identifier are stored in PostgreSQL; the 32-byte key files are loaded from the absolute external `Secrets:KeyRingPath`. The active key identifier and lease lifetime are non-secret configuration, while key contents are deployment material. The HTTP layer exposes metadata-only create, read, rotate and delete operations; decrypted bytes exist only inside the operation-scoped Application lease.
+Secret storage is a Core-backed Infrastructure adapter. AES-256-GCM ciphertext, nonce, tag and key identifier are stored in the core database; the 32-byte key files are loaded from the absolute external `Secrets:KeyRingPath`. The active key identifier and lease lifetime are non-secret configuration, while key contents are deployment material. The HTTP layer exposes metadata-only create, read, rotate and delete operations; decrypted bytes exist only inside the operation-scoped Application lease.
 
 ### JulOS.Server
 
@@ -196,10 +196,10 @@ Responsibilities:
 
 ### 4.2 Package workers
 
-Backend package logic runs out of process. Each enabled package has a worker process or container with:
+Backend package logic runs out of process. Each enabled package has a supervised child process with:
 
 - package identity and version
-- health endpoint
+- health protocol message
 - authenticated control channel
 - registered capability providers
 - declared storage access
@@ -241,21 +241,21 @@ JulOS 1.0 installs only trusted official packages signed by the configured JulOS
 
 ## 6. Package backend communication
 
-Server and package workers communicate through versioned HTTP or gRPC contracts over a private control network.
+Server supervises each package worker as a child process and exchanges a bounded newline-delimited JSON protocol over the worker's standard input and output. This is not a private HTTP or gRPC endpoint and is not network-isolated (D034).
 
-Required worker endpoints:
+Required worker protocol messages:
 
 ```text
-GET  /health/live
-GET  /health/ready
-POST /control/start
-POST /control/stop
-POST /control/configure
-POST /control/validate
-GET  /control/registrations
+validate
+configure
+register
+start
+stop
+health
+command
 ```
 
-The exact transport is selected during M3. The semantic contract is fixed:
+The transport is the newline-delimited JSON protocol over the worker's standard input and output. The semantic contract is fixed:
 
 - calls are authenticated
 - calls have deadlines
@@ -318,7 +318,7 @@ Packages never obtain another package's service instance.
 
 ## 8.1 Durable operation execution
 
-`IOperationService` is the Core-owned boundary for long-running work. A caller creates a queued operation with a user-scoped idempotency key. The owning executor explicitly marks it running, appends progress, and reaches exactly one terminal state. Current status and every accepted progress event are committed in PostgreSQL, so reconnects and Server restarts do not invent completion or lose cancellation intent.
+`IOperationService` is the Core-owned boundary for long-running work. A caller creates a queued operation with a user-scoped idempotency key. The owning executor explicitly marks it running, appends progress, and reaches exactly one terminal state. Current status and every accepted progress event are committed in the core database, so reconnects and Server restarts do not invent completion or lose cancellation intent.
 
 A cancellation request for queued work cancels it immediately. A running request sets a durable cancellation timestamp; the worker or Agent must observe that flag and later acknowledge cancellation through the same lifecycle port. Failure completion accepts only a stable code and sanitized safe detail. Raw exceptions remain inside the executor boundary.
 
@@ -403,11 +403,11 @@ Julgate and guacd implementation details remain behind Remote package contracts.
 - soft deletion is used only when audit or recovery requires it
 - domain history is not duplicated from external systems
 
-`CoreDbContext` lives in Infrastructure and owns only the PostgreSQL `core` schema. It maps persistence-specific rows to the Phase 1 domain concepts instead of adding EF Core constructors or annotations to Domain. Package-owned schemas never enter this context.
+`CoreDbContext` lives in Infrastructure and owns only the `core` schema. It maps persistence-specific rows to the Phase 1 domain concepts instead of adding EF Core constructors or annotations to Domain. Package-owned schemas never enter this context.
 
-The migration history table is `core.__ef_migrations_history`. Schema changes run only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service. Normal Server startup does not call `Migrate`, and manual schema edits are unsupported.
+Schema initialization runs only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service; normal Server startup never changes the schema and manual schema edits are unsupported. On PostgreSQL this applies the committed EF Core migrations, tracked in the `core.__ef_migrations_history` table; on the default SQLite store it creates the current model directly through `EnsureCreated`.
 
-The first migration uses database keys, foreign keys, unique indexes and check constraints to enforce identities, valid revisions, fault metadata, scope shape, layout bounds and lifecycle timestamps. Audit events additionally have a PostgreSQL trigger that rejects updates and deletes.
+The PostgreSQL migrations enforce identities, valid revisions, fault metadata, scope shape, layout bounds and lifecycle timestamps with database keys, foreign keys, unique indexes and check constraints, and add an append-only trigger that rejects updates and deletes on audit events. The default SQLite store creates the same keys, foreign keys and unique indexes but omits the PostgreSQL check constraints and the audit trigger; those invariants are enforced by the Domain and Application rules that apply on both providers.
 
 ## 13. Events and real-time updates
 

@@ -10,7 +10,7 @@ JulOS provides access to private infrastructure and therefore has a high-impact 
 Public or remote client
   │ HTTPS
 JulOS Server
-  ├─ PostgreSQL
+  ├─ core database
   ├─ Runtime Manager
   ├─ package workers
   └─ outbound-connected Agents
@@ -125,7 +125,7 @@ Requirements:
 
 Core secret references use AES-256-GCM. Every encryption uses a random 96-bit nonce and a 128-bit authentication tag. The opaque reference identity, owning scope and purpose are authenticated associated data, so ciphertext cannot be copied to a different reference or scope without detection.
 
-`Secrets:KeyRingPath` points to an absolute external directory containing one Base64-encoded 32-byte key per `<key-id>.key` file. `Secrets:ActiveKeyId` selects the key for new writes; retained files decrypt older rows. The directory must be readable only by the Server identity and backed up separately from PostgreSQL. Key files are never generated automatically in production, stored in the database, written to logs or included in ordinary application backup archives. Activating or retiring a key requires a controlled Server restart.
+`Secrets:KeyRingPath` points to an absolute external directory containing one Base64-encoded 32-byte key per `<key-id>.key` file. `Secrets:ActiveKeyId` selects the key for new writes; retained files decrypt older rows. The directory must be readable only by the Server identity and backed up separately from the core database. Key files are never generated automatically in production, stored in the database, written to logs or included in ordinary application backup archives. Activating or retiring a key requires a controlled Server restart.
 
 Deletion clears the encryption-key identifier, nonce, ciphertext and authentication tag in the same transaction that appends the sanitized audit event. A lease is issued only for a running, non-cancelling operation whose package identity matches the reference scope, expires after 30 seconds to 15 minutes, and zeroes its in-memory buffer when disposed or expired.
 
@@ -326,7 +326,7 @@ julos-postgres
 julos-runtime-manager
 ```
 
-`deploy/compose/compose.yaml` currently defines the first two as the development stack. Runtime Manager joins it with `PKG-003`. The development stack publishes only the Server port, bound to the loopback interface, and requires `JULOS_POSTGRES_PASSWORD` to be set; there is no default credential.
+`deploy/compose/compose.yaml` currently defines the first two as the development stack. Runtime Manager joins it with `PKG-003`. The development stack publishes only the Server port, bound to the loopback interface, and requires `JULOS_POSTGRES_PASSWORD` to be set; there is no default credential. The core store defaults to a single SQLite file; this compose stack uses the opt-in PostgreSQL provider, which is required for multi-instance and recommended for larger deployments.
 
 ### 15.2 Optional services
 
@@ -365,7 +365,7 @@ Missing required configuration fails startup or package enablement with an actio
 
 A complete control-plane backup includes:
 
-- PostgreSQL database
+- core database (SQLite file by default, PostgreSQL when configured)
 - encryption key ring and documented restore secret
 - package artifact metadata and package-owned schemas
 - package configuration
@@ -380,7 +380,7 @@ Runtime containers, temporary profiles, caches and active sessions are recreated
 Initial supported process:
 
 1. enter backup-consistent mode or use database-consistent snapshot procedure
-2. create PostgreSQL logical backup
+2. copy the SQLite database file, or create a PostgreSQL logical backup when PostgreSQL is configured
 3. archive key ring and required persistent volumes
 4. record JulOS version and installed package versions
 5. encrypt backup at rest
@@ -391,7 +391,7 @@ Initial supported process:
 
 1. deploy compatible JulOS version
 2. stop normal Server processing
-3. restore PostgreSQL and required persistent volumes
+3. restore the core database (SQLite file copy by default, or PostgreSQL) and required persistent volumes
 4. restore encryption key material
 5. start in safe mode with optional packages disabled
 6. validate core migration state
@@ -462,7 +462,7 @@ Cleanup is observable and never deletes active resources. Persistent browser pro
 - package installation and repair
 - Browser runtime failure
 - Remote runtime failure
-- PostgreSQL backup and restore
+- core database backup and restore
 - lost Agent
 - full disk
 - broken package migration

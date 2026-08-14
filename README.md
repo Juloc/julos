@@ -137,4 +137,4 @@ No license has been selected yet. Until a license is added, all rights are reser
 
 ## Durable operations
 
-Long-running control-plane work uses versioned operation resources backed by PostgreSQL. Creation is idempotent, progress and cancellation survive reconnects, and success is recorded only after the owning executor verifies the requested state. See [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md#7-background-operations).
+Long-running control-plane work uses versioned operation resources backed by the core database (SQLite by default, PostgreSQL optional). Creation is idempotent, progress and cancellation survive reconnects, and success is recorded only after the owning executor verifies the requested state. See [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md#7-background-operations).

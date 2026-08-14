@@ -347,7 +347,7 @@ Required services:
 
 - JulOS Server
 - JulOS Desktop assets served by Server
-- PostgreSQL
+- core database (SQLite by default, PostgreSQL optional)
 - Runtime Manager with narrowly scoped control of JulOS package runtime containers
 
 Optional services:

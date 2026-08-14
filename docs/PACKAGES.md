@@ -205,7 +205,7 @@ A package may not use:
 
 ## 9. Package worker contract
 
-Every backend package worker exposes authenticated private control endpoints or equivalent gRPC methods for:
+The Server supervises each backend package worker as a child process and exchanges a bounded newline-delimited JSON protocol over its standard input/output, not a private HTTP endpoint and not gRPC, for:
 
 ```text
 liveness

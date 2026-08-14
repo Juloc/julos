@@ -39,15 +39,24 @@ public sealed record CoreDatabaseConfiguration(
         ArgumentNullException.ThrowIfNull(configuration);
 
         var providerValue = configuration["Database:Provider"]?.Trim();
+        var connectionString = configuration.GetConnectionString("CoreDatabase");
+
+        // SQLite is the default core store for a single-host deployment; PostgreSQL is
+        // opt-in for larger or multi-instance deployments (D033). An explicit provider is
+        // always honoured. When none is set, a configured connection string still selects
+        // PostgreSQL so existing deployments that only set ConnectionStrings__CoreDatabase
+        // keep working, while a bare deployment with nothing configured gets SQLite.
         var provider = providerValue?.ToLowerInvariant() switch
         {
-            null or "" or "postgres" or "postgresql" => CoreDatabaseProvider.PostgreSql,
             "sqlite" => CoreDatabaseProvider.Sqlite,
+            "postgres" or "postgresql" => CoreDatabaseProvider.PostgreSql,
+            null or "" => string.IsNullOrWhiteSpace(connectionString)
+                ? CoreDatabaseProvider.Sqlite
+                : CoreDatabaseProvider.PostgreSql,
             _ => throw new InvalidOperationException(
                 "Database:Provider must be either 'postgresql' or 'sqlite'."),
         };
 
-        var connectionString = configuration.GetConnectionString("CoreDatabase");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             if (provider == CoreDatabaseProvider.Sqlite)

@@ -300,3 +300,31 @@ Both were found by running a real Remote session through a real JulOS Server, a 
 Reason: matching Docker's actual reporting behavior for digest references, rather than assuming it echoes back whatever reference string was supplied, is a factual correction, not a design choice — every alternative (accepting the short ID as the identity, or forbidding digest references) would either weaken the identity check's purpose or contradict the mandatory digest-pinning policy. Labels are already the established mechanism for every other piece of identity Runtime Manager must recover after the fact.
 
 Reason: the lease-gated decryption path already existed and is the only sanctioned way to read a secret's value (D029); wiring Remote session provisioning to use it (rather than inventing a second credential-delivery path) keeps exactly one decryption boundary in Core. Modeling credential acquisition as its own Operation keeps the existing idempotency, cancellation and audit semantics that `IOperationService` already provides, instead of adding bespoke state to `RemoteSessionRow`. Keeping the byte layout a provider-boundary convention (not a Core contract) preserves the existing protocol-neutral boundary: Core forwards opaque bytes exactly as it already does for the Browser display credential and the Remote callback token.
+
+## D033 — SQLite is the default core store; PostgreSQL is opt-in
+
+**Status:** Accepted
+
+The core store supports both SQLite and PostgreSQL through one `CoreDbContext`. For a single-host homelab — the primary 1.0 target — SQLite in one file is the default: no second container, no database password and no database network port. PostgreSQL is opt-in for larger or multi-instance deployments.
+
+Provider selection in `CoreDatabaseConfiguration.Read`:
+
+- an explicit `Database:Provider` of `sqlite` or `postgresql`/`postgres` is always honoured;
+- with no provider set, a configured `ConnectionStrings:CoreDatabase` selects PostgreSQL, so an existing deployment that only sets a connection string keeps its behaviour unchanged;
+- with no provider and no connection string, the store defaults to SQLite at `/var/lib/julos/julos.db`.
+
+PostgreSQL remains required whenever more than one Server instance shares the core store, and stays the recommended choice for larger deployments, because SQLite supports exactly one writer on one host.
+
+Reason: the earlier implicit default was PostgreSQL, which forced every evaluation and small single-owner deployment to run and secure a separate database server for no benefit. Defaulting to SQLite only when nothing at all is configured makes "just run the container" work out of the box, while leaving every deployment that already pins a provider or a connection string exactly as it was.
+
+## D034 — Package workers run as supervised stdio child processes, not network services
+
+**Status:** Accepted
+
+Earlier architecture text described package workers as network-isolated services reachable over private HTTP or gRPC endpoints and fronted by Runtime Manager. The implemented and accepted mechanism is different: `ProcessPackageWorkerSupervisor` launches each signed package worker as a child process and speaks one bounded newline-delimited JSON protocol over its standard input and output (validate, configure, register, start, stop, health and typed command). Runtime Manager owns session and helper *runtimes* (Browser, Remote provider); it does not currently front the package workers themselves.
+
+Reason: a supervised child process with a stdio contract is the smallest mechanism that satisfies the actual requirements — out-of-process fault isolation, a typed bounded request/response protocol with deadlines, and explicit package database-provider identity handoff — without a per-worker network listener, port allocation, service discovery or TLS between Server and worker on the same host. It follows the "add abstraction only for a proven repeated need" principle.
+
+Upgrade trigger: move a specific package worker behind a network boundary (its own container/network namespace, authenticated HTTP/gRPC, Runtime-Manager-managed) when that worker must run on a different host than Server, or when its blast radius — for example one reaching an external Docker or Proxmox API — justifies kernel-level network isolation. The change is made per worker, recorded here, and reflected in `ARCHITECTURE.md`, `TECHNICAL_SPECIFICATION.md` and `PACKAGES.md` at the same time.
+
+Reason: the prior HTTP/gRPC descriptions asserted an isolation boundary that is not built, which misleads security reasoning exactly where it will matter most. Recording the real transport and its explicit upgrade trigger keeps the documentation honest without paying for network isolation before a worker needs it.
