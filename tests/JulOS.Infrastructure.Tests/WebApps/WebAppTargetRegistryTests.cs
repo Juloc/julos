@@ -1,0 +1,127 @@
+﻿using JulOS.Infrastructure.WebApps;
+
+using Microsoft.Extensions.Configuration;
+
+namespace JulOS.Infrastructure.Tests.WebApps;
+
+[TestClass]
+public sealed class WebAppTargetRegistryTests
+{
+    private static IConfiguration Configuration(Dictionary<string, string?> values) =>
+        new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+
+    private static Dictionary<string, string?> OneTarget(
+        string host = "unifi.os.juloc.de",
+        string upstream = "https://10.0.0.5:8443",
+        string? mode = null)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["WebApps:Targets:0:Host"] = host,
+            ["WebApps:Targets:0:Upstream"] = upstream,
+        };
+        if (mode is not null)
+        {
+            values["WebApps:Targets:0:RenderingMode"] = mode;
+        }
+
+        return values;
+    }
+
+    [TestMethod]
+    public void EmptyConfigurationYieldsAnEmptyRegistry()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration([]));
+
+        Assert.AreEqual(0, registry.Count);
+        Assert.IsFalse(registry.TryResolve("unifi.os.juloc.de", out _));
+    }
+
+    [TestMethod]
+    public void ResolvesALocalTargetByHostIgnoringCaseAndPort()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget()));
+
+        Assert.AreEqual(1, registry.Count);
+        Assert.IsTrue(registry.TryResolve("UNIFI.os.juloc.de:443", out var target));
+        Assert.AreEqual("unifi.os.juloc.de", target.Host);
+        Assert.AreEqual(new Uri("https://10.0.0.5:8443"), target.Upstream);
+        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
+    }
+
+    [TestMethod]
+    public void DefaultsToLocalRenderingWhenModeIsOmitted()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget()));
+
+        Assert.IsTrue(registry.TryResolve("unifi.os.juloc.de", out var target));
+        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
+    }
+
+    [TestMethod]
+    public void ResolvesAnAutoTarget()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget(mode: "auto")));
+
+        Assert.IsTrue(registry.TryResolve("unifi.os.juloc.de", out var target));
+        Assert.AreEqual(WebAppRenderingMode.Auto, target.RenderingMode);
+    }
+
+    [TestMethod]
+    public void DoesNotResolveAStreamedTarget()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget(mode: "streamed")));
+
+        Assert.AreEqual(1, registry.Count);
+        Assert.IsFalse(registry.TryResolve("unifi.os.juloc.de", out _));
+    }
+
+    [TestMethod]
+    public void DoesNotResolveAnUnknownHost()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget()));
+
+        Assert.IsFalse(registry.TryResolve("grafana.os.juloc.de", out _));
+        Assert.IsFalse(registry.TryResolve(null, out _));
+        Assert.IsFalse(registry.TryResolve("   ", out _));
+    }
+
+    [TestMethod]
+    public void ThrowsWhenTheUpstreamIsNotAnAbsoluteHttpUri()
+    {
+        var configuration = Configuration(OneTarget(upstream: "not-a-uri"));
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
+    }
+
+    [TestMethod]
+    public void ThrowsWhenTheHostCarriesASchemeOrPort()
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => WebAppTargetRegistry.Read(Configuration(OneTarget(host: "https://unifi.os.juloc.de"))));
+        Assert.ThrowsExactly<InvalidOperationException>(
+            () => WebAppTargetRegistry.Read(Configuration(OneTarget(host: "unifi.os.juloc.de:443"))));
+    }
+
+    [TestMethod]
+    public void ThrowsOnAnUnknownRenderingMode()
+    {
+        var configuration = Configuration(OneTarget(mode: "embedded"));
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
+    }
+
+    [TestMethod]
+    public void ThrowsWhenTwoTargetsShareAHost()
+    {
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["WebApps:Targets:0:Host"] = "unifi.os.juloc.de",
+            ["WebApps:Targets:0:Upstream"] = "https://10.0.0.5:8443",
+            ["WebApps:Targets:1:Host"] = "UNIFI.os.juloc.de",
+            ["WebApps:Targets:1:Upstream"] = "https://10.0.0.6:8443",
+        });
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
+    }
+}

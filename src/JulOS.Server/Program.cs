@@ -24,6 +24,7 @@ using JulOS.Server.Remote;
 using JulOS.Server.SafeMode;
 using JulOS.Server.Secrets;
 using JulOS.Server.Security;
+using JulOS.Server.WebApps;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -51,6 +52,7 @@ var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
 builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
+builder.Services.AddJulOsWebAppProxy(builder.Configuration);
 builder.Services.AddHostedService<RemoteSessionLifecycleWorker>();
 builder.Services.AddJulOsAgentControl();
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
@@ -103,6 +105,7 @@ app.UseRateLimiter();
 app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseJulOsWebAppProxy();
 app.UseAntiforgery();
 
 app.MapStaticAssets()

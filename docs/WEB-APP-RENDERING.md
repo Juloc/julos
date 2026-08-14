@@ -92,7 +92,22 @@ Local mode depends on wildcard DNS for `*.<julos-domain>` and a wildcard TLS cer
 - **M4** — Cookie, redirect and `SameSite` edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
 - **M5** — Security and footprint review and the remote-access runbook, as release gates before the mode is enabled.
 
-## 10. Open questions
+## 10. Configuration (initial slice)
+
+The first slice reads its targets from configuration. Each target maps a JulOS host to an internal upstream:
+
+```text
+WebApps:Targets:0:Host           unifi.os.juloc.de
+WebApps:Targets:0:Upstream       https://10.0.0.5:8443
+WebApps:Targets:0:RenderingMode  local            # local (default) | streamed | auto
+WebApps:AllowInvalidUpstreamCertificates  false   # opt-in for self-signed internal upstreams
+```
+
+As environment variables the same keys use the double-underscore form, for example
+`WebApps__Targets__0__Host`. Database-backed targets and per-target credential references
+replace this static configuration in a later milestone.
+
+## 11. Open questions
 
 - Confirm wildcard DNS and a wildcard TLS certificate are available for the deployment domain.
 - Whether the transparent proxy is a Core capability or lives inside the Browser package boundary.
