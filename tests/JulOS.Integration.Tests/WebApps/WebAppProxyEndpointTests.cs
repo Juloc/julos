@@ -1,17 +1,18 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
+using System.Net.WebSockets;
+using System.Text;
 
 using JulOS.Contracts.Authentication;
 using JulOS.Contracts.WebApps;
-using JulOS.Server.WebApps;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace JulOS.Integration.Tests.WebApps;
 
@@ -23,13 +24,13 @@ public sealed class WebAppProxyEndpointTests
     private const string TargetHost = "app.test";
 
     [TestMethod]
-    public async Task ForwardsToTheUpstreamAndStripsFramingHeadersForAnAuthenticatedUser()
+    public async Task ForwardsToTheUpstreamStripsFramingHeadersAndDoesNotLeakTheJulOsSession()
     {
         var databasePath = CreateDatabasePath();
-        using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
         try
         {
-            using var host = CreateHost(databasePath, upstream);
+            using var host = CreateHost(databasePath, upstream.Urls.First());
             using var client = host.CreateClient();
             var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
 
@@ -37,16 +38,61 @@ public sealed class WebAppProxyEndpointTests
             using var response = await client.SendAsync(request).ConfigureAwait(false);
 
             Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            Assert.AreEqual("UPSTREAM-OK:/panel", body);
+            Assert.AreEqual("UPSTREAM-OK:/panel", await response.Content.ReadAsStringAsync().ConfigureAwait(false));
             Assert.IsFalse(response.Headers.Contains("X-Frame-Options"));
 
             Assert.IsTrue(response.Headers.TryGetValues("Content-Security-Policy", out var csp));
             var policy = string.Join("; ", csp!);
+            Assert.IsFalse(policy.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase), policy);
+
+            // The upstream must be reached with its own Host and the forwarded metadata, and must
+            // never receive JulOS's own session cookie.
+            Assert.AreEqual(new Uri(upstream.Urls.First()).Authority, Single(response, "X-Echo-Host"));
+            Assert.AreEqual(TargetHost, Single(response, "X-Echo-Forwarded-Host"));
+            Assert.AreEqual("http", Single(response, "X-Echo-Forwarded-Proto"));
             Assert.IsFalse(
-                policy.Contains("frame-ancestors", StringComparison.OrdinalIgnoreCase),
-                $"CSP still restricts framing: {policy}");
-            StringAssert.Contains(policy, "default-src 'self'");
+                Single(response, "X-Echo-Cookie").Contains(".JulOS.", StringComparison.OrdinalIgnoreCase),
+                $"JulOS cookie leaked to upstream: {Single(response, "X-Echo-Cookie")}");
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task ProxiesAWebSocketToTheUpstreamForAnAuthenticatedUser()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            using var host = CreateHost(databasePath, upstream.Urls.First());
+            using var client = host.CreateClient();
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            var webSocketClient = host.Server.CreateWebSocketClient();
+            webSocketClient.SubProtocols.Add("echo");
+            webSocketClient.ConfigureRequest = configuredRequest =>
+                configuredRequest.Headers["Cookie"] = cookie;
+
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = await webSocketClient
+                .ConnectAsync(new Uri($"ws://{TargetHost}/socket"), cancellation.Token)
+                .ConfigureAwait(false);
+
+            Assert.AreEqual("echo", socket.SubProtocol);
+
+            var payload = Encoding.UTF8.GetBytes("web-app-socket-roundtrip");
+            await socket.SendAsync(payload, WebSocketMessageType.Binary, endOfMessage: true, cancellation.Token)
+                .ConfigureAwait(false);
+
+            var received = new byte[payload.Length];
+            var result = await socket.ReceiveAsync(received, cancellation.Token).ConfigureAwait(false);
+
+            Assert.AreEqual(WebSocketMessageType.Binary, result.MessageType);
+            Assert.AreEqual(payload.Length, result.Count);
+            CollectionAssert.AreEqual(payload, received);
         }
         finally
         {
@@ -58,10 +104,10 @@ public sealed class WebAppProxyEndpointTests
     public async Task RejectsAnUnauthenticatedRequestToATargetHost()
     {
         var databasePath = CreateDatabasePath();
-        using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
         try
         {
-            using var host = CreateHost(databasePath, upstream);
+            using var host = CreateHost(databasePath, upstream.Urls.First());
             using var client = host.CreateClient();
 
             using var request = TargetRequest("/panel", cookie: null);
@@ -79,10 +125,10 @@ public sealed class WebAppProxyEndpointTests
     public async Task ListsConfiguredProxyTargetsForAnAuthenticatedUser()
     {
         var databasePath = CreateDatabasePath();
-        using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
         try
         {
-            using var host = CreateHost(databasePath, upstream);
+            using var host = CreateHost(databasePath, upstream.Urls.First());
             using var client = host.CreateClient();
             var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
 
@@ -104,21 +150,18 @@ public sealed class WebAppProxyEndpointTests
         }
     }
 
-    private static ServerHost CreateHost(string databasePath, IHost upstream)
-    {
-        var handler = upstream.GetTestServer().CreateHandler();
-        return new ServerHost(
+    private static string Single(HttpResponseMessage response, string header) =>
+        response.Headers.TryGetValues(header, out var values) ? string.Concat(values) : string.Empty;
+
+    private static ServerHost CreateHost(string databasePath, string upstreamUrl) =>
+        new(
             $"Data Source={databasePath};Cache=Shared",
             new Dictionary<string, string?>
             {
                 ["Database:Provider"] = "sqlite",
                 ["WebApps:Targets:0:Host"] = TargetHost,
-                ["WebApps:Targets:0:Upstream"] = "http://upstream.internal",
-            },
-            services => services
-                .AddHttpClient(WebAppProxyMiddleware.HttpClientName)
-                .ConfigurePrimaryHttpMessageHandler(() => handler));
-    }
+                ["WebApps:Targets:0:Upstream"] = upstreamUrl,
+            });
 
     private static HttpRequestMessage TargetRequest(string pathAndQuery, string? cookie)
     {
@@ -145,24 +188,59 @@ public sealed class WebAppProxyEndpointTests
                 .Select(value => value.Split(';', 2, StringSplitOptions.None)[0]));
     }
 
-    private static async Task<IHost> StartUpstreamAsync()
+    private static async Task<WebApplication> StartUpstreamAsync()
     {
-        var host = new HostBuilder()
-            .ConfigureWebHost(web => web
-                .UseTestServer()
-                .Configure(app => app.Run(async context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status200OK;
-                    context.Response.Headers["X-Frame-Options"] = "DENY";
-                    context.Response.Headers["Content-Security-Policy"] =
-                        "default-src 'self'; frame-ancestors 'none'";
-                    await context.Response
-                        .WriteAsync($"UPSTREAM-OK:{context.Request.Path}")
-                        .ConfigureAwait(false);
-                })))
-            .Build();
-        await host.StartAsync().ConfigureAwait(false);
-        return host;
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+        var app = builder.Build();
+        app.UseWebSockets();
+        app.Run(async context =>
+        {
+            if (context.WebSockets.IsWebSocketRequest)
+            {
+                await EchoWebSocketAsync(context).ConfigureAwait(false);
+                return;
+            }
+
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.Headers["X-Frame-Options"] = "DENY";
+            context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'";
+            context.Response.Headers["X-Echo-Host"] = context.Request.Host.Value;
+            context.Response.Headers["X-Echo-Forwarded-Host"] = context.Request.Headers["X-Forwarded-Host"].ToString();
+            context.Response.Headers["X-Echo-Forwarded-Proto"] = context.Request.Headers["X-Forwarded-Proto"].ToString();
+            context.Response.Headers["X-Echo-Cookie"] = context.Request.Headers.Cookie.ToString();
+            await context.Response.WriteAsync($"UPSTREAM-OK:{context.Request.Path}").ConfigureAwait(false);
+        });
+        await app.StartAsync().ConfigureAwait(false);
+        return app;
+    }
+
+    private static async Task EchoWebSocketAsync(HttpContext context)
+    {
+        var subprotocol = context.WebSockets.WebSocketRequestedProtocols.Count > 0
+            ? context.WebSockets.WebSocketRequestedProtocols[0]
+            : null;
+        using var socket = await context.WebSockets.AcceptWebSocketAsync(subprotocol).ConfigureAwait(false);
+        var buffer = new byte[4 * 1024];
+        while (socket.State == WebSocketState.Open)
+        {
+            var result = await socket.ReceiveAsync(buffer, context.RequestAborted).ConfigureAwait(false);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await socket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure,
+                    result.CloseStatusDescription,
+                    context.RequestAborted).ConfigureAwait(false);
+                return;
+            }
+
+            await socket.SendAsync(
+                buffer.AsMemory(0, result.Count),
+                result.MessageType,
+                result.EndOfMessage,
+                context.RequestAborted).ConfigureAwait(false);
+        }
     }
 
     private static string CreateDatabasePath()

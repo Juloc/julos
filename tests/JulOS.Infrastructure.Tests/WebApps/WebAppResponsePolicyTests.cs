@@ -72,4 +72,52 @@ public sealed class WebAppResponsePolicyTests
         Assert.IsNull(WebAppResponsePolicy.RewriteContentSecurityPolicy(null));
         Assert.AreEqual(string.Empty, WebAppResponsePolicy.RewriteContentSecurityPolicy(string.Empty));
     }
+
+    [TestMethod]
+    public void StripsFrameAncestorsFromEveryCommaSeparatedPolicy()
+    {
+        Assert.AreEqual(
+            "default-src 'self'",
+            WebAppResponsePolicy.RewriteContentSecurityPolicy("default-src 'self', frame-ancestors 'none'"));
+        Assert.AreEqual(
+            "default-src 'self'",
+            WebAppResponsePolicy.RewriteContentSecurityPolicy("frame-ancestors 'self', default-src 'self'"));
+    }
+
+    [TestMethod]
+    public void KeepsSurvivingPoliciesWhenOnlySomeAreEmptied()
+    {
+        Assert.AreEqual(
+            "default-src 'self', script-src 'self'",
+            WebAppResponsePolicy.RewriteContentSecurityPolicy(
+                "frame-ancestors 'none', default-src 'self'; frame-ancestors 'self', script-src 'self'"));
+    }
+
+    [TestMethod]
+    public void FilterForwardedCookiesRemovesJulOsCookiesAndKeepsTheRest()
+    {
+        Assert.AreEqual(
+            "sid=abc; theme=dark",
+            WebAppResponsePolicy.FilterForwardedCookies("sid=abc; .JulOS.Session=xyz; theme=dark; .JulOS.Antiforgery=q"));
+    }
+
+    [TestMethod]
+    public void FilterForwardedCookiesMatchesTheJulOsPrefixCaseInsensitively()
+    {
+        Assert.AreEqual("a=1", WebAppResponsePolicy.FilterForwardedCookies(".julos.session=x; a=1"));
+    }
+
+    [TestMethod]
+    public void FilterForwardedCookiesReturnsNullWhenNothingRemains()
+    {
+        Assert.IsNull(WebAppResponsePolicy.FilterForwardedCookies(".JulOS.Session=xyz"));
+        Assert.IsNull(WebAppResponsePolicy.FilterForwardedCookies(null));
+        Assert.IsNull(WebAppResponsePolicy.FilterForwardedCookies("   "));
+    }
+
+    [TestMethod]
+    public void FilterForwardedCookiesKeepsAllCookiesWhenNoneAreJulOs()
+    {
+        Assert.AreEqual("a=1; b=2", WebAppResponsePolicy.FilterForwardedCookies("a=1; b=2"));
+    }
 }

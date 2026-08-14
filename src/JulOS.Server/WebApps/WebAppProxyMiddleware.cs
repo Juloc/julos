@@ -85,7 +85,9 @@ internal sealed class WebAppProxyMiddleware
             new HttpMethod(request.Method),
             BuildUpstreamUri(target.Upstream, request, request.Scheme));
 
-        var hasBody = request.ContentLength is > 0 || request.Headers.TransferEncoding.Count > 0;
+        var hasBody = !HttpMethods.IsGet(request.Method)
+            && !HttpMethods.IsHead(request.Method)
+            && request.ContentLength != 0;
         if (hasBody)
         {
             upstreamRequest.Content = new StreamContent(request.Body);
@@ -93,6 +95,17 @@ internal sealed class WebAppProxyMiddleware
 
         foreach (var header in request.Headers)
         {
+            if (string.Equals(header.Key, "Cookie", StringComparison.OrdinalIgnoreCase))
+            {
+                var forwardedCookies = WebAppResponsePolicy.FilterForwardedCookies(header.Value.ToString());
+                if (forwardedCookies is not null)
+                {
+                    upstreamRequest.Headers.TryAddWithoutValidation("Cookie", forwardedCookies);
+                }
+
+                continue;
+            }
+
             if (IsSuppressedRequestHeader(header.Key))
             {
                 continue;
@@ -154,8 +167,8 @@ internal sealed class WebAppProxyMiddleware
             upstream.Options.AddSubProtocol(protocol);
         }
 
-        var cookie = context.Request.Headers.Cookie.ToString();
-        if (!string.IsNullOrEmpty(cookie))
+        var cookie = WebAppResponsePolicy.FilterForwardedCookies(context.Request.Headers.Cookie.ToString());
+        if (cookie is not null)
         {
             upstream.Options.SetRequestHeader("Cookie", cookie);
         }
@@ -299,7 +312,10 @@ internal sealed class WebAppProxyMiddleware
 
     private static bool IsSuppressedRequestHeader(string name) =>
         WebAppResponsePolicy.IsSuppressedResponseHeader(name)
-        || string.Equals(name, "Host", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(name, "Host", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Forwarded", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase);
 
     private static async Task WriteFailureAsync(HttpContext context, int status, string code, string detail)
     {
