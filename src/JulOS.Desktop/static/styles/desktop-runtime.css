@@ -149,6 +149,76 @@
   background: var(--julos-color-surface);
 }
 
+.webapp-browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.webapp-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--julos-color-border, rgba(255, 255, 255, 0.12));
+}
+
+.webapp-toolbar[hidden] {
+  display: none;
+}
+
+.webapp-nav {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--julos-color-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.webapp-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.webapp-address {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--julos-color-border, rgba(255, 255, 255, 0.16));
+  border-radius: 8px;
+  background: var(--julos-color-background);
+  color: inherit;
+}
+
+.webapp-open {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--julos-accent, #12a4a4);
+  color: #04202f;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.webapp-status {
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.webapp-status:empty {
+  display: none;
+}
+
+.webapp-browser > iframe.window-webapp {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
 .window-loading {
   display: grid;
   height: 100%;

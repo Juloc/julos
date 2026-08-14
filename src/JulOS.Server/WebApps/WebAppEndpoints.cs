@@ -18,6 +18,13 @@ internal static class WebAppEndpoints
             .WithTags("WebApps")
             .RequireAuthorization();
 
+        endpoints.MapGet(
+                "/api/v1/webapps/proxy",
+                (WebAppTargetRegistry registry) =>
+                    new WebProxyConfigResponse(registry.DynamicEnabled, registry.DynamicProxyZone))
+            .WithTags("WebApps")
+            .RequireAuthorization();
+
         return endpoints;
     }
 }

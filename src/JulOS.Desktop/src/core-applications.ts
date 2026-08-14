@@ -8,6 +8,7 @@ import {
 } from './package-manager.js';
 import type { SupportedLanguage } from './localization.js';
 import type { DesktopApplication, ShellApiClient, UserProfile } from './shell-api.js';
+import { createWebAppBrowserSurface } from './webapp-browser.js';
 
 export const CoreApplicationIds = {
   settings: 'core.settings',
@@ -15,6 +16,7 @@ export const CoreApplicationIds = {
   agents: 'core.agents',
   notifications: 'core.notifications',
   problems: 'core.problems',
+  webappBrowser: 'core.webapp-browser',
 } as const;
 
 export interface CoreSurfaceHandle {
@@ -58,6 +60,7 @@ export class CoreApplicationCatalog {
       coreApplication(CoreApplicationIds.agents, text(language, 'agents'), 'agents', 820, 580, 480, 360),
       coreApplication(CoreApplicationIds.notifications, text(language, 'notifications'), 'notifications', 720, 560, 420, 340),
       coreApplication(CoreApplicationIds.problems, text(language, 'problems'), 'problems', 760, 580, 440, 360),
+      coreApplication(CoreApplicationIds.webappBrowser, text(language, 'webappBrowser'), 'webapp-browser', 1024, 720, 480, 360, 'multiple-instances'),
     ];
   }
 
@@ -77,6 +80,8 @@ export class CoreApplicationCatalog {
         return this.#createNotificationSurface(false);
       case CoreApplicationIds.problems:
         return this.#createNotificationSurface(true);
+      case CoreApplicationIds.webappBrowser:
+        return createWebAppBrowserSurface(this.#api);
       default:
         throw new Error(`Core application '${applicationId}' is not registered.`);
     }
@@ -463,6 +468,7 @@ function coreApplication(
   defaultHeight: number,
   minimumWidth: number,
   minimumHeight: number,
+  instancePolicy: DesktopApplication['instancePolicy'] = 'single-instance-per-user',
 ): DesktopApplication {
   return {
     applicationDefinitionId: id,
@@ -470,7 +476,7 @@ function coreApplication(
     packageVersion: '1',
     stableKey,
     displayNameKey: title,
-    instancePolicy: 'single-instance-per-user',
+    instancePolicy,
     defaultWidth,
     defaultHeight,
     minimumWidth,
@@ -617,7 +623,7 @@ type TextKey = keyof typeof messages.en;
 
 const messages = {
   en: {
-    settings: 'Settings', packages: 'Package Manager', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Notifications', problems: 'Problems',
+    settings: 'Settings', packages: 'Package Manager', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Notifications', problems: 'Problems', webappBrowser: 'Web Browser',
     language: 'Language', theme: 'Theme', motion: 'Motion', timeZone: 'Time zone', system: 'System', light: 'Light', dark: 'Dark',
     motionEnabled: 'Enabled', motionReduced: 'Reduced', save: 'Save', saving: 'Saving…', saved: 'Saved', loading: 'Loading…',
     requestFailed: 'Request failed.', refresh: 'Refresh', storeDescription: 'Official JulOS packages. Signatures, configuration and activation are handled automatically.',
@@ -630,7 +636,7 @@ const messages = {
     configuration: 'Configuration JSON', configure: 'Configure',
   },
   de: {
-    settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme',
+    settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme', webappBrowser: 'Web-Browser',
     language: 'Sprache', theme: 'Design', motion: 'Animationen', timeZone: 'Zeitzone', system: 'System', light: 'Hell', dark: 'Dunkel',
     motionEnabled: 'Aktiviert', motionReduced: 'Reduziert', save: 'Speichern', saving: 'Speichern…', saved: 'Gespeichert', loading: 'Laden…',
     requestFailed: 'Anfrage fehlgeschlagen.', refresh: 'Aktualisieren', storeDescription: 'Offizielle JulOS-Pakete. Signatur, Konfiguration und Aktivierung erledigt JulOS automatisch.',

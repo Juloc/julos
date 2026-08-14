@@ -102,6 +102,11 @@ export interface WebAppSummary {
   readonly host: string;
 }
 
+export interface WebProxyConfig {
+  readonly enabled: boolean;
+  readonly proxyZone: string;
+}
+
 export class ShellApiClient {
   readonly #api: JulOsApiClient;
 
@@ -192,5 +197,9 @@ export class ShellApiClient {
 
   public readWebApps(): Promise<readonly WebAppSummary[]> {
     return this.#api.get<readonly WebAppSummary[]>('/api/v1/webapps');
+  }
+
+  public readWebProxyConfig(): Promise<WebProxyConfig> {
+    return this.#api.get<WebProxyConfig>('/api/v1/webapps/proxy');
   }
 }

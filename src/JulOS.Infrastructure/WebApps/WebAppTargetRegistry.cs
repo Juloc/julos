@@ -45,6 +45,12 @@ public sealed class WebAppTargetRegistry
     /// <summary>Gets the number of configured local-proxy targets.</summary>
     public int Count => this.targetsByHost.Count;
 
+    /// <summary>Gets whether the dynamic "type a URL" proxy mode is enabled.</summary>
+    public bool DynamicEnabled => this.dynamicPolicy.Enabled;
+
+    /// <summary>Gets the DNS zone under which encoded dynamic proxy hosts are served.</summary>
+    public string DynamicProxyZone => this.dynamicPolicy.ProxyZone;
+
     /// <summary>Reads the configured web-application targets. Missing configuration yields an empty registry.</summary>
     public static WebAppTargetRegistry Read(IConfiguration configuration)
     {
@@ -200,6 +206,10 @@ internal sealed class WebAppDynamicProxyPolicy
         this.zone = zone;
         this.allowlist = allowlist;
     }
+
+    public bool Enabled => this.enabled;
+
+    public string ProxyZone => this.zone;
 
     public static WebAppDynamicProxyPolicy Read(IConfiguration configuration)
     {
