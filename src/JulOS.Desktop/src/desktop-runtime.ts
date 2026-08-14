@@ -16,6 +16,7 @@ import type { SupportedLanguage } from './localization.js';
 import { classifyViewport, deriveResponsiveDesktop } from './responsive-desktop.js';
 import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
+import { WebAppCatalog, WebAppPackageId } from './web-app-catalog.js';
 import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
@@ -68,6 +69,7 @@ export class DesktopRuntime {
   readonly #widgetHost = new WidgetHostStore();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
+  readonly #webApps: WebAppCatalog;
   readonly #keyboard: ShellKeyboardController;
   readonly #applications = new Map<string, DesktopApplication>();
   readonly #widgets = new Map<string, DesktopWidget>();
@@ -108,6 +110,10 @@ export class DesktopRuntime {
       onFailure: options.onFailure,
       onProfileChanged: options.onProfileChanged ?? (() => undefined),
       onPackagesChanged: () => this.#refreshPackageCatalog(),
+    });
+    this.#webApps = new WebAppCatalog({
+      api: options.api,
+      onFailure: options.onFailure,
     });
     this.#keyboard = new ShellKeyboardController({
       openLauncher: () => this.#openLauncher(),
@@ -255,7 +261,11 @@ export class DesktopRuntime {
     packageApplications: readonly DesktopApplication[],
     widgets: readonly DesktopWidget[],
   ): void {
-    const applications = [...this.#coreApplications.applications(), ...packageApplications];
+    const applications = [
+      ...this.#coreApplications.applications(),
+      ...this.#webApps.applications(),
+      ...packageApplications,
+    ];
     this.#applications.clear();
     this.#widgets.clear();
     for (const application of applications) {
@@ -292,7 +302,10 @@ export class DesktopRuntime {
   }
 
   async #refreshPackageCatalog(): Promise<void> {
-    const [packageApplications, widgets] = await this.#readPackageCatalog();
+    const [, [packageApplications, widgets]] = await Promise.all([
+      this.#webApps.refresh(),
+      this.#readPackageCatalog(),
+    ]);
     this.#replaceCatalog(packageApplications, widgets);
 
     const availableApplications = new Set(this.#applications.keys());
@@ -359,7 +372,10 @@ export class DesktopRuntime {
       if (application === undefined) {
         throw new Error(`Application '${launch.window.applicationId}' is not available.`);
       }
-      if (!this.#coreApplications.isCoreApplication(application.applicationDefinitionId)) {
+      if (
+        !this.#coreApplications.isCoreApplication(application.applicationDefinitionId)
+        && !this.#webApps.isWebApp(application.applicationDefinitionId)
+      ) {
         await this.#loadFrontend(application);
       }
       this.#closeLauncher();
@@ -424,7 +440,10 @@ export class DesktopRuntime {
   async #loadRestoredFrontends(): Promise<void> {
     const applicationIds = new Set(this.#store.windows.map((window) => window.applicationId));
     for (const applicationId of applicationIds) {
-      if (this.#coreApplications.isCoreApplication(applicationId)) {
+      if (
+        this.#coreApplications.isCoreApplication(applicationId)
+        || this.#webApps.isWebApp(applicationId)
+      ) {
         continue;
       }
       const application = this.#applications.get(applicationId);
@@ -775,6 +794,21 @@ export class DesktopRuntime {
       return;
     }
 
+    const webAppHost = this.#webApps.hostFor(application.applicationDefinitionId);
+    if (webAppHost !== null) {
+      const frame = document.createElement('iframe');
+      frame.className = 'window-webapp';
+      frame.src = `${location.protocol}//${webAppHost}/`;
+      frame.setAttribute(
+        'sandbox',
+        'allow-forms allow-scripts allow-same-origin allow-popups allow-downloads',
+      );
+      frame.referrerPolicy = 'no-referrer';
+      body.replaceChildren(frame);
+      this.#windowSurfaces.set(window.id, frame);
+      return;
+    }
+
     if (!customElements.get(application.elementName)) {
       return;
     }
@@ -1063,7 +1097,7 @@ function applicationTitle(application: DesktopApplication | undefined): string {
   if (application === undefined) {
     return 'Application';
   }
-  if (application.packageId === 'julos.core') {
+  if (application.packageId === 'julos.core' || application.packageId === WebAppPackageId) {
     return application.displayNameKey;
   }
   return application.stableKey
