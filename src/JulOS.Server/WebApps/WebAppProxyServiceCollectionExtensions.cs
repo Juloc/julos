@@ -1,6 +1,4 @@
-﻿using System.Net;
-
-using JulOS.Infrastructure.WebApps;
+﻿using JulOS.Infrastructure.WebApps;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,7 +7,7 @@ namespace JulOS.Server.WebApps;
 /// <summary>Registers and wires the local web-application reverse proxy.</summary>
 internal static class WebAppProxyServiceCollectionExtensions
 {
-    /// <summary>Reads the configured web-application targets and the upstream HTTP client.</summary>
+    /// <summary>Reads the configured web-application targets and the upstream HTTP clients.</summary>
     internal static IServiceCollection AddJulOsWebAppProxy(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -23,17 +21,13 @@ internal static class WebAppProxyServiceCollectionExtensions
 
         services
             .AddHttpClient(WebAppProxyMiddleware.HttpClientName)
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                AutomaticDecompression = DecompressionMethods.None,
-                UseCookies = false,
-                SslOptions =
-                {
-                    RemoteCertificateValidationCallback = (_, _, _, errors) =>
-                        options.UpstreamCertificateIsAcceptable(errors),
-                },
-            });
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                WebAppProxyMiddleware.CreateHttpHandler(options, requirePinnedAddresses: false));
+
+        services
+            .AddHttpClient(WebAppProxyMiddleware.DynamicHttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                WebAppProxyMiddleware.CreateHttpHandler(options, requirePinnedAddresses: true));
 
         return services;
     }

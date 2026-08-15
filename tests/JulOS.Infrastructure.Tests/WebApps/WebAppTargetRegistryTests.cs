@@ -1,4 +1,6 @@
-﻿using JulOS.Infrastructure.WebApps;
+﻿using System.Net;
+
+using JulOS.Infrastructure.WebApps;
 
 using Microsoft.Extensions.Configuration;
 
@@ -47,6 +49,7 @@ public sealed class WebAppTargetRegistryTests
         Assert.AreEqual("unifi.os.juloc.de", target.Host);
         Assert.AreEqual(new Uri("https://10.0.0.5:8443"), target.Upstream);
         Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
+        Assert.IsFalse(target.RequiresAddressPinning);
     }
 
     [TestMethod]
@@ -125,16 +128,24 @@ public sealed class WebAppTargetRegistryTests
         Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
     }
 
-    private static Dictionary<string, string?> DynamicConfig(string allowedHost) => new()
+    private static Dictionary<string, string?> DynamicConfig(params string[] allowedHosts)
     {
-        ["Authentication:CookieDomain"] = ".localtest.me",
-        ["WebApps:Dynamic:Enabled"] = "true",
-        ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
-        ["WebApps:Dynamic:AllowedHosts:0"] = allowedHost,
-    };
+        var values = new Dictionary<string, string?>
+        {
+            ["Authentication:CookieDomain"] = ".localtest.me",
+            ["WebApps:Dynamic:Enabled"] = "true",
+            ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+        };
+        for (var index = 0; index < allowedHosts.Length; index++)
+        {
+            values[$"WebApps:Dynamic:AllowedHosts:{index}"] = allowedHosts[index];
+        }
+
+        return values;
+    }
 
     [TestMethod]
-    public void ResolvesAnEncodedAllowedDynamicHost()
+    public async Task ResolvesAnEncodedAllowedDynamicLiteralToItsPinnedAddress()
     {
         var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig("192.168.0.0/16")));
         var host = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10:8443"), "p.localtest.me")!;
@@ -142,16 +153,62 @@ public sealed class WebAppTargetRegistryTests
         Assert.IsTrue(registry.TryResolve(host, out var target));
         Assert.AreEqual(new Uri("https://192.168.1.10:8443/"), target.Upstream);
         Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
+        Assert.IsTrue(target.RequiresAddressPinning);
+
+        var addresses = await registry.ResolveAllowedAddressesAsync(target, CancellationToken.None).ConfigureAwait(false);
+        CollectionAssert.AreEqual(new[] { IPAddress.Parse("192.168.1.10") }, addresses);
     }
 
     [TestMethod]
-    public void ResolvesAnEncodedAllowedDynamicHostByDnsSuffix()
+    public async Task DnsDynamicTargetRequiresBothAllowedNameAndAllowedResolvedNetwork()
     {
-        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig(".lan")));
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig(
+            "localhost",
+            "127.0.0.0/8",
+            "::1/128")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("http://localhost:8080"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        Assert.AreEqual(new Uri("http://localhost:8080/"), target.Upstream);
+
+        var addresses = await registry.ResolveAllowedAddressesAsync(target, CancellationToken.None).ConfigureAwait(false);
+        Assert.IsGreaterThan(0, addresses.Length);
+        Assert.IsTrue(addresses.All(IPAddress.IsLoopback));
+    }
+
+    [TestMethod]
+    public async Task DnsSuffixWithoutAnAllowedResolvedNetworkFailsClosed()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig("localhost")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("http://localhost:8080"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        var addresses = await registry.ResolveAllowedAddressesAsync(target, CancellationToken.None).ConfigureAwait(false);
+
+        Assert.AreEqual(0, addresses.Length);
+    }
+
+    [TestMethod]
+    public async Task DnsNameCannotEscapeToAnAddressOutsideItsConfiguredCidr()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig("localhost", "10.0.0.0/8")));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("http://localhost:8080"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        var addresses = await registry.ResolveAllowedAddressesAsync(target, CancellationToken.None).ConfigureAwait(false);
+
+        Assert.AreEqual(0, addresses.Length);
+    }
+
+    [TestMethod]
+    public void ResolvesAnEncodedAllowedDynamicHostByDnsSuffixBeforeAddressValidation()
+    {
+        var registry = WebAppTargetRegistry.Read(Configuration(DynamicConfig(".lan", "192.168.0.0/16")));
         var host = WebAppOriginCodec.EncodeHost(new Uri("https://grafana.lan:3000"), "p.localtest.me")!;
 
         Assert.IsTrue(registry.TryResolve(host, out var target));
         Assert.AreEqual(new Uri("https://grafana.lan:3000/"), target.Upstream);
+        Assert.IsTrue(target.RequiresAddressPinning);
     }
 
     [TestMethod]

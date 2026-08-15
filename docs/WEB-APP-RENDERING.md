@@ -1,6 +1,6 @@
 ﻿# Web application rendering
 
-Status: Planned. Design accepted in decision `D035`. This document is the implementation plan for how JulOS opens an internal web application inside a desktop window.
+Status: In progress. Design accepted in decision `D035`. The static transparent proxy, dynamic encoded-origin proxy and address-bar browser foundation are implemented; Agent-tunnel reachability, credential injection, compatibility fallback and the remaining release gates are still open.
 
 ## 1. Goal
 
@@ -30,25 +30,49 @@ A window is presentation state; the rendering mode is a property of the target, 
 
 Serving a foreign web application under a shared path prefix (`/proxy/app/...`) requires rewriting every absolute URL, script path, stylesheet reference, cookie path and WebSocket endpoint in the response. Modern single-page applications use absolute root paths and open their WebSocket at a fixed root path (for example `/wss/`), so they break under a path prefix. Rewriting a live single-page application is fragile and never complete.
 
-JulOS therefore does not rewrite application URLs. Each proxied target is served at its own host, at the root of that host, exactly where the application expects to be.
+JulOS therefore does not move an application underneath a shared path prefix. Each proxied target is served at its own host, at the root of that host, exactly where the application expects to be. Dynamic address-bar mode may still need bounded origin/reference rewriting when an application emits its original absolute upstream origin; that work is part of the remaining dynamic compatibility slice, not a path-prefix proxy.
 
 ### 3.2 Mechanism
 
 - Each approved target receives a stable hostname `<slug>.<julos-domain>` (for example `unifi.os.juloc.de`).
 - Wildcard DNS (`*.<julos-domain>`) and a wildcard TLS certificate resolve and terminate every target host. Certificate issuance and renewal use the Caddy integration.
-- The JulOS reverse proxy at that host forwards the request unchanged to the internal target and streams the response back byte for byte, including media and chunked bodies. It performs only header-level work:
+- The JulOS reverse proxy at that host forwards the request to the internal target and streams the response back, including media and chunked bodies. It performs only the compatibility and security work owned by the proxy:
   - remove `X-Frame-Options`;
   - narrow `Content-Security-Policy` `frame-ancestors` to the JulOS shell origin and drop directives that would block embedding;
   - adjust `Set-Cookie` `Domain` and `SameSite` so the application's own session cookies stay first-party inside the window iframe;
+  - rewrite proxy-owned redirect/location headers when they point back at the same upstream origin;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;
   - apply request and idle timeouts and a per-target request-rate budget.
 - **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through the outbound Agent tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.
 - **Authentication:** target credentials are injected on the server side through a short-lived secret lease (see the secret model in [`SECURITY_AND_OPERATIONS.md`](SECURITY_AND_OPERATIONS.md)). No target credential is ever sent to the client.
 - **Rendering:** the desktop window embeds an iframe whose source is the target host. Because JulOS controls that host's response headers, the shell origin is allowed to frame it. Several windows embed several iframes; the footprint is a normal browser tab.
 
-### 3.3 Why this renders locally
+### 3.3 Dynamic address-bar targets
 
-The proxy is a transparent byte pipe, not a remote browser. The application's HTML, JavaScript, WebSocket frames and media streams reach the user's own browser, which parses, executes and hardware-decodes them. A media stream plays with local hardware decoding; an interactive canvas runs on the local GPU.
+The Web Browser core application can encode a typed HTTP or HTTPS origin into one host label under `WebApps:Dynamic:ProxyZone`:
+
+```text
+https://grafana.lan:3000
+        ↓
+wa<base32-origin>.p.os.juloc.de
+```
+
+The encoded host is reversible and carries no credential. Dynamic mode remains default-deny through `WebApps:Dynamic:AllowedHosts`.
+
+The allowlist has two independent meanings:
+
+- a DNS suffix entry such as `.lan` authorizes a DNS **name**;
+- a CIDR entry such as `192.168.0.0/16` authorizes a resolved **network address**.
+
+A literal IP target must be covered by a CIDR entry. A DNS-name target must match an allowed DNS suffix and, after resolution, at least one resolved address must be covered by an explicit CIDR entry. A suffix alone never grants network reachability.
+
+For every dynamic request JulOS resolves the target before opening a connection, discards addresses outside the configured CIDRs and passes only the validated addresses to the transport. HTTP and WebSocket connections are opened directly to one of those validated addresses while the original target host remains the HTTP/TLS authority. The transport therefore cannot perform a second uncontrolled DNS lookup between authorization and connect. If DNS fails the request reports the upstream unavailable; if the name resolves only outside the configured networks the request is denied.
+
+This resolved-address rule is the SSRF boundary for dynamic mode. Adding a broad CIDR is therefore an explicit administrator decision, not an inferred private-network fallback.
+
+### 3.4 Why this renders locally
+
+The proxy is a transparent byte transport, not a remote browser. The application's HTML, JavaScript, WebSocket frames and media streams reach the user's own browser, which parses, executes and hardware-decodes them. A media stream plays with local hardware decoding; an interactive canvas runs on the local GPU.
 
 ## 4. Streamed mode
 
@@ -69,8 +93,10 @@ Fallback is an explicit, observable transition, not a hidden retry (see the no-s
 
 ## 6. Security model
 
-- Transparent proxying with header stripping and server-side credential injection is a credentialed intermediary. It is enabled per target, never globally, and every proxied target is an approved resource.
+- Transparent proxying with header stripping and server-side credential injection is a credentialed intermediary. Static targets are enabled explicitly; dynamic targets are constrained by both hostname and resolved-address policy.
+- Dynamic DNS names require an allowed suffix plus an allowed resolved CIDR, and the actual HTTP/WebSocket connection is pinned to the validated address set.
 - Target credentials live only in the encrypted secret store and are leased for the proxied connection; they never reach the client.
+- JulOS authentication/antiforgery cookies and inbound authorization/forwarding headers are stripped before a request is forwarded upstream.
 - Every proxied session and every credential lease creates an audit event.
 - A per-target request-rate budget limits abuse of an exposed proxy host.
 - The proxy never publishes the internal target. Reaching JulOS itself from outside the home network is the responsibility of an authenticated reverse proxy or an overlay network and is out of scope for this component; it is covered by the remote-access guidance in [`SECURITY_AND_OPERATIONS.md`](SECURITY_AND_OPERATIONS.md).
@@ -87,16 +113,16 @@ The JulOS session cookie must also be scoped to the deployment's parent domain (
 
 ## 9. Milestones
 
-- **M0** — Accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
-- **M1** — Transparent proxy for one real single-page target with WebSocket telemetry: served at its own host with header stripping, embedded in a desktop-window iframe and interactively usable.
-- **M2** — Reach the target through the Agent tunnel and inject its credential through a secret lease, with nothing secret reaching the client.
-- **M3** — Rendering-policy resolution with `auto` and an observable fallback to streamed mode.
-- **M4** — Cookie, redirect and `SameSite` edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
-- **M5** — Security and footprint review and the remote-access runbook, as release gates before the mode is enabled.
+- **M0 — Done:** accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
+- **M1 — In progress:** transparent local proxy, WebSocket transport, framing/cookie/redirect policy, configured-target launcher integration, dynamic encoded-origin backend and address-bar browser are implemented. Real target/browser acceptance and the remaining dynamic compatibility work are still required.
+- **M2 — Open:** reach targets through the Agent tunnel and inject target credentials through a secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
+- **M3 — Partially complete:** resolved-IP SSRF validation and connection pinning are implemented. Rendering-policy resolution with `auto` and an observable fallback to streamed mode remains.
+- **M4 — Open:** remaining cookie/redirect edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
+- **M5 — Open:** security and footprint review and the remote-access runbook, as release gates before the mode is enabled by default.
 
-## 10. Configuration (initial slice)
+## 10. Configuration
 
-The first slice reads its targets from configuration. Each target maps a JulOS host to an internal upstream:
+Static targets can be supplied from configuration during the current slice:
 
 ```text
 WebApps:Targets:0:Host           unifi.os.juloc.de
@@ -106,12 +132,22 @@ WebApps:AllowInvalidUpstreamCertificates  false   # opt-in for self-signed inter
 Authentication:CookieDomain      .os.juloc.de     # parent-domain scope so the session reaches target subdomains
 ```
 
-As environment variables the same keys use the double-underscore form, for example
-`WebApps__Targets__0__Host`. Database-backed targets and per-target credential references
-replace this static configuration in a later milestone.
+Dynamic address-bar mode is explicit and default-deny:
+
+```text
+WebApps:Dynamic:Enabled          true
+WebApps:Dynamic:ProxyZone        p.os.juloc.de
+WebApps:Dynamic:AllowedHosts:0   .lan
+WebApps:Dynamic:AllowedHosts:1   192.168.0.0/16
+WebApps:Dynamic:AllowedHosts:2   10.0.0.0/8
+```
+
+A DNS suffix allows names but must be paired with the CIDR ranges those names are permitted to resolve into. Literal IP targets require only a matching CIDR. As environment variables the same keys use the double-underscore form, for example `WebApps__Dynamic__AllowedHosts__1`.
+
+Database-backed targets and per-target credential references replace the static target list in a later milestone.
 
 ## 11. Open questions
 
 - Confirm wildcard DNS and a wildcard TLS certificate are available for the deployment domain.
-- Whether the transparent proxy is a Core capability or lives inside the Browser package boundary.
+- Final ownership of Agent-tunnel proxy reachability and credential injection within the existing Core/Browser capability boundaries.
 - Optional later extension: named, shareable workspaces that group several windows.
