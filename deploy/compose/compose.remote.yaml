@@ -13,7 +13,7 @@ x-remote-environment: &remote-environment
   Remote__Providers__0__Protocol: ${JULOS_REMOTE_PROVIDER_0_PROTOCOL:-ssh}
   Remote__Providers__0__ProviderPackageId: ${JULOS_REMOTE_PROVIDER_0_PACKAGE_ID:-de.juloc.julos.remote-provider}
   Remote__Providers__0__PackageVersion: ${JULOS_REMOTE_PROVIDER_0_PACKAGE_VERSION:-1.0.0}
-  Remote__Providers__0__Image: ${JULOS_REMOTE_PROVIDER_0_IMAGE:-ghcr.io/juloc/julos-remote-provider@sha256:e9c9d61adb82e56370a5fdaa76344dab686b4afd90a2ce41fc82cfe3a510b643}
+  Remote__Providers__0__Image: ${JULOS_REMOTE_PROVIDER_0_IMAGE:-ghcr.io/juloc/julos-remote-provider@sha256:dc0960cab89219df1347d5a98a6321087adb8d1bf0fe5021a2d23c8b3f2f376f}
   Remote__Providers__0__MemoryMegabytes: ${JULOS_REMOTE_PROVIDER_0_MEMORY_MB:-512}
   Remote__Providers__0__CpuLimit: ${JULOS_REMOTE_PROVIDER_0_CPU_LIMIT:-1}
   Remote__Providers__0__PidsLimit: ${JULOS_REMOTE_PROVIDER_0_PIDS_LIMIT:-256}

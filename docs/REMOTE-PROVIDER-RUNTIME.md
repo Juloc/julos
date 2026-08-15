@@ -58,10 +58,14 @@ A WebSocket `101 Switching Protocols` or Guacamole `ping` frames alone are not f
 
 ## Published and wired
 
-The provider publication started after the `/api/tokens` correction confirmed that the corrected authentication exchange was deployed, but the resulting session still emitted only Guacamole keepalive `ping` traffic. That test exposed the second provider defect documented above: the private upstream tunnel contained a valid `authToken` but omitted the required JSON connection selectors. That publication must not be treated as rendered-display evidence.
+The complete token-exchange and tunnel-selector correction was published successfully by the `0.4.0-beta.15` `session-runtimes` Release workflow. The immutable Remote Provider image is:
 
-The next provider image must include the `GUAC_DATA_SOURCE=json`, `GUAC_ID=<session ID>` and `GUAC_TYPE=c` tunnel-selector correction. After that image is published and pinned, validation must use a newly created provider/session and require non-keepalive Guacamole instruction traffic plus an actually rendered target display.
+```text
+ghcr.io/juloc/julos-remote-provider@sha256:dc0960cab89219df1347d5a98a6321087adb8d1bf0fe5021a2d23c8b3f2f376f
+```
+
+The publication also produced provenance attestation. `deploy/compose/compose.remote.yaml` pins this exact digest by default, so a fresh Remote validation stack cannot silently reuse the previous provider image.
 
 The opt-in `remote` Compose profile wires the image into a full deployment through `deploy/compose/compose.remote.yaml` (`Remote__Providers__0__*` and `Remote__NetworkProfiles__0__*`, plus the `runtime-manager` service) layered over `deploy/compose/compose.yaml`; `deploy/compose/README.md` documents the invocation and the required `.env` values.
 
-Still open: publish a provider image containing this complete correction, then repeat end-to-end deployed validation through the real JulOS Server, Runtime Manager and Remote frontend for RDP (REM-006), VNC (REM-007), browser/Android display (REM-005) and SSH close-out (REM-008).
+Still open: repeat end-to-end deployed validation through the real JulOS Server, Runtime Manager and Remote frontend for RDP (REM-006), VNC (REM-007), browser/Android display (REM-005) and SSH close-out (REM-008). Acceptance requires a newly created provider/session, non-keepalive Guacamole instruction traffic and an actually rendered target display.
