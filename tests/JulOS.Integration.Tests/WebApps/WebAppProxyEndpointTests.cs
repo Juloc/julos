@@ -225,6 +225,69 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
+    public async Task DynamicHostWebSocketUsesTheValidatedPinnedAddress()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            var webSocketClient = host.Server.CreateWebSocketClient();
+            webSocketClient.SubProtocols.Add("echo");
+            webSocketClient.ConfigureRequest = configuredRequest =>
+                configuredRequest.Headers["Cookie"] = cookie;
+
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var socket = await webSocketClient
+                .ConnectAsync(new Uri($"ws://{encodedHost}/socket"), cancellation.Token)
+                .ConfigureAwait(false);
+
+            var payload = Encoding.UTF8.GetBytes("dynamic-pinned-websocket");
+            await socket.SendAsync(payload, WebSocketMessageType.Binary, endOfMessage: true, cancellation.Token)
+                .ConfigureAwait(false);
+
+            var received = new byte[payload.Length];
+            var result = await socket.ReceiveAsync(received, cancellation.Token).ConfigureAwait(false);
+
+            Assert.AreEqual(WebSocketMessageType.Binary, result.MessageType);
+            Assert.AreEqual(payload.Length, result.Count);
+            CollectionAssert.AreEqual(payload, received);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task DynamicDnsTargetIsDeniedWhenItsResolvedAddressIsOutsideTheAllowedCidr()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var upstreamPort = new Uri(upstream.Urls.First()).Port;
+            var encodedHost = EncodedHost($"http://localhost:{upstreamPort}");
+            using var host = CreateDynamicDnsHost(databasePath, "10.0.0.0/8");
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(encodedHost, "/panel", cookie);
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task RejectsADynamicHostForAPublicUpstreamOrigin()
     {
         var databasePath = CreateDatabasePath();
@@ -259,6 +322,20 @@ public sealed class WebAppProxyEndpointTests
                 ["WebApps:Dynamic:Enabled"] = "true",
                 ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
                 ["WebApps:Dynamic:AllowedHosts:0"] = "127.0.0.0/8",
+                ["WebApps:AllowInvalidUpstreamCertificates"] = "true",
+            });
+
+    private static ServerHost CreateDynamicDnsHost(string databasePath, string allowedCidr) =>
+        new(
+            $"Data Source={databasePath};Cache=Shared",
+            new Dictionary<string, string?>
+            {
+                ["Database:Provider"] = "sqlite",
+                ["Authentication:CookieDomain"] = ".localtest.me",
+                ["WebApps:Dynamic:Enabled"] = "true",
+                ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+                ["WebApps:Dynamic:AllowedHosts:0"] = "localhost",
+                ["WebApps:Dynamic:AllowedHosts:1"] = allowedCidr,
                 ["WebApps:AllowInvalidUpstreamCertificates"] = "true",
             });
 

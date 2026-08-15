@@ -21,7 +21,15 @@ public enum WebAppRenderingMode
 /// <param name="Host">The JulOS-facing host, for example <c>unifi.os.juloc.de</c>.</param>
 /// <param name="Upstream">The absolute internal upstream base URI the proxy forwards to.</param>
 /// <param name="RenderingMode">The presentation mode for the target.</param>
-public sealed record WebAppTarget(string Host, Uri Upstream, WebAppRenderingMode RenderingMode);
+/// <param name="RequiresAddressPinning">
+/// Whether this target came from the dynamic URL proxy and therefore requires DNS resolution to an
+/// explicitly allowed address before a connection is opened.
+/// </param>
+public sealed record WebAppTarget(
+    string Host,
+    Uri Upstream,
+    WebAppRenderingMode RenderingMode,
+    bool RequiresAddressPinning = false);
 
 /// <summary>Resolves an incoming request host to a configured local web-application target.</summary>
 /// <remarks>
@@ -99,11 +107,25 @@ public sealed class WebAppTargetRegistry
 
         if (this.dynamicPolicy.TryResolve(host, out var upstream))
         {
-            target = new WebAppTarget(host, upstream, WebAppRenderingMode.Local);
+            target = new WebAppTarget(host, upstream, WebAppRenderingMode.Local, RequiresAddressPinning: true);
             return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Resolves a dynamic target to the exact IP addresses it is allowed to connect to. Static
+    /// administrator-configured targets return an empty array because they do not use this policy.
+    /// </summary>
+    public Task<IPAddress[]> ResolveAllowedAddressesAsync(
+        WebAppTarget target,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return target.RequiresAddressPinning
+            ? this.dynamicPolicy.ResolveAllowedAddressesAsync(target.Upstream, cancellationToken)
+            : Task.FromResult(Array.Empty<IPAddress>());
     }
 
     /// <summary>Lists the hosts of every locally proxied target, ordered for a stable presentation.</summary>
@@ -251,7 +273,7 @@ internal sealed class WebAppDynamicProxyPolicy
         upstream = null!;
         if (!this.enabled
             || !WebAppOriginCodec.TryDecodeHost(requestHost, this.zone, out var decoded)
-            || !this.IsAllowed(decoded))
+            || !this.IsOriginHostAllowed(decoded))
         {
             return false;
         }
@@ -260,18 +282,43 @@ internal sealed class WebAppDynamicProxyPolicy
         return true;
     }
 
-    private bool IsAllowed(Uri origin)
+    /// <summary>
+    /// Resolves the target once and retains only addresses covered by an explicit CIDR allowlist.
+    /// A DNS suffix authorizes the name; a CIDR authorizes the address reached after resolution.
+    /// </summary>
+    public async Task<IPAddress[]> ResolveAllowedAddressesAsync(Uri origin, CancellationToken cancellationToken)
     {
-        foreach (var entry in this.allowlist)
+        ArgumentNullException.ThrowIfNull(origin);
+        var literalHost = NormalizeAddressLiteral(origin.Host);
+        if (IPAddress.TryParse(literalHost, out var literalAddress))
         {
-            if (entry.Matches(origin.Host))
-            {
-                return true;
-            }
+            return this.AddressIsAllowed(literalAddress) ? [literalAddress] : [];
         }
 
-        return false;
+        var resolved = await Dns.GetHostAddressesAsync(origin.IdnHost, cancellationToken).ConfigureAwait(false);
+        return resolved
+            .Where(this.AddressIsAllowed)
+            .Distinct()
+            .ToArray();
     }
+
+    private bool IsOriginHostAllowed(Uri origin)
+    {
+        var literalHost = NormalizeAddressLiteral(origin.Host);
+        if (IPAddress.TryParse(literalHost, out var literalAddress))
+        {
+            return this.AddressIsAllowed(literalAddress);
+        }
+
+        var dnsName = origin.IdnHost.ToLowerInvariant();
+        return this.allowlist.Any(entry => entry.MatchesDnsName(dnsName));
+    }
+
+    private bool AddressIsAllowed(IPAddress address) =>
+        this.allowlist.Any(entry => entry.MatchesAddress(address));
+
+    private static string NormalizeAddressLiteral(string host) =>
+        host.StartsWith('[') && host.EndsWith(']') ? host[1..^1] : host;
 
     private sealed class AllowEntry
     {
@@ -300,18 +347,11 @@ internal sealed class WebAppDynamicProxyPolicy
             return new AllowEntry(null, value.TrimStart('.').ToLowerInvariant());
         }
 
-        public bool Matches(string host)
-        {
-            if (this.network is { } cidr)
-            {
-                var literal = host.StartsWith('[') && host.EndsWith(']')
-                    ? host[1..^1]
-                    : host;
-                return IPAddress.TryParse(literal, out var address) && cidr.Contains(address);
-            }
+        public bool MatchesDnsName(string host) =>
+            this.suffix is not null
+            && (host == this.suffix || host.EndsWith("." + this.suffix, StringComparison.Ordinal));
 
-            var candidate = host.ToLowerInvariant();
-            return candidate == this.suffix || candidate.EndsWith("." + this.suffix, StringComparison.Ordinal);
-        }
+        public bool MatchesAddress(IPAddress address) =>
+            this.network is { } network && network.Contains(address);
     }
 }

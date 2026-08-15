@@ -1,4 +1,6 @@
-﻿using System.Net.WebSockets;
+﻿using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
 
 using JulOS.Infrastructure.WebApps;
 
@@ -12,10 +14,16 @@ namespace JulOS.Server.WebApps;
 /// </summary>
 internal sealed class WebAppProxyMiddleware
 {
-    /// <summary>The named <see cref="HttpClient"/> used for upstream forwarding.</summary>
+    /// <summary>The named <see cref="HttpClient"/> used for administrator-configured upstream forwarding.</summary>
     internal const string HttpClientName = "julos-webapp-proxy";
 
+    /// <summary>The named <see cref="HttpClient"/> whose connections require prevalidated IP addresses.</summary>
+    internal const string DynamicHttpClientName = "julos-webapp-dynamic-proxy";
+
     private const int WebSocketBufferSize = 16 * 1024;
+
+    private static readonly HttpRequestOptionsKey<IPAddress[]> PinnedAddressesOption =
+        new("JulOS.WebApps.PinnedAddresses");
 
     private static readonly Action<ILogger, Uri, Exception?> LogUpstreamHttpFailed =
         LoggerMessage.Define<Uri>(
@@ -28,6 +36,12 @@ internal sealed class WebAppProxyMiddleware
             LogLevel.Warning,
             new EventId(1501, nameof(LogUpstreamWebSocketFailed)),
             "Web application upstream WebSocket connection failed for {Upstream}.");
+
+    private static readonly Action<ILogger, Uri, Exception?> LogUpstreamResolutionFailed =
+        LoggerMessage.Define<Uri>(
+            LogLevel.Warning,
+            new EventId(1502, nameof(LogUpstreamResolutionFailed)),
+            "Web application upstream DNS resolution failed for {Upstream}.");
 
     private readonly RequestDelegate next;
     private readonly WebAppTargetRegistry registry;
@@ -69,21 +83,60 @@ internal sealed class WebAppProxyMiddleware
             return;
         }
 
+        var pinnedAddresses = Array.Empty<IPAddress>();
+        if (target.RequiresAddressPinning)
+        {
+            try
+            {
+                pinnedAddresses = await this.registry
+                    .ResolveAllowedAddressesAsync(target, context.RequestAborted)
+                    .ConfigureAwait(false);
+            }
+            catch (SocketException exception)
+            {
+                LogUpstreamResolutionFailed(this.logger, target.Upstream, exception);
+                await WriteFailureAsync(
+                    context,
+                    StatusCodes.Status502BadGateway,
+                    "webapp.upstream_unavailable",
+                    "The web application is unavailable.").ConfigureAwait(false);
+                return;
+            }
+
+            if (pinnedAddresses.Length == 0)
+            {
+                await WriteFailureAsync(
+                    context,
+                    StatusCodes.Status403Forbidden,
+                    "webapp.target_not_allowed",
+                    "The web application target is outside the configured network allowlist.").ConfigureAwait(false);
+                return;
+            }
+        }
+
         if (context.WebSockets.IsWebSocketRequest)
         {
-            await ProxyWebSocketAsync(context, target).ConfigureAwait(false);
+            await this.ProxyWebSocketAsync(context, target, pinnedAddresses).ConfigureAwait(false);
             return;
         }
 
-        await ProxyHttpAsync(context, target).ConfigureAwait(false);
+        await this.ProxyHttpAsync(context, target, pinnedAddresses).ConfigureAwait(false);
     }
 
-    private async Task ProxyHttpAsync(HttpContext context, WebAppTarget target)
+    private async Task ProxyHttpAsync(
+        HttpContext context,
+        WebAppTarget target,
+        IPAddress[] pinnedAddresses)
     {
         var request = context.Request;
         using var upstreamRequest = new HttpRequestMessage(
             new HttpMethod(request.Method),
             BuildUpstreamUri(target.Upstream, request, request.Scheme));
+
+        if (target.RequiresAddressPinning)
+        {
+            upstreamRequest.Options.Set(PinnedAddressesOption, pinnedAddresses);
+        }
 
         var hasBody = !HttpMethods.IsGet(request.Method)
             && !HttpMethods.IsHead(request.Method)
@@ -121,7 +174,8 @@ internal sealed class WebAppProxyMiddleware
         upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
         upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Proto", context.Request.Scheme);
 
-        var client = this.httpClientFactory.CreateClient(HttpClientName);
+        var client = this.httpClientFactory.CreateClient(
+            target.RequiresAddressPinning ? DynamicHttpClientName : HttpClientName);
         HttpResponseMessage upstreamResponse;
         try
         {
@@ -158,7 +212,10 @@ internal sealed class WebAppProxyMiddleware
         }
     }
 
-    private async Task ProxyWebSocketAsync(HttpContext context, WebAppTarget target)
+    private async Task ProxyWebSocketAsync(
+        HttpContext context,
+        WebAppTarget target,
+        IPAddress[] pinnedAddresses)
     {
         var upstreamUri = BuildUpstreamUri(
             target.Upstream,
@@ -167,8 +224,6 @@ internal sealed class WebAppProxyMiddleware
             forWebSocket: true);
 
         using var upstream = new ClientWebSocket();
-        upstream.Options.RemoteCertificateValidationCallback = (_, _, _, errors) =>
-            this.options.UpstreamCertificateIsAcceptable(errors);
         foreach (var protocol in context.WebSockets.WebSocketRequestedProtocols)
         {
             upstream.Options.AddSubProtocol(protocol);
@@ -182,7 +237,23 @@ internal sealed class WebAppProxyMiddleware
 
         try
         {
-            await upstream.ConnectAsync(upstreamUri, context.RequestAborted).ConfigureAwait(false);
+            if (target.RequiresAddressPinning)
+            {
+                var handler = CreateHttpHandler(this.options, requirePinnedAddresses: false);
+                handler.ConnectCallback = (connectionContext, cancellationToken) =>
+                    ConnectPinnedAsync(
+                        pinnedAddresses,
+                        connectionContext.DnsEndPoint.Port,
+                        cancellationToken);
+                using var invoker = new HttpMessageInvoker(handler);
+                await upstream.ConnectAsync(upstreamUri, invoker, context.RequestAborted).ConfigureAwait(false);
+            }
+            else
+            {
+                upstream.Options.RemoteCertificateValidationCallback = (_, _, _, errors) =>
+                    this.options.UpstreamCertificateIsAcceptable(errors);
+                await upstream.ConnectAsync(upstreamUri, context.RequestAborted).ConfigureAwait(false);
+            }
         }
         catch (Exception exception) when (exception is WebSocketException or HttpRequestException)
         {
@@ -199,6 +270,78 @@ internal sealed class WebAppProxyMiddleware
             .AcceptWebSocketAsync(upstream.SubProtocol)
             .ConfigureAwait(false);
         await PumpWebSocketAsync(browser, upstream, context.RequestAborted).ConfigureAwait(false);
+    }
+
+    /// <summary>Creates the common upstream handler, optionally requiring a pinned address option.</summary>
+    internal static SocketsHttpHandler CreateHttpHandler(
+        WebAppProxyOptions options,
+        bool requirePinnedAddresses)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            UseCookies = false,
+            SslOptions =
+            {
+                RemoteCertificateValidationCallback = (_, _, _, errors) =>
+                    options.UpstreamCertificateIsAcceptable(errors),
+            },
+        };
+
+        if (requirePinnedAddresses)
+        {
+            handler.ConnectCallback = ConnectPinnedRequestAsync;
+        }
+
+        return handler;
+    }
+
+    private static ValueTask<Stream> ConnectPinnedRequestAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken)
+    {
+        if (!context.InitialRequestMessage.Options.TryGetValue(PinnedAddressesOption, out var addresses)
+            || addresses.Length == 0)
+        {
+            return ValueTask.FromException<Stream>(
+                new HttpRequestException("Dynamic web application connection has no validated upstream address."));
+        }
+
+        return ConnectPinnedAsync(addresses, context.DnsEndPoint.Port, cancellationToken);
+    }
+
+    private static async ValueTask<Stream> ConnectPinnedAsync(
+        IPAddress[] addresses,
+        int port,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastFailure = null;
+        foreach (var address in addresses)
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)
+            {
+                NoDelay = true,
+            };
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, port), cancellationToken).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (SocketException exception)
+            {
+                lastFailure = exception;
+                socket.Dispose();
+            }
+        }
+
+        throw new HttpRequestException("No validated web application upstream address accepted the connection.", lastFailure);
     }
 
     private static Uri BuildUpstreamUri(

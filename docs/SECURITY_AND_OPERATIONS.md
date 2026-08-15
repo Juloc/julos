@@ -260,6 +260,19 @@ Required controls:
 - correlation IDs without sensitive data
 - dependency and container image scanning
 
+Local web-application proxy rules:
+
+- a proxied target is never reachable anonymously; the JulOS session is checked before any dynamic DNS lookup or upstream connection
+- JulOS session/antiforgery cookies, inbound `Authorization`, `Forwarded` and caller-supplied `X-Forwarded-*` headers are never forwarded to the upstream
+- static targets are administrator-configured resources; dynamic address-bar targets are default-deny and use explicit hostname/network allowlists
+- a literal dynamic IP must match an allowed CIDR
+- a dynamic DNS name must match an allowed DNS suffix and resolve to at least one address in an allowed CIDR; the suffix alone grants no network reachability
+- after validation, HTTP and WebSocket transports connect only to the validated address set while retaining the original hostname for HTTP/TLS authority; they do not perform an uncontrolled second DNS resolution before connect
+- if DNS resolution fails the target is unavailable; if resolution produces no allowed address the request is denied
+- widening a dynamic CIDR is an explicit administrator trust change and must not be inferred automatically from private-address conventions
+
+The detailed local/streamed rendering and dynamic-proxy contract is in `WEB-APP-RENDERING.md` and decision `D035`.
+
 ## 12. Audit logging
 
 Audit events are required for:
