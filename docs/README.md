@@ -26,6 +26,8 @@ This directory is the authoritative specification for JulOS. Code, issues and co
 
 Supporting documents:
 
+- [`INTERFACE_PLAN.md`](INTERFACE_PLAN.md) — final JulOS shell visual direction, responsive presentation and desktop edit-mode contract
+- [`DESKTOP_UX_COMPLETION.md`](DESKTOP_UX_COMPLETION.md) — production Desktop UX release gate and deployed acceptance path
 - [`REMOTE-SESSION-CONTRACT.md`](REMOTE-SESSION-CONTRACT.md) — implemented REM-001 contract boundary
 - [`WEB-APP-RENDERING.md`](WEB-APP-RENDERING.md) — local-versus-streamed web application rendering plan (decision D035)
 - [`RELEASE_NOTES_TEMPLATE.md`](RELEASE_NOTES_TEMPLATE.md) — shape of every release note
@@ -44,14 +46,14 @@ A conflict must be resolved by updating all affected documents in the same commi
 
 ## Documentation ownership
 
-- Product behavior: `PRODUCT.md`, `CONCEPT.md`, `UX_SPECIFICATION.md`
+- Product behavior: `PRODUCT.md`, `CONCEPT.md`, `UX_SPECIFICATION.md`, `INTERFACE_PLAN.md`
 - System boundaries: `ARCHITECTURE.md`, `TECHNICAL_SPECIFICATION.md`
 - Extension model: `PACKAGES.md`
 - Persistent state and transport: `DATA_AND_API_CONTRACTS.md`
 - Security, deployment and recovery: `SECURITY_AND_OPERATIONS.md`
 - Remote contracts and shared transport: `REMOTE-SESSION-CONTRACT.md`, `REMOTE-TRANSPORT-PACKAGE.md`
 - Julgate extraction and migration: `JULGATE_MIGRATION.md`, `JULGATE-REMOTE-EXTRACTION.md`
-- Validation: `QUALITY_AND_TESTING.md`
+- Validation: `QUALITY_AND_TESTING.md`, `DESKTOP_UX_COMPLETION.md`
 - Delivery order: `IMPLEMENTATION_PLAN.md`, `WORK_BREAKDOWN.md`, `BACKLOG.md`
 
 ## Change rule

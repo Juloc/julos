@@ -1,4 +1,5 @@
-﻿import { findMissingPlatformFeatures, probeBrowser } from './platform-support.js';
+﻿import { installInterfacePlan } from './interface-plan.js';
+import { findMissingPlatformFeatures, probeBrowser } from './platform-support.js';
 import { defineJulOsShell } from './shell.js';
 
 /**
@@ -21,4 +22,5 @@ if (missingFeatures.length > 0) {
   notice.dataset['missingFeatures'] = missingFeatures.join(' ');
 } else {
   defineJulOsShell();
+  installInterfacePlan(document);
 }
