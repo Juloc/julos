@@ -1,4 +1,5 @@
-﻿import {
+﻿import { desktopMultiDisplayWorkspace } from './multi-display-workspace.js';
+import {
   WindowStore,
   WindowStoreError,
   type DesktopWindowSnapshot,
@@ -109,6 +110,7 @@ export class WindowInteractionController {
     this.#store = store;
     this.#scheduler = options.scheduler ?? browserScheduler;
     this.#onResizeSettled = options.onResizeSettled ?? (() => undefined);
+    desktopMultiDisplayWorkspace.attachStore(store);
   }
 
   public get activeWindowId(): string | null {
@@ -208,7 +210,13 @@ export class WindowInteractionController {
     this.#applyPendingPointer();
     this.#active = null;
 
-    if (active.kind === 'resize') {
+    if (active.kind === 'move') {
+      await desktopMultiDisplayWorkspace.transferAtEdge(
+        active.windowId,
+        pointer.clientX,
+        active.usableArea,
+      );
+    } else {
       const window = requireWindow(this.#store, active.windowId);
       await this.#onResizeSettled({
         windowId: active.windowId,
