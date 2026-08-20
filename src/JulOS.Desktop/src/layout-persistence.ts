@@ -1,4 +1,5 @@
 ﻿import { JulOsApiClient, JulOsApiError } from './api-client.js';
+import { desktopMultiDisplayWorkspace } from './multi-display-workspace.js';
 import type { WindowPresentationState, WindowStore } from './window-store.js';
 
 export type DesktopViewport = 'desktop' | 'tablet' | 'mobile';
@@ -187,18 +188,12 @@ export class DesktopLayoutPersistence {
       ...pending.document,
       revision: this.#revisions.get(viewport) ?? pending.document.revision,
     };
-    const save = this.#api.requestJson<DesktopLayoutDocument>(layoutPath(viewport), {
-      method: 'PUT',
-      body: document,
-      headers: { [token.headerName]: token.token },
-    });
+    const save = this.#save(viewport, document, token);
     pending.inFlight = save;
 
     try {
       const stored = cloneDocument(await save);
-      this.#revisions.set(viewport, stored.revision);
-      this.#documents.set(viewport, stored);
-      pending.document = { ...pending.document, revision: stored.revision };
+      this.#acceptStored(viewport, pending, stored);
       return cloneDocument(stored);
     } catch (error) {
       if (error instanceof JulOsApiError && error.status === 409) {
@@ -208,6 +203,22 @@ export class DesktopLayoutPersistence {
           currentRevision: error.problem?.currentRevision ?? null,
           correlationId: error.correlationId,
         });
+
+        const currentRevision = error.problem?.currentRevision;
+        if (typeof currentRevision === 'number') {
+          const current = await this.#api.get<DesktopLayoutDocument>(layoutPath(viewport));
+          if (current.revision === currentRevision) {
+            this.#revisions.set(viewport, current.revision);
+            this.#documents.set(viewport, cloneDocument(current));
+            const retried = cloneDocument(await this.#save(
+              viewport,
+              { ...pending.document, revision: current.revision },
+              token,
+            ));
+            this.#acceptStored(viewport, pending, retried);
+            return cloneDocument(retried);
+          }
+        }
       } else {
         await this.#onFailure(error);
       }
@@ -215,6 +226,24 @@ export class DesktopLayoutPersistence {
     } finally {
       pending.inFlight = null;
     }
+  }
+
+  #save(
+    viewport: DesktopViewport,
+    document: SaveDesktopLayoutDocument,
+    token: AntiforgeryToken,
+  ): Promise<DesktopLayoutDocument> {
+    return this.#api.requestJson<DesktopLayoutDocument>(layoutPath(viewport), {
+      method: 'PUT',
+      body: document,
+      headers: { [token.headerName]: token.token },
+    });
+  }
+
+  #acceptStored(viewport: DesktopViewport, pending: PendingSave, stored: DesktopLayoutDocument): void {
+    this.#revisions.set(viewport, stored.revision);
+    this.#documents.set(viewport, cloneDocument(stored));
+    pending.document = { ...pending.document, revision: stored.revision };
   }
 
   async #readAntiforgery(): Promise<AntiforgeryToken> {
@@ -249,7 +278,7 @@ export class DesktopLayoutPersistence {
 }
 
 export function windowsForPersistence(store: WindowStore): readonly PersistedDesktopWindow[] {
-  return store.windows.map((window) => ({
+  return desktopMultiDisplayWorkspace.windows(store).map((window) => ({
     windowId: window.id,
     applicationDefinitionId: window.applicationId,
     launchTargetId: window.launchTargetId,
