@@ -41,11 +41,11 @@ public sealed class InteractiveSessionCleanupServiceTests
 
         var failed = await fixture.Service.ReconcileAsync(10);
         Assert.AreEqual(1, failed.Failures);
-        Assert.AreEqual(0, failed.Resolved);
+        Assert.AreEqual(0, failed.Cleaned);
 
         var recovered = await fixture.Service.ReconcileAsync(10);
         Assert.AreEqual(0, recovered.Failures);
-        Assert.AreEqual(1, recovered.Resolved);
+        Assert.AreEqual(1, recovered.Cleaned);
 
         var problem = await fixture.Context.Problems.AsNoTracking().SingleAsync();
         Assert.AreEqual(ProblemState.Resolved, problem.State);
