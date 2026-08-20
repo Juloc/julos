@@ -1,4 +1,4 @@
-import { classifyViewport } from './responsive-desktop.js';
+﻿import { classifyViewport } from './responsive-desktop.js';
 
 export type InterfaceViewport = 'desktop' | 'tablet' | 'mobile';
 
@@ -19,7 +19,7 @@ export function canStartDesktopEditMode(target: Element | null): boolean {
   }
 
   return target.closest(
-    'button, input, select, textarea, a, dialog, .desktop-window, .launcher-panel, .taskbar, [contenteditable="true"]',
+    'button, input, select, textarea, a, dialog, .authentication-view, .authentication-card, .desktop-window, .launcher-panel, .taskbar, [contenteditable="true"]',
   ) === null;
 }
 
@@ -109,6 +109,7 @@ export class InterfacePlanController {
     }
 
     this.#desktop.dataset['editMode'] = 'true';
+    this.#syncEditToolbarLanguage();
     if (this.#toolbar !== null) {
       this.#toolbar.hidden = false;
     }
@@ -126,6 +127,7 @@ export class InterfacePlanController {
     }
     this.#dispatchEditModeChange(false);
   }
+
 
   #dispatchEditModeChange(active: boolean): void {
     const event = this.#host.ownerDocument.createEvent('CustomEvent');
@@ -175,6 +177,22 @@ export class InterfacePlanController {
     toolbar.append(label, done);
     this.#desktop.append(toolbar);
     this.#toolbar = toolbar;
+    this.#syncEditToolbarLanguage();
+  }
+
+  #syncEditToolbarLanguage(): void {
+    if (this.#toolbar === null) {
+      return;
+    }
+
+    const german = this.#host.ownerDocument.documentElement.lang === 'de';
+    this.#toolbar.setAttribute('aria-label', german ? 'Desktop bearbeiten' : 'Edit desktop');
+    this.#toolbar.querySelector<HTMLElement>('.desktop-edit-label')!.textContent = german
+      ? 'Desktop bearbeiten'
+      : 'Edit desktop';
+    this.#toolbar.querySelector<HTMLButtonElement>('.desktop-edit-done')!.textContent = german
+      ? 'Fertig'
+      : 'Done';
   }
 
   #syncViewport(): void {

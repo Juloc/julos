@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import {
@@ -24,11 +24,12 @@ test('desktop edit long press uses deliberate touch-friendly thresholds', () => 
 });
 
 test('edit mode does not start from interactive shell controls or windows', () => {
-  const dom = new JSDOM('<div class="desktop-content"><div id="blank"></div><button id="button"></button><div class="desktop-window"><span id="inside"></span></div></div>');
+  const dom = new JSDOM('<div class="desktop-content"><div id="blank"></div><button id="button"></button><div class="desktop-window"><span id="inside"></span></div><div class="authentication-card"><span id="auth"></span></div></div>');
   const document = dom.window.document;
   assert.equal(canStartDesktopEditMode(document.querySelector('#blank')), true);
   assert.equal(canStartDesktopEditMode(document.querySelector('#button')), false);
   assert.equal(canStartDesktopEditMode(document.querySelector('#inside')), false);
+  assert.equal(canStartDesktopEditMode(document.querySelector('#auth')), false);
   dom.window.close();
 });
 
@@ -48,6 +49,12 @@ test('controller injects one stylesheet and exposes explicit edit mode with a do
   controller.enterEditMode();
   assert.equal(root.querySelector<HTMLElement>('#desktop-root')?.dataset['editMode'], 'true');
   assert.equal(root.querySelector<HTMLElement>('.desktop-edit-toolbar')?.hidden, false);
+
+  dom.window.document.documentElement.lang = 'de';
+  controller.exitEditMode();
+  controller.enterEditMode();
+  assert.equal(root.querySelector<HTMLElement>('.desktop-edit-label')?.textContent, 'Desktop bearbeiten');
+  assert.equal(root.querySelector<HTMLButtonElement>('.desktop-edit-done')?.textContent, 'Fertig');
 
   root.querySelector<HTMLButtonElement>('.desktop-edit-done')?.click();
   assert.equal(root.querySelector<HTMLElement>('#desktop-root')?.dataset['editMode'], undefined);

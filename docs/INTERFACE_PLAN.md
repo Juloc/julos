@@ -1,4 +1,4 @@
-# JulOS Interface Plan
+﻿# JulOS Interface Plan
 
 This document defines the completed visual and interaction direction for the JulOS production desktop shell. It refines `UX_SPECIFICATION.md` and `DESKTOP_UX_COMPLETION.md`; it does not introduce a second application, window, launcher, taskbar or mobile model.
 
