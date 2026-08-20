@@ -82,7 +82,8 @@ public static class PackageManagementServiceCollectionExtensions
         services.AddScoped<IInteractiveSessionCleanupService>(provider => new InteractiveSessionCleanupService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<IRemoteRuntimeManager>(),
-            provider.GetRequiredService<ISecretReferenceService>()));
+            provider.GetRequiredService<ISecretReferenceService>(),
+            provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IPackageManagementService>(provider => new PostgresPackageManagementService(
             provider.GetRequiredService<CoreDbContext>(),
             provider.GetRequiredService<PackageArtifactVerifier>(),
