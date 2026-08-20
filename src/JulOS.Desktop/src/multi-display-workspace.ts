@@ -94,7 +94,6 @@ interface PendingOutboundTransfer {
 
 interface PendingInboundTransfer {
   readonly sourceId: string;
-  readonly window: DesktopWindowSnapshot;
 }
 
 interface BroadcastChannelLike {
@@ -111,8 +110,8 @@ const edgeThresholdPixels = 12;
 
 /**
  * Coordinates browser windows that show the same JulOS Desktop.
- * The server remains authoritative for durable layout data; this coordinator only owns
- * short-lived display presence, window ownership and cross-display handoff.
+ * Durable layout still belongs to the server. This service only coordinates active
+ * browser displays, window ownership and handoff between those displays.
  */
 export class MultiDisplayWorkspace {
   readonly #enabled: boolean;
@@ -152,7 +151,7 @@ export class MultiDisplayWorkspace {
     }
 
     this.#channel.addEventListener('message', this.#messageHandler);
-    globalThis.addEventListener?.('pagehide', this.#pageHideHandler);
+    window.addEventListener('pagehide', this.#pageHideHandler);
     this.#heartbeatTimer = globalThis.setInterval(() => {
       this.#prunePeers();
       this.#announcePresence();
@@ -182,7 +181,7 @@ export class MultiDisplayWorkspace {
     this.#broadcastState();
   }
 
-  /** Returns the owned workspace windows across every active browser display. */
+  /** Returns one combined window list for durable layout persistence. */
   public windows(store: WindowStore): readonly DesktopWindowSnapshot[] {
     if (!this.#enabled) {
       return store.windows;
@@ -212,10 +211,7 @@ export class MultiDisplayWorkspace {
     return result.map(({ window }, index) => ({ ...window, zIndex: index }));
   }
 
-  /**
-   * Transfers a moved window when the pointer is released at a connected display edge.
-   * Returns false when there is no display on that side or the target cannot prepare the app.
-   */
+  /** Transfers a normal window when the pointer is released at a connected display edge. */
   public async transferAtEdge(
     windowId: string,
     pointerX: number,
@@ -231,12 +227,8 @@ export class MultiDisplayWorkspace {
       return false;
     }
 
-    const target = resolveDisplayTarget(
-      this.#displayId,
-      [...this.#peers.values()],
-      direction,
-      { displayId: this.#displayId, startedAt: this.#startedAt },
-    );
+    const current = { displayId: this.#displayId, startedAt: this.#startedAt };
+    const target = resolveDisplayTarget(this.#displayId, [...this.#peers.values()], direction, current);
     if (target === null) {
       return false;
     }
@@ -247,7 +239,6 @@ export class MultiDisplayWorkspace {
     }
 
     const requestId = createIdentifier();
-    const normalizedY = normalizeWindowY(window.bounds, usableArea);
     const prepared = new Promise<DesktopWindowSnapshot | null>((resolve) => {
       const timer = globalThis.setTimeout(() => {
         this.#pendingOutbound.delete(requestId);
@@ -263,7 +254,7 @@ export class MultiDisplayWorkspace {
       requestId,
       targetId: target.displayId,
       direction,
-      normalizedY,
+      normalizedY: normalizeWindowY(window.bounds, usableArea),
       window: cloneWindow(window),
     });
 
@@ -283,7 +274,7 @@ export class MultiDisplayWorkspace {
       window: cloneWindow(targetWindow),
     });
 
-    // Let DesktopRuntime finish its snap/persistence work for this pointerup first.
+    // DesktopRuntime still needs the source window for snap/persistence work in this pointerup.
     globalThis.setTimeout(() => this.#closeWindowThroughUi(windowId), 0);
     return true;
   }
@@ -303,7 +294,9 @@ export class MultiDisplayWorkspace {
     this.#pendingOutbound.clear();
     this.#pendingInbound.clear();
     this.#channel?.close();
-    globalThis.removeEventListener?.('pagehide', this.#pageHideHandler);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pagehide', this.#pageHideHandler);
+    }
   }
 
   #observeLocalWindows(windows: readonly DesktopWindowSnapshot[]): void {
@@ -364,12 +357,13 @@ export class MultiDisplayWorkspace {
         break;
       case 'transfer-ready':
         if (message.targetId === this.#displayId) {
-          break;
+          this.#resolveOutbound(message.requestId, message.senderId, message.window);
         }
-        this.#resolveOutbound(message.requestId, message.senderId, message.window);
         break;
       case 'transfer-rejected':
-        this.#resolveOutbound(message.requestId, message.senderId, null);
+        if (message.targetId === this.#displayId) {
+          this.#resolveOutbound(message.requestId, message.senderId, null);
+        }
         break;
       case 'transfer-commit':
         if (message.targetId === this.#displayId) {
@@ -410,8 +404,7 @@ export class MultiDisplayWorkspace {
         continue;
       }
 
-      const currentOwner = this.#display(owner);
-      if (compareDisplays(this.#display(message.senderId), currentOwner) < 0) {
+      if (compareDisplays(this.#display(message.senderId), this.#display(owner)) < 0) {
         this.#owners.set(window.id, message.senderId);
         this.#snapshots.set(window.id, cloneWindow(window));
       }
@@ -428,26 +421,20 @@ export class MultiDisplayWorkspace {
   async #prepareInboundTransfer(message: TransferRequestMessage): Promise<void> {
     try {
       await this.#ensureApplicationReady(message.window.applicationId);
-      const targetWindow = {
+      const area = currentUsableArea();
+      const bounds = placeTransferredWindow(
+        message.window.bounds,
+        area,
+        message.direction,
+        message.normalizedY,
+      );
+      const targetWindow: DesktopWindowSnapshot = {
         ...cloneWindow(message.window),
-        state: 'normal' as const,
-        bounds: placeTransferredWindow(
-          message.window.bounds,
-          currentUsableArea(),
-          message.direction,
-          message.normalizedY,
-        ),
-        restoreBounds: placeTransferredWindow(
-          message.window.restoreBounds,
-          currentUsableArea(),
-          message.direction,
-          message.normalizedY,
-        ),
+        state: 'normal',
+        bounds,
+        restoreBounds: bounds,
       };
-      this.#pendingInbound.set(message.requestId, {
-        sourceId: message.senderId,
-        window: targetWindow,
-      });
+      this.#pendingInbound.set(message.requestId, { sourceId: message.senderId });
       this.#post({
         type: 'transfer-ready',
         senderId: this.#displayId,
@@ -535,6 +522,7 @@ export class MultiDisplayWorkspace {
       await delay(20);
     }
 
+    // Let DesktopRuntime complete its launch continuation before removing the preload window.
     await delay(0);
     for (const window of store.windows) {
       if (!beforeIds.has(window.id) && window.applicationId === applicationId) {
@@ -553,23 +541,18 @@ export class MultiDisplayWorkspace {
     if (this.#channel === null || this.#store === null) {
       return;
     }
-    const windows = this.#store.windows
-      .filter((window) => this.#owners.get(window.id) === this.#displayId)
-      .map(cloneWindow);
     this.#post({
       type: 'state',
       senderId: this.#displayId,
       startedAt: this.#startedAt,
-      windows,
+      windows: this.#store.windows
+        .filter((window) => this.#owners.get(window.id) === this.#displayId)
+        .map(cloneWindow),
     });
   }
 
   #announcePresence(): void {
-    this.#post({
-      type: 'presence',
-      senderId: this.#displayId,
-      startedAt: this.#startedAt,
-    });
+    this.#post({ type: 'presence', senderId: this.#displayId, startedAt: this.#startedAt });
   }
 
   #post(message: WorkspaceMessage): void {
@@ -577,11 +560,7 @@ export class MultiDisplayWorkspace {
   }
 
   #touchPeer(displayId: string, startedAt: number): void {
-    this.#peers.set(displayId, {
-      displayId,
-      startedAt,
-      lastSeenAt: this.#now(),
-    });
+    this.#peers.set(displayId, { displayId, startedAt, lastSeenAt: this.#now() });
   }
 
   #prunePeers(): void {
@@ -594,10 +573,9 @@ export class MultiDisplayWorkspace {
   }
 
   #removePeer(displayId: string): void {
-    if (!this.#peers.delete(displayId)) {
-      return;
+    if (this.#peers.delete(displayId)) {
+      this.#recoverWindows(displayId);
     }
-    this.#recoverWindows(displayId);
   }
 
   #recoverWindows(displayId: string): void {
@@ -664,19 +642,13 @@ export class MultiDisplayWorkspace {
     if (displayId === this.#displayId) {
       return { displayId, startedAt: this.#startedAt };
     }
-    const peer = this.#peers.get(displayId);
-    return peer ?? { displayId, startedAt: Number.MAX_SAFE_INTEGER };
+    return this.#peers.get(displayId) ?? { displayId, startedAt: Number.MAX_SAFE_INTEGER };
   }
 
   #leave(): void {
-    if (this.#channel === null) {
-      return;
+    if (this.#channel !== null) {
+      this.#post({ type: 'leave', senderId: this.#displayId, startedAt: this.#startedAt });
     }
-    this.#post({
-      type: 'leave',
-      senderId: this.#displayId,
-      startedAt: this.#startedAt,
-    });
   }
 }
 
@@ -685,7 +657,7 @@ export function edgeForPointer(
   area: UsableArea,
   threshold = edgeThresholdPixels,
 ): DisplayEdge | null {
-  if (!Number.isFinite(pointerX) || threshold < 0) {
+  if (!Number.isFinite(pointerX) || !Number.isFinite(threshold) || threshold < 0) {
     return null;
   }
   if (pointerX <= area.x + threshold) {
@@ -704,15 +676,14 @@ export function resolveDisplayTarget(
   current: WorkspaceDisplay,
 ): WorkspaceDisplay | null {
   const displays = [current, ...peers]
-    .filter((display, index, values) => values.findIndex((candidate) => candidate.displayId === display.displayId) === index)
+    .filter((display, index, values) =>
+      values.findIndex((candidate) => candidate.displayId === display.displayId) === index)
     .sort(compareDisplays);
   const index = displays.findIndex((display) => display.displayId === currentDisplayId);
   if (index < 0) {
     return null;
   }
-  return direction === 'left'
-    ? displays[index - 1] ?? null
-    : displays[index + 1] ?? null;
+  return direction === 'left' ? displays[index - 1] ?? null : displays[index + 1] ?? null;
 }
 
 export function placeTransferredWindow(
@@ -728,8 +699,12 @@ export function placeTransferredWindow(
     ? area.x + inset
     : area.x + area.width - width - inset;
   const availableY = Math.max(0, area.height - height);
-  const y = area.y + availableY * clamp(normalizedY, 0, 1);
-  return { x, y, width, height };
+  return {
+    x,
+    y: area.y + availableY * clamp(normalizedY, 0, 1),
+    width,
+    height,
+  };
 }
 
 function normalizeWindowY(bounds: WindowBounds, area: UsableArea): number {
@@ -742,11 +717,7 @@ function compareDisplays(left: WorkspaceDisplay, right: WorkspaceDisplay): numbe
 }
 
 function cloneWindow(window: DesktopWindowSnapshot): DesktopWindowSnapshot {
-  return {
-    ...window,
-    bounds: { ...window.bounds },
-    restoreBounds: { ...window.restoreBounds },
-  };
+  return { ...window, bounds: { ...window.bounds }, restoreBounds: { ...window.restoreBounds } };
 }
 
 function defaultChannelFactory(): (() => BroadcastChannelLike) | null {
@@ -761,8 +732,8 @@ function currentUsableArea(): UsableArea {
   return {
     x: 0,
     y: 0,
-    width: Math.max(layer?.clientWidth ?? globalThis.innerWidth ?? 320, 320),
-    height: Math.max(layer?.clientHeight ?? globalThis.innerHeight ?? 240, 240),
+    width: Math.max(layer?.clientWidth ?? (typeof window !== 'undefined' ? window.innerWidth : 320), 320),
+    height: Math.max(layer?.clientHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 240), 240),
   };
 }
 
@@ -774,8 +745,7 @@ function shellShadowRoot(): ShadowRoot | null {
 }
 
 function findLauncherButton(applicationId: string): HTMLButtonElement | null {
-  const root = shellShadowRoot();
-  for (const button of root?.querySelectorAll<HTMLButtonElement>('#application-launcher-entries button') ?? []) {
+  for (const button of shellShadowRoot()?.querySelectorAll<HTMLButtonElement>('#application-launcher-entries button') ?? []) {
     if (button.dataset['applicationId'] === applicationId && button.dataset['launchTargetId'] === undefined) {
       return button;
     }
@@ -787,28 +757,47 @@ function parseMessage(value: unknown): WorkspaceMessage | null {
   if (typeof value !== 'object' || value === null) {
     return null;
   }
-  const candidate = value as Partial<WorkspaceMessage> & { readonly type?: unknown };
+  const candidate = value as Record<string, unknown>;
   if (
-    typeof candidate.type !== 'string'
-    || typeof candidate.senderId !== 'string'
-    || typeof candidate.startedAt !== 'number'
-    || !Number.isFinite(candidate.startedAt)
+    typeof candidate['type'] !== 'string'
+    || typeof candidate['senderId'] !== 'string'
+    || typeof candidate['startedAt'] !== 'number'
+    || !Number.isFinite(candidate['startedAt'])
   ) {
     return null;
   }
-  switch (candidate.type) {
+
+  switch (candidate['type']) {
     case 'presence':
-    case 'state':
-    case 'closed':
-    case 'transfer-request':
-    case 'transfer-ready':
-    case 'transfer-rejected':
-    case 'transfer-commit':
     case 'leave':
-      return candidate as WorkspaceMessage;
+      return candidate as unknown as PresenceMessage | LeaveMessage;
+    case 'state':
+      return Array.isArray(candidate['windows']) ? candidate as unknown as StateMessage : null;
+    case 'closed':
+      return typeof candidate['windowId'] === 'string' ? candidate as unknown as ClosedMessage : null;
+    case 'transfer-request':
+      return hasTransferFields(candidate) && (candidate['direction'] === 'left' || candidate['direction'] === 'right')
+        && typeof candidate['normalizedY'] === 'number'
+        ? candidate as unknown as TransferRequestMessage
+        : null;
+    case 'transfer-ready':
+      return hasTransferFields(candidate) ? candidate as unknown as TransferReadyMessage : null;
+    case 'transfer-rejected':
+      return typeof candidate['requestId'] === 'string' && typeof candidate['targetId'] === 'string'
+        ? candidate as unknown as TransferRejectedMessage
+        : null;
+    case 'transfer-commit':
+      return hasTransferFields(candidate) ? candidate as unknown as TransferCommitMessage : null;
     default:
       return null;
   }
+}
+
+function hasTransferFields(candidate: Record<string, unknown>): boolean {
+  return typeof candidate['requestId'] === 'string'
+    && typeof candidate['targetId'] === 'string'
+    && typeof candidate['window'] === 'object'
+    && candidate['window'] !== null;
 }
 
 function createIdentifier(): string {
