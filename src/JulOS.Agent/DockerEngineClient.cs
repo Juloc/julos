@@ -122,7 +122,7 @@ internal sealed class DockerEngineClient : IDisposable
     {
         if (request.Page > 0)
         {
-            return Page(request, [], 1);
+            return Page(request, Array.Empty<object>(), 1);
         }
         using var version = await GetJsonAsync("/version", cancellationToken).ConfigureAwait(false);
         using var info = await GetJsonAsync("/info", cancellationToken).ConfigureAwait(false);
@@ -363,7 +363,7 @@ internal sealed class DockerEngineClient : IDisposable
                 readWrite = Flag(mount, "RW"),
             }).ToArray();
 
-    private static IReadOnlyDictionary<string, string> Labels(JsonElement element)
+    private static Dictionary<string, string> Labels(JsonElement element)
     {
         if (!element.TryGetProperty("Labels", out var labels) || labels.ValueKind != JsonValueKind.Object)
         {

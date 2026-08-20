@@ -7,6 +7,8 @@ namespace JulOS.Agent;
 
 internal sealed class AgentCapabilityInventory
 {
+    private static readonly string[] DockerReadOperations = ["inventory", "logs"];
+    private static readonly string[] DockerControlActions = ["start", "stop", "restart"];
     private readonly DockerEngineOptions docker;
 
     internal AgentCapabilityInventory(DockerEngineOptions? docker = null)
@@ -77,7 +79,7 @@ internal sealed class AgentCapabilityInventory
                 JsonSerializer.SerializeToElement(new
                 {
                     transport = "unix-socket",
-                    operations = new[] { "inventory", "logs" },
+                    operations = DockerReadOperations,
                 })),
             new AgentCapabilityContract(
                 "docker.control",
@@ -86,7 +88,7 @@ internal sealed class AgentCapabilityInventory
                 1,
                 JsonSerializer.SerializeToElement(new
                 {
-                    actions = new[] { "start", "stop", "restart" },
+                    actions = DockerControlActions,
                 })),
         ];
     }
