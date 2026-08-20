@@ -8,8 +8,8 @@ This gate is completed before feature packages become the main implementation fo
 
 - **DESK-013 — implemented:** fresh deployments provide browser-native administrator setup and normal local sign-in.
 - **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, Agent status, notifications/problems and persisted package widgets. Package lifecycle changes refresh the desktop catalog without a page reload.
-- **DESK-015 — in progress:** the production runtime now uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller and existing Alt-Tab switcher. Repository validation and deployed Windows/macOS/touch acceptance remain required.
-- **DESK-016 — planned:** final appearance and personalization completion follows the interaction pass.
+- **DESK-015 — implemented, deployed acceptance pending:** the production runtime uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller, existing Alt-Tab switcher and same-browser multi-display coordination. Multiple authenticated JulOS browser windows form one ordered workspace: an existing durable window has one active display owner, a window dragged to an adjacent display edge is handed off after the target prepares the application, and windows owned by a disappearing display are recovered by the remaining workspace. Repository validation and deployed Windows/macOS/touch/multi-display acceptance remain required.
+- **DESK-016 — implemented:** final appearance and personalization rules are wired; deployed visual acceptance remains part of the release gate.
 
 The implementation status above does not replace the deployed acceptance gate at the end of this document.
 
@@ -65,6 +65,21 @@ The interaction model must be neutral enough for Windows and macOS users while r
 - edge and corner snapping provide visible preview before committing;
 - keyboard focus never becomes trapped outside intentional modal contexts.
 
+### Multi-display browser workspace
+
+- two or more authenticated JulOS browser windows in the same browser profile and origin may act as ordered displays of one active workspace;
+- display ordering follows connection order and does not wrap at the outer edges;
+- a durable window has exactly one active display owner, preventing the same restored window from appearing independently on every display;
+- releasing a normal window at an adjacent display edge requests handoff to that display;
+- the target prepares package frontend code through the normal launcher/frontend path before ownership moves, so transferred package windows do not become empty shells;
+- transferred geometry is clamped to the target usable area while retaining its relative vertical position;
+- taskbar state remains local to the windows owned by that display;
+- combined active-display window state is used when persisting the durable desktop layout;
+- optimistic layout conflicts caused by another browser instance may retry only after re-reading the exact server revision reported by the conflict;
+- when one display closes or stops heartbeating, the earliest surviving display recovers its owned windows;
+- authorization, package capabilities and server-side state do not move into the browser coordination layer;
+- browsers without `BroadcastChannel` continue as normal single-display JulOS sessions.
+
 ### Taskbar / dock behavior
 
 - installed/running applications have stable identities;
@@ -109,8 +124,9 @@ Desktop UX Completion is done only when a clean installation can be tested throu
 6. launch its application from the launcher;
 7. move, resize, snap, minimize, restore, maximize and close its window;
 8. reload and verify allowed desktop state persistence;
-9. exercise the same shell with a desktop Windows browser and a desktop macOS browser;
-10. verify keyboard-only and basic tablet/touch operation.
+9. open a second authenticated JulOS browser window, place it on another monitor, verify restored windows are not duplicated, move a package window across the shared edge in both directions, then close one display and verify its windows recover on the survivor;
+10. exercise the same shell with a desktop Windows browser and a desktop macOS browser;
+11. verify keyboard-only and basic tablet/touch operation.
 
 The gate must be validated against the production Server-served Desktop build, not a standalone development shell.
 
