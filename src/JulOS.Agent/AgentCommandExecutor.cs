@@ -5,25 +5,27 @@ using JulOS.Contracts.Agents;
 
 namespace JulOS.Agent;
 
-internal sealed record AgentCommandExecution(
-    bool Succeeded,
-    JsonElement Result,
-    string? ErrorCode);
+internal sealed record AgentCommandExecution(bool Succeeded, JsonElement Result, string? ErrorCode);
 
 internal sealed class AgentCommandExecutor
 {
     private const string DiagnosticsSnapshotCommand = "diagnostics.snapshot";
+    private const string ContainerInventoryReadCommand = "container.inventory.read";
+    private const string ContainerLogsReadCommand = "container.logs.read";
+    private const string ContainerControlCommand = "container.control";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly TimeProvider timeProvider;
     private readonly string version;
     private readonly AgentCapabilityInventory capabilityInventory;
     private readonly AgentRuntimeDiagnostics diagnostics;
+    private readonly DockerEngineClient? docker;
 
     internal AgentCommandExecutor(
         TimeProvider timeProvider,
         string version,
         AgentCapabilityInventory? capabilityInventory = null,
-        AgentRuntimeDiagnostics? diagnostics = null)
+        AgentRuntimeDiagnostics? diagnostics = null,
+        DockerEngineClient? docker = null)
     {
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this.version = string.IsNullOrWhiteSpace(version)
@@ -31,9 +33,10 @@ internal sealed class AgentCommandExecutor
             : version;
         this.capabilityInventory = capabilityInventory ?? new AgentCapabilityInventory();
         this.diagnostics = diagnostics ?? new AgentRuntimeDiagnostics(timeProvider.GetUtcNow());
+        this.docker = docker;
     }
 
-    internal Task<AgentCommandExecution> ExecuteAsync(
+    internal async Task<AgentCommandExecution> ExecuteAsync(
         AgentCommandResponse command,
         CancellationToken cancellationToken)
     {
@@ -41,14 +44,31 @@ internal sealed class AgentCommandExecutor
         cancellationToken.ThrowIfCancellationRequested();
         if (command.ExpiresAtUtc <= this.timeProvider.GetUtcNow())
         {
-            return Task.FromResult(Failure("agent.command_expired"));
+            return Failure("agent.command_expired");
         }
 
-        return command.CommandType switch
+        try
         {
-            DiagnosticsSnapshotCommand => Task.FromResult(Success(this.CreateDiagnosticsSnapshot())),
-            _ => Task.FromResult(Failure("agent.command_not_supported")),
-        };
+            return command.CommandType switch
+            {
+                DiagnosticsSnapshotCommand => Success(this.CreateDiagnosticsSnapshot()),
+                ContainerInventoryReadCommand when this.docker is not null =>
+                    Success(await this.docker.ReadInventoryAsync(command.Payload, cancellationToken).ConfigureAwait(false)),
+                ContainerLogsReadCommand when this.docker is not null =>
+                    Success(await this.docker.ReadLogsAsync(command.Payload, cancellationToken).ConfigureAwait(false)),
+                ContainerControlCommand when this.docker is not null =>
+                    Success(await this.docker.ControlAsync(command.Payload, cancellationToken).ConfigureAwait(false)),
+                _ => Failure("agent.command_not_supported"),
+            };
+        }
+        catch (DockerCommandException exception)
+        {
+            return Failure(exception.Code);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return Failure("docker.platform_not_supported");
+        }
     }
 
     private AgentDiagnosticsSnapshotResponse CreateDiagnosticsSnapshot() => new(
