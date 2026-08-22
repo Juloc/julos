@@ -183,7 +183,7 @@ public sealed class InteractiveSessionCapabilityProviderTests
             var sessions = new FakeRemoteSessionService(context, now);
             var runtime = new RecordingRuntimeManager(now);
             var secrets = new RecordingSecretService(now);
-            var lifecycle = new FakeLifecycleService(sessions, now);
+            var lifecycle = new FakeLifecycleService(sessions);
             var provider = new InteractiveSessionCapabilityProvider(
                 context,
                 new StaticPlanDispatcher(Plan()),
@@ -523,7 +523,7 @@ public sealed class InteractiveSessionCapabilityProviderTests
             row.State = response.State;
             row.ConnectedAtUtc = response.ConnectedAtUtc;
             row.EndedAtUtc = response.EndedAtUtc;
-            row.Revision = response.Revision;
+            row.Revision = (int)response.Revision;
             row.UpdatedAtUtc = now;
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -558,7 +558,7 @@ public sealed class InteractiveSessionCapabilityProviderTests
                 ExpiresAtUtc = response.CreatedAtUtc.AddSeconds(request.MaximumSessionSeconds),
                 ConnectedAtUtc = response.ConnectedAtUtc,
                 EndedAtUtc = response.EndedAtUtc,
-                Revision = response.Revision,
+                Revision = (int)response.Revision,
             };
     }
 
@@ -584,7 +584,7 @@ public sealed class InteractiveSessionCapabilityProviderTests
         }
     }
 
-    private sealed class FakeLifecycleService(FakeRemoteSessionService sessions, DateTimeOffset now)
+    private sealed class FakeLifecycleService(FakeRemoteSessionService sessions)
         : IRemoteSessionLifecycleService
     {
         public Task<RemoteSessionResponse> DisconnectAsync(
