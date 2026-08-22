@@ -151,11 +151,17 @@ export class MultiDisplayWorkspace {
     }
 
     this.#channel.addEventListener('message', this.#messageHandler);
+    // Neither the channel nor the heartbeat may be the only handle keeping a
+    // host process alive (e.g. a Node test runner); unref both where the
+    // runtime supports it. In the browser these are no-ops (the channel has no
+    // unref and the timer id is a number) so live behavior is unchanged.
+    (this.#channel as unknown as { unref?: () => void }).unref?.();
     window.addEventListener('pagehide', this.#pageHideHandler);
     this.#heartbeatTimer = globalThis.setInterval(() => {
       this.#prunePeers();
       this.#announcePresence();
     }, heartbeatMilliseconds);
+    (this.#heartbeatTimer as unknown as { unref?: () => void }).unref?.();
     this.#announcePresence();
   }
 
