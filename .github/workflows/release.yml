@@ -25,7 +25,7 @@ concurrency:
 
 env:
   DOCKER_BUILD_RECORD_UPLOAD: "false"
-  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:933a2a8b7bc260560d0c2459ca8aa102596ab282bb094eb690c5ecf767302a8a
+  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:14ecfacb71a0e461351e2e87c19b80413d0f704ca2270f060c64404a6903743d
   JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
 jobs:
