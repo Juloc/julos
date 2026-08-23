@@ -1,5 +1,6 @@
 ﻿using JulOS.Contracts.WebApps;
 using JulOS.Infrastructure.WebApps;
+using JulOS.Server.Authorization;
 
 namespace JulOS.Server.WebApps;
 
@@ -16,14 +17,14 @@ internal static class WebAppEndpoints
                     .Select(host => new WebAppSummaryResponse(host))
                     .ToArray())
             .WithTags("WebApps")
-            .RequireAuthorization();
+            .RequireAuthorization(JulOsAuthorizationPolicies.WebAppUse);
 
         endpoints.MapGet(
                 "/api/v1/webapps/proxy",
                 (WebAppTargetRegistry registry) =>
                     new WebProxyConfigResponse(registry.DynamicEnabled, registry.DynamicProxyZone))
             .WithTags("WebApps")
-            .RequireAuthorization();
+            .RequireAuthorization(JulOsAuthorizationPolicies.WebAppUse);
 
         return endpoints;
     }

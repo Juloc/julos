@@ -3,6 +3,9 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 
 using JulOS.Infrastructure.WebApps;
+using JulOS.Server.Authorization;
+
+using Microsoft.AspNetCore.Authorization;
 
 namespace JulOS.Server.WebApps;
 
@@ -63,9 +66,10 @@ internal sealed class WebAppProxyMiddleware
         this.logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IAuthorizationService authorizationService)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(authorizationService);
 
         if (!this.registry.TryResolve(context.Request.Host.Host, out var target))
         {
@@ -80,6 +84,22 @@ internal sealed class WebAppProxyMiddleware
                 StatusCodes.Status401Unauthorized,
                 "webapp.authentication_required",
                 "A JulOS session is required to open a web application.").ConfigureAwait(false);
+            return;
+        }
+
+        // Reaching a configured or dynamically allowlisted target can expose internal
+        // infrastructure, so authentication alone is not enough: the caller must hold the
+        // web-application permission, which the Administrator role has by default.
+        var authorization = await authorizationService
+            .AuthorizeAsync(context.User, JulOsAuthorizationPolicies.WebAppUse)
+            .ConfigureAwait(false);
+        if (!authorization.Succeeded)
+        {
+            await WriteFailureAsync(
+                context,
+                StatusCodes.Status403Forbidden,
+                "webapp.not_authorized",
+                "This account is not permitted to open web applications.").ConfigureAwait(false);
             return;
         }
 
