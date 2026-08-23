@@ -2,6 +2,8 @@
 
 This file is the issue blueprint for JulOS. Each item is intended to become one GitHub issue unless its implementation proves too large to review safely. Do not combine unrelated items.
 
+Per-item completion **status** is tracked in `BACKLOG.md`, which is authoritative. The older per-item `Status:` lines in this file are not maintained past Phase 2 and must not be read as current progress. Some items added during implementation (for example `REL-PKG-001`, `REL-ALPHA-007` and `WEB-001`) are tracked in `BACKLOG.md` without a matching blueprint entry here.
+
 ## How to execute an item
 
 For every item:
@@ -393,7 +395,7 @@ Implemented as `CoreDbContext` and relational storage rows in `JulOS.Infrastruct
 
 The committed migration is applied only through `JulOS.Server --migrate-database`. The development Compose stack runs that command in a one-shot service and starts Server only after it succeeds, so normal startup never changes the schema.
 
-`tests/JulOS.Integration.Tests` creates isolated databases on a real PostgreSQL service and proves that an empty database migrates, invalid states are rejected and audit rows are append-only. CI supplies the service through `JULOS_TEST_POSTGRES`; SQLite is not used.
+`tests/JulOS.Integration.Tests` creates isolated databases on a real PostgreSQL service and proves that an empty database migrates, invalid states are rejected and audit rows are append-only. CI supplies the service through `JULOS_TEST_POSTGRES`. Since decision `D033`, SQLite is also a supported core-store provider — the single-host default when no provider or connection string is configured — and is exercised by other integration tests (for example the web-application proxy tests); the persistence-integration suite in this project targets PostgreSQL.
 
 ### API-002 — Add optimistic concurrency
 
@@ -1013,7 +1015,7 @@ Acceptance:
 
 Depends on: BRW-003, REM-005.
 
-Deliver tabs, address field, navigation, downloads and session status.
+Deliver tabs, address field, navigation, downloads and session status. Downloads depend on `FILE-007` (Phase 8); until it lands, Browser download support is deferred and BRW-004 is accepted without it (see the BRW-004 note in `BACKLOG.md`).
 
 Acceptance:
 

@@ -44,6 +44,8 @@ Internal websites open in a real isolated Chromium runtime connected to a JulOS 
 
 Reason: this supports local addresses, multiple tabs, downloads, certificates, logins, browser tools and sites that prohibit framing. It also avoids exposing internal management services publicly.
 
+Qualified by `D035`: for internal **web applications**, local transparent-proxy rendering in an iframe is the default and this streamed real-browser runtime is the fallback (isolation, targets that cannot be proxied, and RDP/VNC/SSH). D005 remains authoritative for the streamed runtime itself.
+
 ## D006 — Julgate extraction instead of duplication
 
 **Status:** Accepted
