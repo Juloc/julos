@@ -1,0 +1,503 @@
+﻿/*
+ * JulOS interface completion layer.
+ *
+ * This stylesheet refines the production shell only. It deliberately reuses
+ * the existing JulOS/Fluent token variables and does not create a second theme,
+ * taskbar, launcher or window system.
+ */
+
+:host {
+  --julos-glass-surface: color-mix(in srgb, var(--julos-color-surface-solid) 78%, transparent);
+  --julos-glass-surface-strong: color-mix(in srgb, var(--julos-color-surface-solid) 88%, transparent);
+  --julos-glass-surface-subtle: color-mix(in srgb, var(--julos-color-surface) 68%, transparent);
+  --julos-glass-highlight: color-mix(in srgb, white 18%, transparent);
+  --julos-glass-border: color-mix(in srgb, var(--julos-color-border-strong) 72%, transparent);
+  --julos-window-shadow: 0 22px 64px color-mix(in srgb, var(--julos-color-shadow) 84%, transparent),
+    0 2px 10px color-mix(in srgb, var(--julos-color-shadow) 54%, transparent);
+  --julos-flyout-shadow: 0 20px 54px color-mix(in srgb, var(--julos-color-shadow) 74%, transparent),
+    0 2px 8px color-mix(in srgb, var(--julos-color-shadow) 44%, transparent);
+}
+
+.desktop {
+  isolation: isolate;
+}
+
+.desktop::before,
+.desktop::after {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+}
+
+.desktop::before {
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--julos-color-accent) 20%, transparent) 0 10%, transparent 35%),
+    radial-gradient(circle at 82% 30%, color-mix(in srgb, var(--julos-color-accent) 10%, transparent) 0 8%, transparent 33%),
+    linear-gradient(145deg, color-mix(in srgb, var(--julos-color-background) 92%, white), var(--julos-color-background));
+}
+
+.desktop::after {
+  z-index: -1;
+  background: linear-gradient(180deg, rgb(255 255 255 / 5%), transparent 22%, rgb(0 0 0 / 3%));
+}
+
+.authentication-card,
+.taskbar,
+.launcher-panel,
+.about-dialog,
+.window-switcher {
+  border-color: var(--julos-glass-border);
+  background: var(--julos-glass-surface-strong);
+  box-shadow: var(--julos-flyout-shadow);
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+}
+
+.authentication-card {
+  border-radius: 24px;
+  box-shadow: var(--julos-window-shadow);
+}
+
+.authentication-brand,
+.brand-mark,
+.about-mark,
+.application-glyph,
+.brand-glyph {
+  background: linear-gradient(145deg, var(--julos-color-accent), var(--julos-color-accent-pressed));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 28%),
+    0 8px 24px color-mix(in srgb, var(--julos-color-accent) 24%, transparent);
+}
+
+.taskbar {
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: max(10px, env(safe-area-inset-left));
+  min-height: 52px;
+  padding: 6px 7px;
+  border-radius: 18px;
+  box-shadow:
+    0 12px 42px color-mix(in srgb, var(--julos-color-shadow) 62%, transparent),
+    inset 0 1px 0 var(--julos-glass-highlight);
+}
+
+.taskbar-button,
+.user-button,
+.running-application {
+  border-radius: 11px;
+  transition:
+    background var(--julos-duration-fast) var(--julos-easing-standard),
+    color var(--julos-duration-fast) var(--julos-easing-standard),
+    opacity var(--julos-duration-fast) var(--julos-easing-standard),
+    transform var(--julos-duration-fast) var(--julos-easing-standard),
+    box-shadow var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.taskbar-button:hover,
+.user-button:hover,
+.running-application:hover {
+  background: color-mix(in srgb, var(--julos-color-surface-hover) 78%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
+}
+
+.launcher-button {
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 28%),
+    0 5px 16px color-mix(in srgb, var(--julos-color-accent) 20%, transparent);
+}
+
+.search-button {
+  border: 1px solid color-mix(in srgb, var(--julos-color-border) 75%, transparent);
+  background: color-mix(in srgb, var(--julos-color-subtle) 78%, transparent);
+}
+
+.status-dot {
+  box-shadow: 0 0 0 2px var(--julos-glass-surface-strong);
+}
+
+.launcher-panel {
+  width: min(410px, calc(100% - 20px));
+  padding: 14px;
+  border-radius: 22px;
+  background: var(--julos-glass-surface-strong);
+  transform-origin: left bottom;
+}
+
+.launcher-panel header {
+  padding: 9px 9px 15px;
+}
+
+.launcher-panel header strong {
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.launcher-entry {
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition:
+    background var(--julos-duration-fast) var(--julos-easing-standard),
+    border-color var(--julos-duration-fast) var(--julos-easing-standard),
+    transform var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.launcher-entry:hover,
+.launcher-entry:focus-visible {
+  border-color: color-mix(in srgb, var(--julos-color-border) 70%, transparent);
+  background: color-mix(in srgb, var(--julos-color-surface-hover) 74%, transparent);
+}
+
+.launcher-entry:active {
+  transform: scale(0.985);
+}
+
+.application-glyph {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  border-radius: 10px;
+}
+
+.desktop-window {
+  border-color: color-mix(in srgb, var(--julos-color-border) 82%, transparent);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--julos-color-surface-solid) 96%, transparent);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--julos-color-shadow) 64%, transparent);
+  opacity: 0.9;
+  transform: translateZ(0);
+  transition:
+    border-color var(--julos-duration-fast) var(--julos-easing-standard),
+    box-shadow var(--julos-duration-normal) var(--julos-easing-standard),
+    opacity var(--julos-duration-fast) var(--julos-easing-standard),
+    transform var(--julos-duration-normal) var(--julos-easing-standard);
+}
+
+.desktop-window[data-active="true"] {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 42%, var(--julos-color-border));
+  box-shadow: var(--julos-window-shadow);
+  opacity: 1;
+}
+
+.desktop-window[data-state="maximized"],
+.desktop-window[data-state="full-screen"],
+.desktop-window:not([data-presentation="windowed"]) {
+  border-radius: 0;
+}
+
+.window-titlebar {
+  height: 42px;
+  flex-basis: 42px;
+  padding-left: 14px;
+  border-bottom-color: color-mix(in srgb, var(--julos-color-border) 78%, transparent);
+  background: var(--julos-glass-surface-subtle);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+}
+
+.window-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+}
+
+.window-controls button {
+  width: 46px;
+  transition:
+    background var(--julos-duration-fast) var(--julos-easing-standard),
+    color var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.window-controls button:first-child {
+  border-bottom-left-radius: 8px;
+}
+
+.window-controls button:last-child {
+  border-top-right-radius: 16px;
+}
+
+.desktop-window[data-state="maximized"] .window-controls button:last-child,
+.desktop-window[data-state="full-screen"] .window-controls button:last-child,
+.desktop-window:not([data-presentation="windowed"]) .window-controls button:last-child {
+  border-top-right-radius: 0;
+}
+
+.snap-preview {
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--julos-color-accent) 74%, white 12%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--julos-color-accent) 18%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 14%),
+    0 16px 46px color-mix(in srgb, var(--julos-color-accent) 14%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.desktop-widget {
+  border-color: var(--julos-glass-border);
+  border-radius: 18px;
+  background: var(--julos-glass-surface);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, var(--julos-color-shadow) 48%, transparent),
+    inset 0 1px 0 var(--julos-glass-highlight);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  transition:
+    border-color var(--julos-duration-fast) var(--julos-easing-standard),
+    box-shadow var(--julos-duration-normal) var(--julos-easing-standard),
+    transform var(--julos-duration-normal) var(--julos-easing-standard);
+}
+
+.desktop[data-edit-mode="true"] .desktop-widget {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 58%, var(--julos-color-border));
+  box-shadow:
+    0 14px 34px color-mix(in srgb, var(--julos-color-shadow) 54%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--julos-color-accent) 16%, transparent),
+    inset 0 1px 0 var(--julos-glass-highlight);
+}
+
+.desktop[data-edit-mode="true"] .desktop-widget::after {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--julos-color-accent-foreground);
+  border-radius: 50%;
+  background: var(--julos-color-accent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--julos-color-shadow) 55%, transparent);
+  content: '';
+}
+
+.desktop-edit-toolbar {
+  position: absolute;
+  z-index: 1300;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 7px 6px 14px;
+  border: 1px solid var(--julos-glass-border);
+  border-radius: 999px;
+  background: var(--julos-glass-surface-strong);
+  box-shadow: var(--julos-flyout-shadow);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  transform: translateX(-50%);
+  animation: julos-edit-toolbar-in var(--julos-duration-normal) var(--julos-easing-standard);
+}
+
+.desktop-edit-toolbar[hidden] {
+  display: none;
+}
+
+.desktop-edit-label {
+  color: var(--julos-color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desktop-edit-done {
+  min-width: 64px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--julos-color-accent);
+  color: var(--julos-color-accent-foreground);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.desktop-edit-done:hover {
+  background: var(--julos-color-accent-hover);
+}
+
+.window-switcher {
+  gap: 10px;
+  padding: 14px;
+  border-radius: 20px;
+}
+
+.window-switcher-item {
+  border-radius: 13px;
+}
+
+.window-switcher-item[data-selected="true"] {
+  background: color-mix(in srgb, var(--julos-color-surface-hover) 76%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--julos-color-accent) 18%, transparent);
+}
+
+.core-app {
+  background: color-mix(in srgb, var(--julos-color-background) 96%, var(--julos-color-surface-solid));
+}
+
+.core-card {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--julos-color-surface) 88%, transparent);
+  transition:
+    border-color var(--julos-duration-fast) var(--julos-easing-standard),
+    box-shadow var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.core-card:hover {
+  border-color: var(--julos-color-border-strong);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--julos-color-shadow) 34%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .desktop-window[data-active="true"]:hover {
+    box-shadow:
+      0 24px 70px color-mix(in srgb, var(--julos-color-shadow) 88%, transparent),
+      0 2px 10px color-mix(in srgb, var(--julos-color-shadow) 54%, transparent);
+  }
+}
+
+:host([data-interface-viewport="tablet"]) {
+  --julos-control-height: 44px;
+}
+
+:host([data-interface-viewport="tablet"]) .taskbar {
+  min-height: 58px;
+}
+
+:host([data-interface-viewport="tablet"]) .window-titlebar {
+  height: 44px;
+  flex-basis: 44px;
+}
+
+:host([data-interface-viewport="tablet"]) .window-controls button {
+  width: 48px;
+}
+
+:host([data-interface-viewport="mobile"]) {
+  --julos-control-height: 48px;
+  --julos-taskbar-height: 70px;
+}
+
+:host([data-interface-viewport="mobile"]) .desktop-content {
+  padding: 0;
+}
+
+:host([data-interface-viewport="mobile"]) .taskbar {
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: max(8px, env(safe-area-inset-left));
+  min-height: 58px;
+  padding: 5px;
+  border-radius: 19px;
+}
+
+:host([data-interface-viewport="mobile"]) .search-button,
+:host([data-interface-viewport="mobile"]) .desktop-version,
+:host([data-interface-viewport="mobile"]) .user-button span {
+  display: none;
+}
+
+:host([data-interface-viewport="mobile"]) .launcher-panel {
+  right: max(8px, env(safe-area-inset-right));
+  bottom: calc(var(--julos-taskbar-height) + max(12px, env(safe-area-inset-bottom)));
+  left: max(8px, env(safe-area-inset-left));
+  width: auto;
+  max-height: min(68vh, 620px);
+  border-radius: 24px;
+}
+
+:host([data-interface-viewport="mobile"]) .application-launcher-entries {
+  max-height: calc(68vh - 72px);
+}
+
+:host([data-interface-viewport="mobile"]) .launcher-entry {
+  min-height: 54px;
+}
+
+:host([data-interface-viewport="mobile"]) .desktop-window,
+:host([data-interface-viewport="mobile"]) .desktop-window[data-active="true"] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
+}
+
+:host([data-interface-viewport="mobile"]) .window-titlebar {
+  height: 48px;
+  flex-basis: 48px;
+  padding-left: max(14px, env(safe-area-inset-left));
+}
+
+:host([data-interface-viewport="mobile"]) .window-controls button {
+  width: 50px;
+}
+
+:host([data-interface-viewport="mobile"]) .desktop-edit-toolbar {
+  top: max(10px, env(safe-area-inset-top));
+  max-width: calc(100% - 20px);
+}
+
+@keyframes julos-edit-toolbar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+:host-context(html[data-motion="reduced"]) *,
+:host-context(html[data-motion="reduced"]) *::before,
+:host-context(html[data-motion="reduced"]) *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .authentication-card,
+  .taskbar,
+  .launcher-panel,
+  .about-dialog,
+  .desktop-window,
+  .desktop-widget,
+  .window-switcher,
+  .desktop-edit-toolbar {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .desktop-edit-done,
+  .launcher-button {
+    border: 1px solid ButtonText;
+  }
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .authentication-card,
+  .taskbar,
+  .launcher-panel,
+  .about-dialog,
+  .window-switcher,
+  .desktop-widget,
+  .desktop-edit-toolbar {
+    background: var(--julos-color-surface-solid);
+  }
+}
