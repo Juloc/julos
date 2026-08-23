@@ -1,4 +1,4 @@
-# JulOS 0.3.0 alpha evaluation stack.
+# JulOS 0.4.0 beta evaluation stack.
 #
 # This stack deliberately contains only the control plane and its database.
 # Package workers and session runtimes are added separately when their package
@@ -7,7 +7,7 @@
 name: julos-alpha
 
 x-server: &server
-  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.14}
+  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.17}
   environment:
     ASPNETCORE_ENVIRONMENT: Production
     ASPNETCORE_HTTP_PORTS: 8080

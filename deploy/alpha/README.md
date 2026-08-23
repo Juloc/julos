@@ -6,15 +6,15 @@ This directory contains the release-oriented JulOS beta deployment files. The re
 
 - Docker Engine with Docker Compose
 - OpenSSL for generating `JULOS_PRIMARY_KEY`
-- access to `ghcr.io/juloc/julos-server:0.4.0-beta.2`
+- access to `ghcr.io/juloc/julos-server:0.4.0-beta.17`
 
 ## Recommended SQLite stack
 
 ```bash
 mkdir -p julos-beta
 cd julos-beta
-curl -O https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.2/deploy/alpha/compose.sqlite.yaml
-curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.2/deploy/alpha/.env.sqlite.example
+curl -O https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.17/deploy/alpha/compose.sqlite.yaml
+curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.17/deploy/alpha/.env.sqlite.example
 cp .env.example .env
 openssl rand -base64 32
 ```
@@ -33,7 +33,7 @@ SQLite supports one JulOS server replica on one host. Do not share its database 
 
 ## Package Store
 
-Beta.2 contains the Official Package Store. Official Browser, Remote and Host Metrics packages are signed during the release workflow and embedded into the server image. The signing private key is never copied into the image or release artifacts.
+This beta contains the Official Package Store. Official Browser, Remote and Host Metrics packages are signed during the release workflow and embedded into the server image. The signing private key is never copied into the image or release artifacts.
 
 Browser and Remote package execution use the separate Runtime Manager boundary. The JulOS server itself must never receive the Docker socket. A deployment that enables Browser/Remote runtimes must run the Runtime Manager separately and grant Docker access only to that component.
 
@@ -73,4 +73,4 @@ docker compose --env-file .env -f compose.sqlite.yaml down --volumes
 
 ## Beta boundaries
 
-Beta.2 is intended for active homelab testing of the desktop shell, account setup, settings, official packages, Browser and Remote foundations. Docker/Proxmox discovery and the broader 1.0 package set remain later milestones.
+This beta is intended for active homelab testing of the desktop shell, account setup, settings, official packages, Browser and Remote foundations. Docker/Proxmox discovery and the broader 1.0 package set remain later milestones.
