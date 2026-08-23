@@ -6,15 +6,15 @@ This directory contains the release-oriented JulOS beta deployment files. The re
 
 - Docker Engine with Docker Compose
 - OpenSSL for generating `JULOS_PRIMARY_KEY`
-- access to `ghcr.io/juloc/julos-server:0.4.0-beta.17`
+- access to `ghcr.io/juloc/julos-server:0.4.0-beta.18`
 
 ## Recommended SQLite stack
 
 ```bash
 mkdir -p julos-beta
 cd julos-beta
-curl -O https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.17/deploy/alpha/compose.sqlite.yaml
-curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.17/deploy/alpha/.env.sqlite.example
+curl -O https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.18/deploy/alpha/compose.sqlite.yaml
+curl -o .env.example https://raw.githubusercontent.com/Juloc/julos/v0.4.0-beta.18/deploy/alpha/.env.sqlite.example
 cp .env.example .env
 openssl rand -base64 32
 ```
