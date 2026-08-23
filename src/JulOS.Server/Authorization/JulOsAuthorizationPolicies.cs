@@ -15,4 +15,5 @@ internal static class JulOsAuthorizationPolicies
     internal const string SecretManage = "permission:" + AuthorizationPermissionNames.SecretManage;
     internal const string PackageRead = "permission:" + AuthorizationPermissionNames.PackageRead;
     internal const string PackageManage = "permission:" + AuthorizationPermissionNames.PackageManage;
+    internal const string WebAppUse = "permission:" + AuthorizationPermissionNames.WebAppUse;
 }

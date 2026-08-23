@@ -262,7 +262,7 @@ Required controls:
 
 Local web-application proxy rules:
 
-- a proxied target is never reachable anonymously; the JulOS session is checked before any dynamic DNS lookup or upstream connection
+- a proxied target is never reachable anonymously, and authentication alone is not sufficient: the caller must hold the `core.webapp.use` permission (granted to the administrator role by default), which also gates the `/api/v1/webapps` discovery endpoints; the permission is checked before any dynamic DNS lookup or upstream connection
 - JulOS session/antiforgery cookies, inbound `Authorization`, `Forwarded` and caller-supplied `X-Forwarded-*` headers are never forwarded to the upstream
 - static targets are administrator-configured resources; dynamic address-bar targets are default-deny and use explicit hostname/network allowlists
 - a literal dynamic IP must match an allowed CIDR

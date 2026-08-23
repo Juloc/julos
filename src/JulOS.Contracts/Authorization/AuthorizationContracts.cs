@@ -32,6 +32,9 @@ public static class AuthorizationPermissionNames
 
     /// <summary>Install, configure, update, enable, disable and remove packages.</summary>
     public const string PackageManage = "core.package.manage";
+
+    /// <summary>Open local web-application targets through the transparent reverse proxy.</summary>
+    public const string WebAppUse = "core.webapp.use";
 }
 
 /// <summary>Stable authorization assignment subject types.</summary>

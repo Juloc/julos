@@ -5,14 +5,17 @@ using System.Text;
 
 using JulOS.Contracts.Authentication;
 using JulOS.Contracts.WebApps;
+using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.WebApps;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -23,6 +26,7 @@ namespace JulOS.Integration.Tests.WebApps;
 public sealed class WebAppProxyEndpointTests
 {
     private const string AdministratorPassword = "Valid-Initial-Password-42!";
+    private const string SecondaryPassword = "Valid-Secondary-Password-42!";
     private const string TargetHost = "app.test";
 
     [TestMethod]
@@ -116,6 +120,40 @@ public sealed class WebAppProxyEndpointTests
             using var response = await client.SendAsync(request).ConfigureAwait(false);
 
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task RejectsAnAuthenticatedUserWithoutTheWebAppPermission()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            using var host = CreateHost(databasePath, upstream.Urls.First());
+            using var administratorClient = host.CreateClient();
+            _ = await SetupAdministratorAsync(administratorClient).ConfigureAwait(false);
+
+            await CreateUserAsync(host, "viewer", "Viewer").ConfigureAwait(false);
+            using var viewerClient = host.CreateClient();
+            var cookie = await LoginAndReadCookieAsync(viewerClient, "viewer", SecondaryPassword)
+                .ConfigureAwait(false);
+
+            // The discovery endpoint is gated on the web-application permission.
+            using var listRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/webapps");
+            listRequest.Headers.TryAddWithoutValidation("Cookie", cookie);
+            using var listResponse = await viewerClient.SendAsync(listRequest).ConfigureAwait(false);
+            Assert.AreEqual(HttpStatusCode.Forbidden, listResponse.StatusCode);
+
+            // The transparent proxy is gated on the same permission, so an authenticated
+            // user without it cannot reach the internal target.
+            using var proxyRequest = TargetRequest("/panel", cookie);
+            using var proxyResponse = await viewerClient.SendAsync(proxyRequest).ConfigureAwait(false);
+            Assert.AreEqual(HttpStatusCode.Forbidden, proxyResponse.StatusCode);
         }
         finally
         {
@@ -377,6 +415,41 @@ public sealed class WebAppProxyEndpointTests
             new InitialAdministratorRequest("admin", "Administrator", AdministratorPassword))
             .ConfigureAwait(false);
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
+
+        return string.Join(
+            "; ",
+            response.Headers.GetValues("Set-Cookie")
+                .Select(value => value.Split(';', 2, StringSplitOptions.None)[0]));
+    }
+
+    private static async Task CreateUserAsync(ServerHost host, string userName, string displayName)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<UserManager<LocalUser>>();
+        var now = TimeProvider.System.GetUtcNow();
+        var user = new LocalUser
+        {
+            Id = Guid.CreateVersion7(now),
+            UserName = userName,
+            DisplayName = displayName,
+            PreferredLanguage = "en",
+            TimeZone = "UTC",
+            Theme = "system",
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+            Revision = 1,
+        };
+        var result = await manager.CreateAsync(user, SecondaryPassword).ConfigureAwait(false);
+        Assert.IsTrue(result.Succeeded, string.Join(", ", result.Errors.Select(error => error.Code)));
+    }
+
+    private static async Task<string> LoginAndReadCookieAsync(HttpClient client, string userName, string password)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/auth/login",
+            new LocalLoginRequest(userName, password))
+            .ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
         return string.Join(
             "; ",
