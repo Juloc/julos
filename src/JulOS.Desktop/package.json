@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit --project tsconfig.test.json",
     "build": "tsc --project tsconfig.json && node build.mjs",
     "watch": "node build.mjs && tsc --project tsconfig.json --watch",
-    "test": "tsc --project tsconfig.test.json && node --test \"build/tests/**/*.test.js\""
+    "test": "tsc --project tsconfig.test.json && node --test --test-timeout=30000 \"build/tests/**/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "24.13.3",
