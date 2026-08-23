@@ -22,6 +22,9 @@ public sealed class RemoteProviderCallbackAuthenticatorTests
         Assert.IsFalse(authenticator.Authenticate(Guid.CreateVersion7(), runtimeId, token));
         Assert.IsFalse(authenticator.Authenticate(sessionId, "remote-other", token));
 
+        var tampered = token[..^1] + (token[^1] == 'A' ? 'B' : 'A');
+        Assert.IsFalse(authenticator.Authenticate(sessionId, runtimeId, tampered));
+
         clock.Advance(TimeSpan.FromMinutes(6));
         Assert.IsFalse(authenticator.Authenticate(sessionId, runtimeId, token));
     }

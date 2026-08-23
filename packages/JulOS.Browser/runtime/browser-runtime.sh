@@ -12,6 +12,8 @@ chromium_pid_file="$runtime_directory/chromium.pid"
 temporary_profile_directory="$runtime_directory/profile"
 profile_directory=${JULOS_PROFILE_DIRECTORY:-$temporary_profile_directory}
 log_directory="$runtime_directory/logs"
+startup_attempt_limit=300
+startup_retry_delay=0.1
 
 cleanup() {
     trap - EXIT INT TERM
@@ -88,11 +90,11 @@ echo $! >"$x_pid_file"
 attempt=0
 while [ ! -S "/tmp/.X11-unix/X${DISPLAY#:}" ]; do
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 100 ]; then
+    if [ "$attempt" -ge "$startup_attempt_limit" ]; then
         echo "Xvfb did not become ready." >&2
         exit 70
     fi
-    sleep 0.1
+    sleep "$startup_retry_delay"
 done
 
 openbox >"$log_directory/openbox.log" 2>&1 &
@@ -116,11 +118,11 @@ echo $! >"$vnc_pid_file"
 attempt=0
 while ! nc -z 127.0.0.1 5900; do
     attempt=$((attempt + 1))
-    if [ "$attempt" -ge 100 ]; then
+    if [ "$attempt" -ge "$startup_attempt_limit" ]; then
         echo "The VNC display endpoint did not become ready." >&2
         exit 70
     fi
-    sleep 0.1
+    sleep "$startup_retry_delay"
 done
 
 chromium \
