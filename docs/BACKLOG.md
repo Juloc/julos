@@ -15,7 +15,7 @@ Status values: `Planned`, `Ready`, `In progress`, `Blocked`, `Done`.
 | DESK-013 | Browser first-run and sign-in | Done | Fresh deployments can create the initial administrator and subsequent sessions can sign in entirely through the production Desktop shell. The `JulOsShell` custom element now has JSDOM regression coverage (`src/JulOS.Desktop/src/shell.test.ts`) for authenticated-name persistence through the `#applyLanguage()` sweep, profile theme/motion application, and `onProfileChanged` reapply after a settings save (issue #62). |
 | DESK-014 | Production shell composition | Done | Enabled package apps and persisted widgets use the existing launcher/window/taskbar/frontend/persistence stack; Core Settings, Package Manager, Agent status, notifications and problems are normal desktop windows, and package lifecycle changes refresh the catalog live. |
 | DESK-015 | Cross-platform desktop interaction pass | Done | Shared responsive rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard handling and the existing Alt-Tab switcher are wired into production; deployed Windows/macOS/touch acceptance remains a release gate. |
-| DESK-016 | Appearance and personalization completion | Done | System/light/dark theme, reduced motion, Fluent-derived tokens and the JulOS accent system are active; server-confirmed theme and motion changes apply without reload. |
+| DESK-016 | Appearance and personalization completion | Done | System/light/dark theme, reduced motion, Fluent-derived tokens and the JulOS accent system are active; server-confirmed theme and motion changes apply without reload. Deferred beyond this iteration: a user-selectable accent, the Full/Balanced/Simple presets and the wallpaper/density controls from `UI_DESIGN_SYSTEM.md`; the Settings surface currently exposes language, theme, motion and time zone only. |
 | REL-PKG-001 | Official package artifact and signing pipeline | In progress | Reproducible Host Metrics/Remote/Browser ZIP builds and full-archive SHA-256/ECDSA-P256-P1363 verification are implemented; a stable private signing key, matching trusted public-key configuration and the first real signed release run remain. |
 | REL-ALPHA-007 | Published Desktop web root | Done | The container publishes Desktop assets through the Server web root and the release smoke test verifies `/` plus the main ES module. |
 | Phase 3 | Desktop shell | Done | DESK-013 through DESK-016 are implemented; deployed cross-platform acceptance remains part of the release gate. |
@@ -149,11 +149,11 @@ Implementation must not invent alternate behavior outside these specifications w
 
 ## Open product decisions
 
-These do not block current implementation:
+These do not block feature implementation. One of them — the package signing key custody procedure — does block the 1.0 signed-release gate (`REL-PKG-001`): the first real signed release cannot run until the private signing key custody and the matching trusted public-key configuration are decided.
 
 - final license
 - final public JulOS domain
-- final package signing key custody procedure
+- final package signing key custody procedure (blocks the `REL-PKG-001` signed-release gate)
 - final public package-registry host
 - public third-party package support after 1.0
 

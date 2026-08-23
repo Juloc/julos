@@ -8,8 +8,8 @@ This gate is completed before feature packages become the main implementation fo
 
 - **DESK-013 — implemented:** fresh deployments provide browser-native administrator setup and normal local sign-in.
 - **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, Agent status, notifications/problems and persisted package widgets. Package lifecycle changes refresh the desktop catalog without a page reload.
-- **DESK-015 — in progress:** the production runtime now uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller and existing Alt-Tab switcher. Repository validation and deployed Windows/macOS/touch acceptance remain required.
-- **DESK-016 — planned:** final appearance and personalization completion follows the interaction pass.
+- **DESK-015 — implemented:** the production runtime uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller and existing Alt-Tab switcher. Deployed Windows/macOS/touch acceptance remains a release gate (see `BACKLOG.md`).
+- **DESK-016 — implemented:** system/light/dark theme, reduced motion and the Fluent-derived token and accent system are active, and server-confirmed theme and motion changes apply without reload. Deferred beyond this iteration: a user-selectable accent, the Full/Balanced/Simple presets and the wallpaper/density controls described in `UI_DESIGN_SYSTEM.md`; the shipped Settings surface exposes language, theme, motion and time zone only.
 
 The implementation status above does not replace the deployed acceptance gate at the end of this document.
 
