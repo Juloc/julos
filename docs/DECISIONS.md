@@ -8,13 +8,13 @@ Accepted decisions are recorded here until individual ADR files become necessary
 
 Production code starts after product scope, architecture, package boundaries, implementation order and contribution rules are committed.
 
-Reason: JulOS combines desktop, package, Agent and remote-session concerns. Undefined boundaries would create early coupling that is expensive to remove.
+Reason: JulOS combines desktop, package, Host Connector and remote-session concerns. Undefined boundaries would create early coupling that is expensive to remove.
 
 ## D002 — Initial monorepo
 
 **Status:** Accepted
 
-Core, Desktop, Agent, Package SDK, official packages and runtime images live in `Juloc/julos` initially.
+Core, Desktop, Host Connector, Package SDK, official packages and runtime images live in `Juloc/julos` initially.
 
 Reason: contracts and packages will evolve together before 1.0. Separate repositories would add versioning, CI and dependency overhead without providing real isolation.
 
@@ -24,7 +24,7 @@ Create `Juloc/julos-package-template` only after the SDK and manifest are stable
 
 **Status:** Accepted
 
-The core owns platform concepts only. Docker, Proxmox, Caddy, remote protocols, files and discovery exist only in packages and Agents.
+The core owns platform concepts only. Docker, Proxmox, Caddy, remote protocols, files and discovery exist only in packages and typed Host Connector adapters.
 
 Reason: a deployment must remain lightweight and functional when optional packages are absent or faulty.
 
@@ -72,13 +72,13 @@ Caddy UI exposes stable authenticated integration endpoints. JulOS.Caddy consume
 
 Reason: JulOS should not rebuild Caddy UI or couple to its database. The package must also work when Caddy UI is not hosted by the Docker package.
 
-## D009 — One shared Agent binary
+## D009 — One shared Host Connector binary
 
 **Status:** Accepted
 
-JulOS uses one small Agent with explicitly enabled capabilities rather than one Agent per package.
+JulOS uses one optional small Host Connector with explicitly enabled typed capabilities rather than one host daemon per package. The component was implemented under the pre-beta name `Agent`; current product UI, contracts and new code use Host Connector.
 
-Reason: multiple Agents would duplicate enrollment, updates, security, networking and host metrics. The shared Agent still prevents arbitrary command execution through a strict capability allowlist.
+Reason: multiple host daemons would duplicate enrollment, updates, security, networking and host metrics. The shared Connector still prevents arbitrary command execution through exact versioned schemas and target-side scope validation. It has no assistant/chat role, package UI or general host shell. A container terminal is a separate Docker-package session for one selected container.
 
 ## D010 — Docker Compose is the first deployment target
 
@@ -132,13 +132,15 @@ Reason: the control plane needs to start Browser, Remote and package workers eve
 
 Runtime Manager is control-plane infrastructure, not the JulOS Docker package.
 
-## D016 — Trusted signed packages only for 1.0
+## D016 — Open sources, immutable integrity and optional publisher signatures
 
 **Status:** Accepted
 
-JulOS 1.0 installs only official or administrator-trusted signed packages. Package artifacts, frontend modules and runtime images are verified by identity, digest and signature.
+JulOS accepts official, administrator-selected and user-managed sources. Every fetched definition, extension artifact and runtime image is locked by immutable digest. Publisher signatures are optional trust information: unsigned or unknown-publisher content is installable after an explicit administrator warning; a claimed but invalid signature is rejected as corruption.
 
-Reason: package JavaScript and backend workers have meaningful access to the JulOS environment. A public untrusted marketplace requires stronger sandboxing and is outside 1.0.
+Unknown native frontend JavaScript cannot execute in the authenticated Shell origin. It requires a separate package origin or sandboxed frame and a versioned message bridge. Docker/Compose definitions do not gain Shell access and remain installable under the warning model.
+
+Reason: users own their homelab and choose what to install, while integrity, provenance and requested host rights must remain visible. Separating simple user-facing trust warnings from mandatory technical isolation avoids both a closed ecosystem and unsafe same-origin native code.
 
 ## D017 — Package-owned database schemas
 
@@ -210,7 +212,7 @@ The domain shares four primitives, and nothing else:
 
 - `TimeProvider` from the base class library is the clock port. JulOS defines no clock interface of its own.
 - `IIdentifierGenerator` produces identifiers, implemented as time-ordered version 7 GUIDs derived from the injected `TimeProvider`.
-- Each entity declares its own identifier type, for example `public readonly record struct AgentId(Guid Value)`, validated through `EntityIdentifier.Validated`.
+- Each entity declares its own identifier type, for example `public readonly record struct HostConnectorId(Guid Value)`, validated through `EntityIdentifier.Validated`.
 - `Revision` carries optimistic concurrency, starting at 1 and never wrapping.
 
 A refused domain operation throws `DomainRuleViolationException` with a stable code.
@@ -337,10 +339,58 @@ Reason: the prior HTTP/gRPC descriptions asserted an isolation boundary that is 
 
 An internal web application opens by default in local mode: JulOS reverse-proxies the target transparently and the user's own browser renders it in a desktop-window iframe, so video and interactive content decode and run locally with hardware acceleration. The isolated streamed browser runtime (`D005`) is retained as the fallback for targets that cannot be proxied transparently, for isolation, and for RDP, VNC and SSH.
 
-Local mode serves each target at its own `<slug>.<julos-domain>` host (wildcard DNS and TLS through the Caddy integration) and does not rewrite application URLs, because single-page applications with absolute root paths and root WebSocket endpoints break under a shared path prefix. The proxy only strips framing headers, keeps the application's cookies first-party inside the iframe, passes WebSockets through, reaches targets through the Agent tunnel, and injects target credentials on the server side through a secret lease so nothing secret reaches the client.
+Local mode serves each target at its own `<slug>.<julos-domain>` host (wildcard DNS and TLS through the Caddy integration) and does not rewrite application URLs, because single-page applications with absolute root paths and root WebSocket endpoints break under a shared path prefix. The proxy only strips framing headers, keeps the application's cookies first-party inside the iframe, passes WebSockets through, reaches targets through the Host Connector tunnel, and injects target credentials on the server side through a secret lease so nothing secret reaches the client.
 
 This qualifies `D005`: an iframe is used, but only for a JulOS-controlled host whose framing headers JulOS itself sets and which is never publicly exposed, so `D005`'s reasons — foreign origins forbidding framing, and exposing internal services — do not apply. Framing a foreign origin directly remains forbidden.
 
 Reason: pixel-streaming a remote browser is the wrong transport for media and interactive local content and has a heavy per-window footprint, so it should be the exception, not the default. Transparent per-host proxying renders locally with hardware acceleration and, unlike path-based proxying, serves real single-page control panels without fragile URL rewriting. The full plan is `docs/WEB-APP-RENDERING.md`.
 
 **Prerequisite:** wildcard DNS and a wildcard TLS certificate for the deployment domain. Without them only streamed mode is offered; path-based proxying is not adopted as a substitute.
+
+## D036 — Runtime Manager never manages user catalog workloads
+
+**Status:** Accepted
+
+Runtime Manager remains the narrow privileged sidecar for JulOS control-plane, helper and session runtimes. Docker images and Compose stacks selected by a user are interpreted by the Docker package and applied through typed operations on the selected Host Connector.
+
+Reason: giving Server or Runtime Manager general user-workload access would collapse the security boundary between JulOS infrastructure and the homelab it manages. A target-side Connector can enforce installation ownership without exposing a raw Docker proxy to Core.
+
+## D037 — The installable PWA is the primary phone and tablet client
+
+**Status:** Accepted
+
+JulOS uses one server-delivered Shell and one application model in an installable PWA and normal browser tabs. Native mobile clients and a separate mobile-only product model remain outside 1.0. Offline mode is not claimed; the service worker caches only immutable Shell assets and presents an honest disconnected state.
+
+Reason: one PWA keeps application, permission and release behavior consistent while still giving phones and tablets an installed, full-screen, touch-safe experience.
+
+## D038 — Layouts resolve by workspace class with an optional device override
+
+**Status:** Accepted
+
+Application viewport class describes compatibility. Workspace class describes persisted presentation: Phone, Tablet, desktop-single or desktop-multi. A user receives one shared layout per workspace class by default and may opt a randomly registered client device into its own layout or fresh-start mode. Hardware fingerprinting is forbidden.
+
+Reason: a Phone must not overwrite Desktop placement, multi-monitor use needs a different topology, and a user may want either continuity across similar devices or one device's exact last state.
+
+## D039 — Frontend Surface execution is separate from Windows and Sessions
+
+**Status:** Accepted
+
+Foreground-focused, foreground-visible, background-active, suspended, faulted and terminated describe frontend execution only. They neither prove nor implicitly change Window persistence or runtime Session state. Phone backgrounds suspend by default; a user can request best-effort `keep-surface-active` behavior. Reliable background work runs as a durable server-side Operation. The distinct existing Remote Session detach value `keep-active` remains a Session policy and is never reused as the Surface preference value.
+
+Reason: hiding a Window currently leaves timers, polling and display connections active, while detaching current Browser/Remote elements can destroy sessions. An explicit lifecycle prevents both resource waste and accidental session loss, and acknowledges that mobile operating systems may freeze the PWA anyway.
+
+## D040 — JulOS Shell owns top-level Back navigation
+
+**Status:** Accepted
+
+System Back, browser history and supported mouse Back input enter one Shell dispatcher. Transient Shell state and a registered application Back handler are consumed before split/task/workspace history. At the JulOS Root, normal browser or operating-system exit remains possible.
+
+Reason: forwarding Back directly to the outer browser loses JulOS work, while trapping it forever violates platform expectations. One ordered dispatcher gives packages a bounded hook without letting them own top-level history.
+
+## D041 — Container terminal is a scoped Docker/Remote session, never a host shell
+
+**Status:** Accepted
+
+A container terminal starts only for one explicitly selected running container resolved from a stable Docker installation/service identity. It requires `docker.container.terminal`, an expiry, target-side ownership validation and audit of session lifecycle. Remote owns presentation; Host Connector owns only the typed Docker exec adapter. Keystrokes and output are not audited.
+
+Reason: users need ordinary container CLI access, including for workloads such as Hermes, but a generic Host Connector or Server shell would grant materially broader authority and defeat typed capability boundaries.

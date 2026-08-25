@@ -17,7 +17,8 @@ JulOS Server
   ├─ Package registry and lifecycle coordinator
   ├─ Capability broker
   ├─ App, window and layout state
-  ├─ Agent connection service
+  ├─ Host Connector connection service
+  ├─ application catalog and installation coordinator
   ├─ Events, operations, notifications and problems
   ├─ Audit log
   └─ Secret reference service
@@ -26,7 +27,7 @@ JulOS Server
        ├─ Runtime Manager
        │    └─ JulOS-owned package and session runtime containers
        ├─ out-of-process package workers
-       └─ outbound-connected JulOS Agents
+       └─ outbound-connected JulOS Host Connectors
             └─ hosts, Docker engines, filesystems and networks
 ```
 
@@ -57,7 +58,8 @@ Domain owns platform rules only:
 - application and launch-target identity
 - desktop layout, window and widget state
 - session-reference lifecycle
-- Agent identity and state
+- Host Connector identity and state
+- client-device, workspace and application-installation state
 - permission and scope values
 - problem, notification and audit metadata
 
@@ -78,7 +80,9 @@ Application services implement core use cases through ports:
 - install, configure, enable, disable, update and remove packages
 - approve applications and discovery proposals
 - create and update layouts
-- enroll and revoke Agents
+- enroll and revoke Host Connectors
+- register client devices and resolve workspace layouts
+- coordinate catalog sources and application-installation operations
 - authorize and route capability requests
 - process problem observations
 - create operations and audit events
@@ -101,7 +105,7 @@ It owns:
 - persistence wiring
 - package lifecycle coordination
 - event and operation transport
-- Agent control connection
+- Host Connector control connection
 - Runtime Manager client
 - package worker control clients
 
@@ -113,7 +117,7 @@ Local account records, password hashes, roles, setup completion and profile pref
 
 Authorization keeps three owners separate. Domain owns pure permission and scope evaluation. Application owns the stable Core permission catalog and role-administration ports. Infrastructure resolves direct user assignments and inherited role assignments from the core database, while Server maps named policies and administrator endpoints. No role name bypasses permission evaluation; even the system administrator role is authorized through explicit global assignments.
 
-Operation resources follow the same inward dependency direction. Contracts define the public queued/running/terminal and progress representations. Application owns lifecycle transitions and the executor-facing port. Infrastructure persists authoritative state, idempotency fingerprints, progress events and cancellation requests in the Core schema. Server only authenticates the user, enforces operation permissions and maps the versioned HTTP resources. Package workers and Agents advance operations through the Application port; they do not update Core tables directly.
+Operation resources follow the same inward dependency direction. Contracts define the public queued/running/terminal and progress representations. Application owns lifecycle transitions and the executor-facing port. Infrastructure persists authoritative state, idempotency fingerprints, progress events and cancellation requests in the Core schema. Server only authenticates the user, enforces operation permissions and maps the versioned HTTP resources. Package workers and Host Connectors advance operations through the Application port; they do not update Core tables directly.
 
 ## 6. JulOS Desktop
 
@@ -122,9 +126,13 @@ Desktop is a lightweight browser client shell. It owns immediate presentation st
 Responsibilities:
 
 - window placement, size, focus, z-order and snapping
+- Phone single/split and Tablet presentation
 - taskbar and launcher behavior
 - widget placement
-- viewport-specific layout restoration
+- shared or device-scoped workspace restoration
+- frontend-surface activation, suspension and resume
+- Shell-owned browser/system Back navigation
+- PWA installation, update and disconnected presentation
 - package Custom Element hosting
 - API and SignalR clients
 - offline, stale and reconnect presentation
@@ -132,13 +140,13 @@ Responsibilities:
 
 Window movement and resize occur locally at animation-frame speed. Persisted layout is synchronized after interaction; Server is not called for every pointer event.
 
-## 7. Package architecture
+## 7. Extension-package and application architecture
 
-A package consists of one signed artifact descriptor and one or more optional components:
+A JulOS extension package consists of one immutable artifact descriptor and one or more optional components:
 
 ```text
-Package
-├─ manifest and signatures
+Extension package
+├─ manifest, digest and optional publisher signature
 ├─ frontend ES modules and localization assets
 ├─ package worker image or executable
 ├─ package-owned migrations
@@ -165,7 +173,7 @@ A worker crash changes the package to a visible fault state and does not termina
 
 ### 7.2 Package frontend
 
-Package frontend code is a signed ES module loaded as a Custom Element with Shadow DOM.
+Trusted package frontend code may be loaded as an integrity-checked ES module and Custom Element with Shadow DOM. Unknown or unsigned native frontend code requires the isolated package-origin/message-bridge contract from `APPLICATION_CATALOG.md`; Shadow DOM alone is not a security sandbox.
 
 The Desktop supplies a limited host context for:
 
@@ -189,11 +197,17 @@ Packages may use:
 
 Cross-package database reads are forbidden.
 
+### 7.4 Application catalog
+
+Catalog applications remain external products even when JulOS deploys them. A catalog entry can connect an existing service, normalize one image into Compose, apply a standard Compose stack or reference a native extension package.
+
+The catalog/application coordinator owns source cache, trust presentation, desired definition, approvals, operations and stable resource references. The Docker package owns Compose interpretation and user-workload policy. Host Connector owns only target-side typed Docker adapters. Runtime Manager is not used for user workloads.
+
 ## 8. Runtime Manager
 
 Runtime Manager is a small privileged sidecar that owns direct access to the local container runtime.
 
-It manages only JulOS-owned resources:
+It manages only JulOS control-plane resources:
 
 - package workers when containerized
 - Browser runtimes
@@ -239,9 +253,9 @@ A capability request includes:
 
 Mutating requests create audit events.
 
-## 10. Agent architecture
+## 10. Host Connector architecture
 
-One Agent binary runs on hosts where local access is required.
+One optional Host Connector process runs on a host where local access is required. It is infrastructure under Settings → Host access, not a launcher application, assistant, chat surface or package worker.
 
 Initial capability families:
 
@@ -253,7 +267,7 @@ Initial capability families:
 - `files.local`
 - `network.discovery`
 
-The Agent:
+The Host Connector:
 
 - establishes an outbound authenticated connection
 - advertises only enabled capabilities
@@ -262,7 +276,9 @@ The Agent:
 - supports cancellation, deadlines and result limits
 - has no general remote shell
 
-Package-specific interpretation occurs in package workers. The Agent contains transport and host capability implementations, not package UI or business logic.
+Package-specific interpretation occurs in package workers. The Host Connector contains transport and typed host adapters, not package UI or business logic. It has no generic command, host shell, TCP proxy or Docker API proxy. A container terminal is a Docker-package action for one resolved container and uses the separate Remote terminal transport.
+
+The complete identity, protocol, migration, stream and terminal boundary is `HOST_CONNECTOR.md`.
 
 ## 11. Browser and Remote architecture
 
@@ -293,11 +309,11 @@ Browser owns isolated Chromium runtime policy:
 
 Browser asks Runtime Manager to start the runtime and requests a Remote session for display and input.
 
-### 11.3 Window/session separation
+### 11.3 Window/surface/session separation
 
-A Window stores presentation state. A Session stores runtime state.
+A Window stores presentation state. A frontend Surface stores execution state. A Session stores runtime state.
 
-Closing a Window may disconnect, suspend or terminate according to the application policy. Reloading Desktop can restore a Window and then reconnect, show an expired state or request a new Session.
+Suspending a Surface stops its frontend activity but does not close its Window or terminate its Session. Closing a Window may disconnect, suspend or terminate a Session only according to the explicit application policy. Reloading Desktop can restore a Window and then resume its Surface, reconnect, show an expired state or request a new Session.
 
 ## 12. Integration products
 
@@ -323,7 +339,9 @@ JulOS.Caddy never reads Caddy UI database tables directly and does not require t
 - package installations and lifecycle
 - application definitions and approvals
 - layouts, windows and widget placements
-- Agent identities and connection state
+- Host Connector identities and connection state
+- client devices, workspace preferences and shared/device layouts
+- catalog sources, application installations, approvals and resource references
 - session references
 - problem, notification, operation and audit metadata
 - connection metadata and secret references
@@ -366,7 +384,7 @@ Temporary runtime data is not confused with persistent package state.
 
 - authenticated narrow allowlisted runtime API
 
-### Agent to Server
+### Host Connector to Server
 
 - outbound long-lived mutually authenticated connection
 
@@ -383,7 +401,7 @@ No component receives a generic proxy to another trust boundary.
 - reconnect does not require full-page reload
 - failures never become empty success responses
 - package failures are isolated and observable
-- Agent disconnect cancels or fails affected operations predictably
+- Host Connector disconnect cancels or fails affected operations predictably
 - Runtime Manager failure prevents new runtimes but does not stop core read access
 - startup safe mode disables optional packages
 - cleanup failure creates a problem rather than silently leaking resources
@@ -391,14 +409,14 @@ No component receives a generic proxy to another trust boundary.
 ## 16. Security boundaries
 
 - TLS for all remote communication
-- mutual authentication for Agent and privileged control channels
+- server-authenticated TLS plus client-generated hash-verified Host Connector credential, with explicit overlap-safe rotation
 - encrypted secret storage and opaque references
 - short-lived session and credential leases
 - backend-enforced permissions and scopes
 - explicit confirmation for destructive actions
 - audit entries for mutations
 - package and runtime resource limits
-- signed package and runtime artifacts
+- immutable digests, optional publisher signatures and isolated untrusted native frontends
 - no public Docker sockets, PostgreSQL ports or internal package control endpoints
 
 Detailed requirements are in `SECURITY_AND_OPERATIONS.md`.
@@ -418,7 +436,7 @@ Optional:
 - package workers
 - Remote runtime or guacd
 - Browser runtime pool
-- Agents on Proxmox nodes, Docker hosts and selected VMs
+- Host Connectors on Proxmox nodes, Docker hosts and selected VMs
 
 The architecture must not require all packages or runtimes to be installed.
 

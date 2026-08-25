@@ -54,7 +54,7 @@ JulOS 1.0 is optimized for a single-owner homelab but must not hard-code single-
 ### 5.1 Open the homelab workspace
 
 1. User signs in.
-2. JulOS loads the saved desktop for the current viewport class.
+2. JulOS resolves the current client device, workspace class and shared or device-scoped layout.
 3. Widgets show current or clearly marked last-known metrics.
 4. The taskbar restores active applications and reconnectable sessions.
 5. Current critical problems appear without blocking desktop use.
@@ -72,7 +72,7 @@ The internal website is not exposed publicly and is not embedded in an iframe.
 
 ### 5.3 Inspect a Docker problem
 
-1. Docker package receives inventory and health observations from an Agent.
+1. Docker package receives inventory and health observations through a Host Connector.
 2. A stable problem identity is created or updated.
 3. The desktop problem widget shows the issue.
 4. Opening the problem launches the Docker application at the affected service.
@@ -90,8 +90,8 @@ The internal website is not exposed publicly and is not embedded in an iframe.
 ### 5.5 Install a feature package
 
 1. User opens Package Manager.
-2. JulOS downloads a signed package descriptor and verifies compatibility.
-3. Required permissions, runtime resources and dependencies are shown.
+2. JulOS downloads the extension artifact, verifies integrity and evaluates publisher trust.
+3. Required permissions, runtime resources, signature status and dependencies are shown; an unsigned or unknown publisher produces a warning rather than a hidden rejection.
 4. Installation creates package records, storage and optional runtime resources.
 5. Configuration is completed before enablement.
 6. Enabled applications, widgets and capabilities appear dynamically.
@@ -126,17 +126,20 @@ Every window supports the behavior appropriate for its application policy:
 - full-screen mode for remote applications
 - single-instance or multi-instance behavior
 
-### 6.2 Viewport behavior
+### 6.2 Workspace behavior
 
-- Desktop: free windows, snapping and simultaneous applications.
-- Tablet: reduced free placement, larger controls and simplified snap zones.
-- Mobile: one primary full-screen window, task switcher and optional compact widgets.
+- Desktop single-display: free windows, snapping and simultaneous applications.
+- Desktop multi-display: a separate persisted layout with stable logical display slots.
+- Tablet: the same desktop model with maximized/split defaults, larger controls and free placement where space and input allow it.
+- Phone: one primary full-screen application by default and an explicitly activated split with at most two visible applications.
 
-Layouts are stored separately per viewport class so mobile use does not destroy desktop placement.
+Layouts are shared per workspace class by default and may be overridden for one registered client device. Phone use cannot overwrite tablet or desktop placement. The complete resolution and persistence contract is `MOBILE_PWA.md`.
 
 ### 6.3 Session behavior
 
 A window is presentation state. A session is runtime state.
+
+A frontend Surface has a third, separate execution state: foreground-focused, foreground-visible, background-active, suspended, faulted or terminated. Suspending a Surface stops frontend work but does not imply that its Window is closed or its runtime Session is terminated.
 
 A closed window may:
 
@@ -164,7 +167,13 @@ Packages may contribute:
 
 Official packages are developed in the monorepo until the contracts are stable.
 
-### 7.1 Initial official packages
+### 7.1 Application catalog
+
+JulOS extension packages and user applications are separate technical models shown in one Store. A catalog application may connect an existing service, install one Docker image, install a standard Compose stack or reference a native JulOS extension. Standard Compose remains authoritative and JulOS metadata is limited to `x-julos`.
+
+Official, community, Git, HTTPS, OCI and local catalogs are supported. Unsigned application definitions remain installable after a clear administrator warning; invalid claimed signatures are rejected as corrupted. Exact definitions and resolved images are locked by digest. `APPLICATION_CATALOG.md` is the complete contract.
+
+### 7.2 Initial official packages
 
 #### Browser
 
@@ -195,7 +204,8 @@ Reusable Julgate code is extracted into this package. Julgate remains deployable
 
 Provides:
 
-- host and engine connections through Agents
+- host and engine connections through Host Connectors
+- connection, single-image and Compose application installation
 - Compose project, service and container inventory
 - images, volumes and networks
 - health, logs and controlled lifecycle actions
@@ -216,7 +226,7 @@ Provides:
 
 Provides one file-manager application and provider-neutral operations for:
 
-- Agent-local paths
+- Host Connector-local paths
 - SMB
 - SFTP
 - WebDAV
@@ -236,7 +246,7 @@ Caddy UI remains the complete management product.
 
 #### Discovery
 
-Provides network and service observations through Agents:
+Provides network and service observations through Host Connectors:
 
 - ARP
 - ICMP
@@ -255,7 +265,7 @@ JulOS represents infrastructure with stable resources and relationships:
 Proxmox cluster
   └─ Node
       ├─ VM or LXC
-      │   └─ Agent
+      │   └─ Host Connector
       │       └─ Docker engine
       │           └─ Compose project
       │               └─ Service
@@ -279,7 +289,7 @@ An application may be related to a service, route, connection and browser launch
 Stable Docker app identity:
 
 ```text
-agent-id + compose-project + service-name + application-slot
+host-connector-id + docker-engine-id + compose-project + service-name + application-slot
 ```
 
 Container IDs and ephemeral IP addresses are not application identities.
@@ -327,8 +337,8 @@ Problems use a common model with source, stable resource identity, severity, tim
 JulOS intentionally reaches sensitive local systems. Security is therefore a product function, not a later hardening task.
 
 - all authorization decisions occur on the backend
-- Agents establish outbound authenticated connections
-- no general remote shell is exposed by the Agent
+- Host Connectors establish outbound authenticated connections
+- no general remote shell is exposed by a Host Connector
 - secrets are encrypted and represented by opaque references
 - runtime credentials are short-lived
 - package permissions are visible before enablement
@@ -355,7 +365,7 @@ Optional services:
 - Browser runtime pool
 - Remote runtime and guacd
 - package workers
-- Agents on Proxmox nodes, Docker hosts and selected VMs
+- Host Connectors on Proxmox nodes, Docker hosts and selected VMs
 
 The Runtime Manager is control-plane infrastructure and is not the Docker package. It may manage only JulOS-owned runtime resources with mandatory labels and allowlisted configuration.
 
@@ -369,7 +379,8 @@ Core owns:
 - application definitions
 - desktop layouts and window state
 - session references
-- Agents and connections
+- Host Connectors and connections
+- client devices, workspace preferences and application-installation references
 - problem, notification and audit metadata
 - secret references
 
@@ -403,8 +414,8 @@ JulOS 1.0 is complete when a fresh homelab deployment can:
 
 1. install and start the control plane
 2. create an administrator and sign in
-3. enroll Agents
-4. install and configure official packages
+3. enroll Host Connectors where local host access is required
+4. install and configure official extension packages
 5. connect Proxmox and Docker
 6. discover and approve applications
 7. show current host, storage, VM and container status
@@ -413,18 +424,19 @@ JulOS 1.0 is complete when a fresh homelab deployment can:
 10. open RDP, VNC or SSH sessions where configured
 11. access configured file providers
 12. open Caddy UI through the Caddy integration
-13. use multiple windows with snapping and saved layouts
-14. back up and restore the control-plane state
-15. recover through safe mode when an optional package fails
+13. install the PWA and restore phone, tablet, single-display and multi-display workspaces, including an explicit two-app Phone split
+14. connect existing services or install single-image and Compose applications from official and custom catalogs
+15. back up and restore the control-plane and managed application state
+16. recover through safe mode when an optional package fails
 
 ## 16. Explicit non-goals for 1.0
 
-- public third-party marketplace
-- untrusted package execution
+- a centrally governed commercial marketplace
+- unsandboxed untrusted native extension execution
 - Kubernetes
 - high availability
 - native mobile applications
-- unrestricted shell automation
+- unrestricted host shell automation
 - automatic destructive remediation
 - long-term metrics analytics platform
 - replacement of Proxmox, Docker or Caddy UI

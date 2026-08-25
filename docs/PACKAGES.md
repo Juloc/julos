@@ -4,7 +4,9 @@
 
 Packages add optional JulOS capabilities without increasing Core coupling. Official packages live in this monorepo until the package SDK, manifest and release process are stable.
 
-JulOS 1.0 installs only official or administrator-trusted signed packages.
+Publisher signatures are recommended but not an installation gate. Every artifact requires an integrity digest. Unsigned or unknown-publisher artifacts require a clear administrator warning; an artifact with a claimed but invalid signature is rejected. Unknown native frontend code runs only through the isolated frontend boundary from `APPLICATION_CATALOG.md`.
+
+This document defines JulOS **extension packages**. User-facing catalog applications—existing connections, Docker images and Compose stacks—use `APPLICATION_CATALOG.md`. The Store can show both, but persistence, runtime ownership and trust presentation remain distinct.
 
 ## 2. Package identity
 
@@ -26,14 +28,14 @@ Package identity never changes when a display name, repository or publisher webs
 
 ## 3. Package artifact
 
-A package release is represented by a signed OCI artifact or equivalent immutable bundle containing a descriptor and references to immutable assets.
+A package release is represented by an immutable OCI artifact or equivalent bundle containing a descriptor and references to immutable assets. A publisher signature is optional metadata over the complete artifact.
 
 Logical contents:
 
 ```text
 package/
 ├─ manifest.json
-├─ manifest.signature
+├─ manifest.signature                 optional
 ├─ frontend/
 │  ├─ application modules
 │  ├─ widget modules
@@ -73,7 +75,7 @@ Initial semantic shape:
     { "name": "docker.control", "version": 1 }
   ],
   "capabilitiesRequired": [
-    { "name": "agent.connection", "version": 1, "optional": false }
+    { "name": "host.connector.connection", "version": 1, "optional": false }
   ],
   "permissions": [
     "docker.read",
@@ -88,7 +90,7 @@ Initial semantic shape:
 }
 ```
 
-The final JSON schema is committed before implementation. Unknown required fields, unsupported schema versions, invalid signatures and incompatible Core versions fail installation clearly.
+The final JSON schema is committed before implementation. Unknown required fields, unsupported schema versions, integrity mismatches, claimed-but-invalid signatures and incompatible Core versions fail installation clearly. Missing/unknown signatures produce the documented trust warning.
 
 ## 5. Package component types
 
@@ -129,7 +131,7 @@ Installed packages may enter Updating or Removing.
 
 Required lifecycle behavior:
 
-1. verify publisher, signature and artifact digest
+1. verify artifact digest, evaluate publisher/signature state and require acknowledgement when needed
 2. validate manifest and Core compatibility
 3. display permissions, dependencies and runtime requirements
 4. create package record and storage
@@ -220,6 +222,8 @@ health diagnostics
 
 Worker calls have deadlines and cancellation. A failed or timed-out worker call returns a typed package error.
 
+The supervised local `process` worker path is restricted to administrator-trusted signed extensions. An unsigned or unknown-publisher backend worker requires the resource-limited Runtime Manager worker-container profile from `PKG-013`, or the extension remains disabled. Warning acknowledgement alone never grants execution under the Server operating-system identity.
+
 Workers register:
 
 - applications
@@ -233,7 +237,7 @@ Registrations are removed when the package is disabled or worker connection expi
 
 ## 10. Package frontend contract
 
-Frontend modules are signed and integrity-checked.
+Frontend modules are integrity-checked. A trusted publisher may run under the existing trusted frontend policy; unsigned or unknown-publisher native code requires the isolated package-origin/message bridge before execution.
 
 Each application or widget declares:
 
@@ -242,6 +246,7 @@ Each application or widget declares:
 - custom element name
 - localization bundle
 - supported theme and viewport behavior
+- surface contract version and supported background modes
 - API contract version
 - required permissions
 - window or widget size constraints
@@ -249,6 +254,20 @@ Each application or widget declares:
 Package UI uses Shadow DOM to prevent style leakage. The host provides theme tokens, localization, typed API access, navigation and event subscriptions.
 
 The host does not provide secrets, raw tokens or unrestricted global state.
+
+Shadow DOM is not a security sandbox. The isolated frontend bridge exposes only versioned typed messages, no Shell DOM, JulOS cookies or arbitrary Core endpoints. Mobile-capable applications implement activate, deactivate, suspend, resume, optional Back and dispose semantics from `MOBILE_PWA.md`.
+
+The target schema adds one exact case-sensitive object to each mobile-capable `Applications[]` entry:
+
+```json
+"Surface": {
+  "ContractVersion": "1.0.0",
+  "SupportedBackgroundModes": ["suspend", "keep-surface-active"],
+  "HandlesBack": true
+}
+```
+
+`suspend` is required for every application that lists the `mobile` viewport. `keep-surface-active` is optional capability declaration, never permission for the package to select the user's preference. Unknown fields/major versions fail manifest validation. Exact async methods, deadlines, reasons and state transitions are owned by `MOBILE_PWA.md`.
 
 ## 11. Package storage
 
@@ -350,7 +369,7 @@ The manifest cannot request privileged mode, arbitrary host mounts or unrestrict
 Update flow:
 
 1. download immutable artifact
-2. verify signature and digest
+2. verify digest and evaluate optional publisher signature
 3. validate compatibility and permissions changes
 4. show release and migration notes
 5. drain or cancel package operations according to policy
@@ -399,7 +418,8 @@ There is no silent fallback to the old version.
 
 ### Docker
 
-- connects through Agent capability
+- connects through Host Connector capability
+- installs catalog-selected single-image and standard Compose applications on an explicitly selected host
 - inventories hosts, Compose projects, services and containers
 - provides health, logs and controlled lifecycle actions
 - identifies applications using stable host/project/service identities
@@ -415,7 +435,7 @@ There is no silent fallback to the old version.
 
 ### Files
 
-- provides Agent-local, SMB, SFTP and WebDAV providers
+- provides Host Connector-local, SMB, SFTP and WebDAV providers
 - uses one file-operation contract across providers
 - provides upload, download, copy, move, rename, delete and preview
 - requires explicit confirmation and permission for destructive operations
@@ -430,7 +450,7 @@ There is no silent fallback to the old version.
 
 ### Discovery
 
-- combines Agent-visible ARP, ICMP, mDNS, SSDP and optional SNMP sources
+- combines Host Connector-visible ARP, ICMP, mDNS, SSDP and optional SNMP sources
 - records devices and services as observations and proposals
 - requires approval before management
 - preserves ignored state without repeated alerts
@@ -447,7 +467,7 @@ The Package Manager must support:
 - refresh
 - source health
 
-A public catalog and third-party publisher onboarding are outside 1.0.
+Official extension releases remain signed. Administrator-selected custom sources and publishers are allowed under the same digest, warning and native-isolation rules. Application catalogs use the broader source model in `APPLICATION_CATALOG.md`.
 
 ## 19. Repository strategy
 
@@ -463,12 +483,13 @@ Create `Juloc/julos-package-template` only after Package SDK, manifest, worker c
 
 An official package is complete only when it includes:
 
-- valid signed manifest
+- valid manifest, immutable digest and explicit signature state
 - configuration validation
 - permissions and capability declarations
 - health and diagnostics
 - worker isolation
 - application and widget registrations where required
+- surface lifecycle tests for every mobile-capable application
 - localization
 - migration tests
 - timeout and fault tests

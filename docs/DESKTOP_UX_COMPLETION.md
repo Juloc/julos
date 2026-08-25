@@ -4,10 +4,12 @@ JulOS 1.0 must feel like a real desktop environment rather than a web page that 
 
 This gate is completed before feature packages become the main implementation focus.
 
+Scope clarification: this document records completion of the existing responsive Shell foundation. It does not complete the installable PWA, client-device layouts, Phone Split, Tablet multi-window defaults, Surface suspension or Shell-owned Back behavior; those are `MOB-001` through `MOB-010` in `MOBILE_PWA.md`.
+
 ## Current implementation status
 
 - **DESK-013 — implemented:** fresh deployments provide browser-native administrator setup and normal local sign-in.
-- **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, Agent status, notifications/problems and persisted package widgets. Package lifecycle changes refresh the desktop catalog without a page reload.
+- **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, legacy Agent status, notifications/problems and persisted package widgets. The atomic `HCON-002` cutover removes that status application and moves Host access into Settings. Package lifecycle changes refresh the desktop catalog without a page reload.
 - **DESK-015 — implemented, deployed acceptance pending:** the production runtime uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller, existing Alt-Tab switcher and same-browser multi-display coordination. Multiple authenticated JulOS browser windows form one ordered workspace: an existing durable window has one active display owner, a window dragged to an adjacent display edge is handed off after the target prepares the application, and windows owned by a disappearing display are recovered by the remaining workspace. Repository validation and deployed Windows/macOS/touch/multi-display acceptance remain required.
 - **DESK-016 — implemented:** system/light/dark theme, reduced motion and the Fluent-derived token and accent system are active, and server-confirmed theme and motion changes apply without reload. Deferred beyond this iteration: a user-selectable accent, the Full/Balanced/Simple presets and the wallpaper/density controls described in `UI_DESIGN_SYSTEM.md`; the shipped Settings surface exposes language, theme, motion and time zone only.
 
@@ -42,7 +44,7 @@ The production entry point must compose the already implemented Desktop building
 - minimize, restore, maximize, close, focus and z-order work consistently;
 - drag, resize and snapping are active in the production shell;
 - saved layout and window state restore after reload/login where allowed;
-- Package Manager, Settings, notifications, problems and Agent status are reachable from the shell;
+- Package Manager, Settings, notifications, problems and current legacy Agent status are reachable from the shell; target Host Connector administration belongs only under Settings → Host access;
 - Package Manager can install a signed package, apply configuration and control package enable/disable/removal lifecycle;
 - package lifecycle changes refresh launcher/window/widget availability without a page reload;
 - widgets render through the existing widget host from persisted placements;
@@ -128,6 +130,8 @@ Desktop UX Completion is done only when a clean installation can be tested throu
 10. exercise the same shell with a desktop Windows browser and a desktop macOS browser;
 11. verify keyboard-only and basic tablet/touch operation.
 
+The later `MOB-010` release gate additionally covers installed Android/iOS/iPad PWA use, Phone Split, shared/device layouts, Tablet keyboard/trackpad, Surface suspend/resume and system/mouse Back routing.
+
 The gate must be validated against the production Server-served Desktop build, not a standalone development shell.
 
 ## Ordering
@@ -138,7 +142,7 @@ Implementation order from the current alpha state:
 2. DESK-014 Shell composition
 3. DESK-015 Cross-platform interaction pass
 4. DESK-016 Appearance and personalization completion
-5. deployed Agent/Host Metrics acceptance
+5. deployed legacy Agent/Host Metrics acceptance followed by the `HCON-002` migration gate
 6. deployed Remote acceptance
 7. Browser completion
 8. Docker and Proxmox

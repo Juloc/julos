@@ -2,9 +2,25 @@
 
 Use these terms consistently in code, documentation and UI.
 
-## Agent
+## App installation
 
-A small JulOS process installed on a target host. It connects outbound to Server and exposes only configured typed capabilities.
+One selected catalog delivery connected to or deployed on one target. It has a stable JulOS identity and managed, adopted or external ownership.
+
+## Application catalog
+
+A versioned source of application metadata and delivery options. It may be official, community-managed, Git/HTTPS/OCI-backed or local.
+
+## Background mode
+
+The user preference `suspend` or `keep-surface-active` for an application's hidden frontend Surface. Keep-surface-active is best effort and is not durable background execution; Remote Session `keep-active` is a different lifecycle contract.
+
+## Client device
+
+One explicitly registered browser/PWA installation used to resolve layout preferences. It is random, user-scoped and never an authentication credential.
+
+## Container terminal
+
+A short-lived, permission-checked Remote terminal session attached by the Docker package to one selected container. It is not a Host Connector or host shell.
 
 ## Application
 
@@ -16,7 +32,7 @@ A Browser session opened with a fixed website and reduced browser chrome. It rem
 
 ## Capability
 
-A versioned operation contract that a package or Agent can provide and another package can request through Core.
+A versioned operation contract that a package or Host Connector can provide and another package can request through Core.
 
 ## Capability broker
 
@@ -28,7 +44,7 @@ Stored configuration that allows a package to access an external product, host o
 
 ## Core
 
-The product-independent JulOS platform behavior: users, permissions, packages, applications, layouts, sessions, Agents, problems and audit metadata.
+The product-independent JulOS platform behavior: users, permissions, extension packages, applications, layouts, sessions, Host Connectors, problems and audit metadata.
 
 ## Desktop
 
@@ -38,13 +54,23 @@ The browser client shell containing taskbar, launcher, windows, widgets, notific
 
 Evidence that a device, service or application may exist. An observation does not grant access or management.
 
+## Host Connector
+
+An optional small JulOS host service installed when a package needs local host resources. It connects outbound with a durable enrolled identity and exposes only configured, versioned typed capabilities. It has no assistant/chat role, package UI, package business logic or general host shell.
+
+`Agent` is the legacy pre-migration name retained only in historical work items, releases, migrations and compatibility documentation.
+
+## Layout scope
+
+`shared` uses the user's workspace-class layout across devices. `device` uses a layout owned by one registered Client device. `fresh` is a restore mode that persists no Window state.
+
 ## Launch target
 
 A specific resource or configured destination opened through an Application, such as one discovered web service or one VM console.
 
 ## Package
 
-A signed installable JulOS feature unit that can contribute applications, widgets, workers, settings and capabilities.
+An installable JulOS extension unit that can contribute applications, widgets, workers, settings and capabilities. Its integrity digest is mandatory; publisher signature state is separately visible.
 
 ## Package worker
 
@@ -72,7 +98,7 @@ An opaque identifier for encrypted credential material. The value is never retur
 
 ## Server
 
-The JulOS ASP.NET Core control plane serving APIs, Desktop assets, authentication, package coordination and Agent connections.
+The JulOS ASP.NET Core control plane serving APIs, Desktop assets, authentication, package/application coordination and Host Connector connections.
 
 ## Session
 
@@ -81,6 +107,10 @@ A live or reconnectable runtime interaction such as Browser, RDP, VNC or SSH. Se
 ## Stable external identity
 
 A package-defined identity that continues across ephemeral resource recreation. A Docker container ID is not a stable application identity.
+
+## Surface
+
+One package frontend instance hosted for a Window. Its foreground-focused, foreground-visible, background-active, suspended, faulted or terminated execution state is separate from Window presentation and runtime Session state.
 
 ## Widget
 
@@ -92,4 +122,8 @@ Saved presentation state for one Application instance, including position, size,
 
 ## Viewport class
 
-One of desktop, tablet or mobile. Layouts are stored separately per viewport class.
+One of desktop, tablet or mobile declared for application compatibility. Persisted presentation uses Workspace class instead.
+
+## Workspace class
+
+One of Phone, Tablet, desktop-single or desktop-multi. Shared and optional device-scoped layouts are stored separately per Workspace class.

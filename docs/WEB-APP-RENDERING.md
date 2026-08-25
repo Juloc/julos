@@ -1,6 +1,6 @@
 ﻿# Web application rendering
 
-Status: In progress. Design accepted in decision `D035`. The static transparent proxy, dynamic encoded-origin proxy and address-bar browser foundation are implemented; Agent-tunnel reachability, credential injection, compatibility fallback and the remaining release gates are still open.
+Status: In progress. Design accepted in decision `D035`. The static transparent proxy, dynamic encoded-origin proxy and address-bar browser foundation are implemented; Host Connector-tunnel reachability, credential injection, compatibility fallback and the remaining release gates are still open.
 
 ## 1. Goal
 
@@ -43,7 +43,7 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
   - rewrite proxy-owned redirect/location headers when they point back at the same upstream origin;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;
   - apply request and idle timeouts and a per-target request-rate budget.
-- **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through the outbound Agent tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.
+- **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through a target-bound `host.stream/1` grant on the outbound Host Connector tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.
 - **Authentication:** target credentials are injected on the server side through a short-lived secret lease (see the secret model in [`SECURITY_AND_OPERATIONS.md`](SECURITY_AND_OPERATIONS.md)). No target credential is ever sent to the client.
 - **Rendering:** the desktop window embeds an iframe whose source is the target host. Because JulOS controls that host's response headers, the shell origin is allowed to frame it. Several windows embed several iframes; the footprint is a normal browser tab.
 
@@ -104,7 +104,7 @@ Fallback is an explicit, observable transition, not a hidden retry (see the no-s
 
 ## 7. Relationship to decision D005
 
-`D005` rejects iframes as the general application runtime because a foreign origin can forbid framing and because internal services must not be exposed. Local mode does use an iframe, but only for a JulOS-controlled host whose framing headers JulOS itself sets, reached through the Agent tunnel and never publicly exposed. The reasons behind `D005` do not apply to this case. Framing a foreign origin directly remains forbidden. Decision `D035` records this boundary.
+`D005` rejects iframes as the general application runtime because a foreign origin can forbid framing and because internal services must not be exposed. Local mode does use an iframe, but only for a JulOS-controlled host whose framing headers JulOS itself sets, reached through the Host Connector tunnel and never publicly exposed. The reasons behind `D005` do not apply to this case. Framing a foreign origin directly remains forbidden. Decision `D035` records this boundary.
 
 ## 8. Prerequisite
 
@@ -116,7 +116,7 @@ The JulOS session cookie must also be scoped to the deployment's parent domain (
 
 - **M0 — Done:** accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
 - **M1 — In progress:** transparent local proxy, WebSocket transport, framing/cookie/redirect policy, configured-target launcher integration, dynamic encoded-origin backend and address-bar browser are implemented. Real target/browser acceptance and the remaining dynamic compatibility work are still required.
-- **M2 — Open:** reach targets through the Agent tunnel and inject target credentials through a secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
+- **M2 — Open, depends on `HCON-005`:** reach targets through a target-bound Host Connector stream and inject target credentials through an operation-bound secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
 - **M3 — Partially complete:** resolved-IP SSRF validation and connection pinning are implemented. Rendering-policy resolution with `auto` and an observable fallback to streamed mode remains.
 - **M4 — Open:** remaining cookie/redirect edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
 - **M5 — Open:** security and footprint review and the remote-access runbook, as release gates before the mode is enabled by default.
@@ -150,5 +150,5 @@ Database-backed targets and per-target credential references replace the static 
 ## 11. Open questions
 
 - Confirm wildcard DNS and a wildcard TLS certificate are available for the deployment domain.
-- Final ownership of Agent-tunnel proxy reachability and credential injection within the existing Core/Browser capability boundaries.
+- No ownership question remains for tunneling: the owning Web/Browser capability authorizes the target, `HCON-005` transports the bound stream, and the operation-bound Secret lease injects credentials server-side.
 - Optional later extension: named, shareable workspaces that group several windows.

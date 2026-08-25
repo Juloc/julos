@@ -510,7 +510,7 @@ Status: done.
 
 Implemented through versioned operation and progress contracts, an Application lifecycle port, PostgreSQL-backed Infrastructure storage and permission-protected Server endpoints. Creation is idempotent per user and key. Queued resources remain queued until an owning executor explicitly starts them; only the executor can mark verified work as succeeded. Progress events are immutable and update the current summary atomically.
 
-Running cancellation is a durable request observed by the owning worker or Agent through the Application service; queued cancellation becomes terminal immediately. Failed operations persist only a stable code and caller-safe detail. Migration `AddOperationResources` creates the operation and progress tables and backfills the three explicit operation permissions for an existing administrator role.
+Running cancellation is a durable request observed by the owning worker or target Host Connector through the Application service; queued cancellation becomes terminal immediately. Failed operations persist only a stable code and caller-safe detail. Migration `AddOperationResources` creates the operation and progress tables and backfills the three explicit operation permissions for an existing administrator role.
 
 Integration tests cover antiforgery, idempotency conflict, reconnect-safe reads, progress ordering, persistent cancellation and safe failed-operation causes against real PostgreSQL.
 
@@ -692,6 +692,22 @@ Acceptance:
 - shell is operable without a pointer
 - automated and manual checklist passes
 
+### DESK-013 — Complete browser first-run and sign-in
+
+Status: done. Detailed delivered behavior and acceptance evidence are owned by `DESKTOP_UX_COMPLETION.md` and summarized in `BACKLOG.md`.
+
+### DESK-014 — Compose the production Shell
+
+Status: done. The canonical launcher/window/taskbar/package/widget composition and acceptance record are in `DESKTOP_UX_COMPLETION.md`. HCON-002 depends on this completed item.
+
+### DESK-015 — Complete cross-platform desktop interaction
+
+Status: done; deployed Windows/macOS/touch evidence remains a release-gate check. Multi-display and interaction details are in `DESKTOP_UX_COMPLETION.md` and `MULTI-DISPLAY.md`.
+
+### DESK-016 — Complete appearance and personalization foundation
+
+Status: done for the documented shipped theme/motion/token scope. Deferred personalization is not silently part of this item; see `DESKTOP_UX_COMPLETION.md` and `UI_DESIGN_SYSTEM.md`.
+
 ## Phase 4 — Package platform
 
 ### PKG-001 — Define package manifest schema
@@ -715,6 +731,8 @@ Acceptance:
 
 - modified artifact is rejected
 - untrusted publisher cannot install
+
+This records the completed initial trusted-only path. `PKG-013` and `PKG-014` deliberately supersede the publisher gate for unknown/unsigned content only after isolation and digest-bound acknowledgement; invalid integrity remains rejected.
 
 ### PKG-003 — Implement Runtime Manager service
 
@@ -827,6 +845,8 @@ Acceptance:
 - package contains no product-specific infrastructure logic
 
 ## Phase 5 — Agent and host observability
+
+Historical terminology note: `AGT-001` through `AGT-006` were implemented and released under the former **Agent** name. Do not rename historical commits, migrations, release notes or work-item IDs. `HCON-002` uses this implementation as its migration source and replaces current product/API/process terminology atomically; no new work extends an `AGT-*` contract.
 
 ### AGT-001 — Implement enrollment tokens
 
@@ -978,6 +998,31 @@ Acceptance:
 
 - password/key auth, host-key policy and terminal resize tested
 
+### REM-009 — Implement provider-neutral terminal presentation
+
+Depends on: REM-004, REM-005, HCON-005.
+
+Deliver:
+
+- versioned terminal WebSocket contract separate from graphical Guacamole display
+- terminal renderer with UTF-8 input/output, resize, focus release and mobile keyboard support
+- reconnect, idle timeout, maximum duration and explicit end semantics
+- package-facing session creation contract that identifies one already-authorized terminal provider target
+
+Out of scope:
+
+- generic Host Connector or Server shell
+- reuse of SSH target credentials for Docker exec
+- terminal input/output recording
+
+Acceptance:
+
+- resize and multibyte input survive round trips
+- disconnect/reconnect follows explicit session policy
+- expiry and Window close end presentation without inventing success
+- no graphical Remote/Guacamole payload is required for a terminal-only provider
+- automated contract, authorization, reconnect, timeout and mobile-keyboard tests pass
+
 ### BRW-001 — Build Browser runtime image
 
 Depends on: PKG-003, REM-004.
@@ -1033,40 +1078,653 @@ Acceptance:
 - app mode remains a full browser session, not iframe
 - policy can allow opening in full browser mode
 
-## Phase 7 — Docker and Proxmox
+## Phase 6A — Product realignment foundations
 
-### DKR-001 — Implement Agent Docker capability
+This phase is mandatory before new host, catalog or mobile behavior. It replaces incorrect product terminology and persistence assumptions without keeping dual implementations. Normative details are in `HOST_CONNECTOR.md`, `MOBILE_PWA.md` and `APPLICATION_CATALOG.md`.
 
-Depends on: AGT-003.
+### SPEC-001 — Reconcile the JulOS product concept
 
-Deliver engine connection, read scope and allowlisted control actions.
+Depends on: current Phase 6 implementation evidence and accepted user decisions.
+
+Deliver:
+
+- accepted Host Connector, open application catalog and PWA/mobile target specifications
+- synchronized Product, Concept, Architecture, Technical, UX, Package, Data, Security, Quality, implementation, backlog, decision and glossary documents
+- explicit migration boundaries for legacy Agent terminology, viewport layouts and signed-only package policy
+- branch disposition for the open package-route fix and stale Docker implementation branch
+
+Out of scope:
+
+- production code or schema changes
+- merging the existing Docker branch
+- claiming any new target behavior is implemented
 
 Acceptance:
 
-- Docker socket is not publicly exposed
-- read-only scope cannot mutate
+- no authoritative specification contradicts decisions D009, D016 and D036 through D041
+- every new implementation item has dependencies, deliverables, exclusions and acceptance criteria
+- historical releases/migrations remain factual and current target terminology is unambiguous
+- Markdown links and repository policy validation pass
 
-### DKR-002 — Implement Docker inventory worker
+### STAB-001 — Integrate the real-Kestrel package-route fix
+
+Depends on: SPEC-001 and the existing regression commit `31a11ba` on `origin/agent/fix-package-route-fallback`.
+
+Deliver:
+
+- replace the routed catch-all that suppresses package parameter routes under Kestrel
+- preserve Web App proxy handling and typed JulOS `request.not_found` responses
+- add the `server-smoke` validation stage that boots real Kestrel
+- assert package enable, disable, remove and update route families are routed
+- wire the smoke into release validation and reconcile `QUALITY_AND_TESTING.md`
+
+Out of scope:
+
+- Host Connector, catalog, mobile or Docker behavior
+- weakening the authenticated fallback policy
+- treating in-memory `TestServer` coverage as real-host evidence
+
+Acceptance:
+
+- an unknown package action reaches its handler and returns a package-owned error rather than `request.not_found`
+- a genuinely unknown route returns HTTP 404 with `request.not_found`
+- Web App proxy host routing still executes before the not-found middleware
+- `server-smoke` and full repository validation pass on the integrated `main`
+- the remote fix branch is deleted only after the verified commit is reachable from `main`
+
+### DB-001 — Add supported SQLite schema upgrades
+
+Depends on: API-001, D033 and SPEC-001.
+
+Deliver:
+
+- an Infrastructure-owned ordered SQLite migration runner used only by `--migrate-database`
+- `__julos_schema_history` containing migration ID, checksum and applied timestamp
+- a deterministic baseline detector for the exact last supported `EnsureCreated` beta schema
+- a fresh-database baseline migration and a real previous-beta SQLite fixture
+- transaction, checksum and interrupted-migration diagnostics
+- removal of `EnsureCreated` from production upgrade behavior
+- provider-aware backup/restore path for default SQLite before the first schema-changing cutover
+
+Implementation rules:
+
+- PostgreSQL continues to use committed EF migrations; old migrations are never rewritten
+- SQLite migration classes/scripts are provider-specific where PostgreSQL SQL cannot apply
+- a legacy schema is baselined only when its complete expected table/index fingerprint matches
+- unknown/partial schemas fail with `database.sqlite_schema_unsupported`; they are not guessed or repaired
+- normal Server startup never changes schema
+- SQLite backup stops mutations, checkpoints WAL, uses the SQLite backup API into staging, runs `integrity_check`, writes checksums and publishes atomically; restore verifies/stages before replacing the explicit database file
+
+Acceptance:
+
+- fresh SQLite and upgraded previous-beta SQLite expose the same current model
+- running migration twice is idempotent
+- checksum mismatch or injected failure leaves the previous transaction usable
+- real fixture retains users, packages, Agent/Host Metrics, layouts, sessions, secrets and audit rows
+- scripted SQLite backup/restore drill reproduces the pre-migration database byte-logically and leaves the source unchanged on injected failure
+- documentation and backup/restore runbook name the supported rollback limit
+
+### HCON-001 — Lock Host Connector contracts and migration constants
+
+Depends on: SPEC-001.
+
+Deliver:
+
+- committed public/runtime contract fixtures from `HOST_CONNECTOR.md`
+- canonical Host Connector IDs, event names, errors, permissions, paths and headers
+- CredentialV1 enrollment/rotation and heartbeat/long-poll runtime endpoint fixtures
+- documented `MachineIdentityNamespaceV1` retaining the legacy hash namespace
+- complete database and identity-file migration map
+
+Out of scope: executable rename or compatibility adapter.
+
+Acceptance:
+
+- fixtures cover minimum, complete, malformed and unsupported-major messages
+- no target contract contains a generic command, shell, TCP destination or Docker API payload
+- old protocol can only become a non-executing 426 tombstone during the cutover
+
+### HCON-002 — Replace Agent with Host Connector atomically
+
+Depends on: HCON-001, DB-001, completed AGT-001 through AGT-006, DESK-014 and PKG-012.
+
+Deliver in one vertical commit:
+
+- project, namespace, type, API, protocol-v1 heartbeat/long-poll, environment, service/image and current documentation rename
+- PostgreSQL and SQLite table/column/index/constraint migration preserving durable IDs/history, draining and archiving legacy Commands instead of coercing them into typed requests
+- protected default/custom-path identity migration preserving ID, CredentialV1 and MachineIdentityV1, including both-file conflict handling
+- client-generated credential enrollment plus administrator-initiated overlap-safe rotation
+- Host Connector permission creation, explicit role/assignment backfill and endpoint policy cutover
+- Host Metrics `2.0.0` with `hostConnectorId`
+- Settings → Hosts → Host access administration
+- removal of Agent launcher/taskbar app and browser-facing generic command creation
+- exact 426 legacy runtime tombstone only for the documented transition release
+- English and German user-facing text, pre-cutover backup/drain/failure-recovery/rollback-limit runbook and upgrade note
+
+Out of scope:
+
+- Docker, Files or Discovery feature expansion
+- automatic binary update
+- permanent old/new dual route
+
+Acceptance:
+
+- clean install, PostgreSQL fixture, SQLite fixture and real identity-file upgrade pass
+- enrollment, exact retry, credential rotation, heartbeat/long-poll, metrics, diagnostics, rename and revoke work under new contracts
+- queued legacy Commands become failed archive rows with `agent.command_cancelled_for_upgrade`; active legacy work blocks migration and never becomes fake success
+- read/manage/diagnostics/Admin and 401/403 permission migration matrix passes idempotently
+- revoked and legacy binaries execute no request after cutover
+- current UI/API/assemblies contain no product Agent surface outside explicit historical allowlist
+- credentials and tokens are absent from logs, diagnostics and migration output
+
+### HCON-003 — Validate and publish the Host Connector upgrade
+
+Depends on: HCON-002.
+
+Deliver:
+
+- deployed clean-install and supported-upgrade evidence
+- published Host Connector image/binary and Host Metrics package with immutable version/digest
+- executed evidence for the HCON-002 upgrade, failure-recovery and rollback-limit runbooks
+- removal date for the non-executing legacy tombstone
+
+Acceptance:
+
+- a previously enrolled real host reconnects without re-enrollment
+- Server, Connector and official package version mismatch is actionable
+- legacy identity file is removed only after verified new-file write
+- release smoke covers Host access UI, metrics, default/custom identity paths, credential rotation, revoke and diagnostics
+
+### HCON-004 — Add typed host-adapter request registry
+
+Depends on: HCON-002, PKG-009.
+
+Deliver:
+
+- registry keyed by capability name/version, operation name and payload schema version
+- per-operation request validator, authorization/scope descriptor, deadline and result-size policy
+- internal dispatch API for package-owned providers
+- rejection of unknown/disabled capabilities before queue persistence
+
+Out of scope: arbitrary extension scripts, generic JSON commands or streaming.
+
+Acceptance:
+
+- an unregistered tuple cannot be queued or executed
+- target scope is checked by Server and independently by Connector
+- cancellation/deadline/result limit propagate end to end
+- architecture tests prove packages do not reference Connector implementation types
+
+### HCON-005 — Add target-bound multiplexed Host Connector streams
+
+Depends on: HCON-003, HCON-004, API-007, API-009.
+
+Deliver:
+
+- authenticated stream grant and multiplexing contract from `HOST_CONNECTOR.md`
+- binding to parent Operation, user, capability, target, direction, expiry and byte limits
+- backpressure, cancellation, idle timeout and disconnect cleanup
+- Server/Connector diagnostics with no payload content
+
+Out of scope: arbitrary TCP proxy, host shell or target selection by the Connector.
+
+Acceptance:
+
+- a grant cannot be replayed for another target/capability/Connector
+- cancellation and disconnect close both directions predictably
+- byte/idle/expiry limits fail with stable codes
+- WEB-001 and REM-009 can consume the same transport without bypassing their own authorization
+
+### MOB-001 — Lock PWA, workspace, lifecycle and Back contracts
+
+Depends on: SPEC-001.
+
+Deliver:
+
+- committed contract fixtures and canonical vocabulary from `MOBILE_PWA.md`
+- workspace/layout resolution and migration fixtures
+- package Surface lifecycle and Shell navigation interfaces
+- documented cache allow/deny matrix
+
+Acceptance:
+
+- Phone, Tablet, desktop-single and desktop-multi behavior has one unambiguous owner
+- Window, Surface and Session state cannot be conflated in contracts
+- no hardware fingerprint or offline-mutation queue is permitted
+
+### MOB-002 — Add installable PWA Shell
+
+Depends on: MOB-001, FND-003, DESK-001, DESK-002.
+
+Deliver:
+
+- manifest, complete icons/maskable icons and standalone install metadata
+- versioned service worker and immutable Shell-asset cache
+- disconnected and update-available Shell surfaces in English and German
+- Page/Service-Worker update handshake with per-client flush/conflict/offline/discard behavior
+- safe-area, `100dvh`, `VisualViewport` and software-keyboard handling
+
+Acceptance:
+
+- installability audit passes on supported Android/iOS/Desktop targets
+- API/auth/antiforgery/secret/operation/session/display/proxy responses never enter persistent cache
+- offline start shows unavailable/Retry and performs no mutation
+- activation never forces reload; each page reloads only after clean/flush or explicit current-page discard
+
+### MOB-003 — Add client-device registration and preferences
+
+Depends on: MOB-001, DB-001, API-002, API-003, API-004.
+
+Deliver:
+
+- `ClientDevice`, `DeviceWorkspacePreference` and `ApplicationExecutionPreference` persistence
+- server-generated random device key, Secure/HTTP-only/SameSite-Strict cookie, hash-only storage and owner-scoped APIs
+- fixed capability classification, device-level Workspace override and exact registration/re-registration DTO/status behavior
+- Settings UI to name/remove devices and choose shared/device plus resume/fresh
+- `client_device.changed`, antiforgery, optimistic concurrency and documented audit behavior
+
+Acceptance:
+
+- device key cannot authenticate or access another user's resources
+- clearing site data creates a visible new device identity
+- missing/deleted/cross-user cookie never reveals or adopts another user's device
+- device removal deletes only that device's layouts/preferences
+- concurrent preference writes return 409 with authoritative revision
+
+### MOB-004 — Replace viewport-only layout identity
+
+Depends on: MOB-003, CORE-004, DESK-008, DB-001.
+
+Deliver:
+
+- Workspace-class/layout-scope Domain and API model
+- PostgreSQL and SQLite migration from desktop/tablet/mobile shared layouts
+- provider-equivalent partial unique indexes, composite ownership/window references and Phone state checks
+- resolver for shared, device and fresh modes
+- stable `DisplaySlot` field and separate desktop-multi initialization
+- deletion of the old viewport route in the same cutover
+- `workspace_layout.changed` publication and authoritative client refresh
+
+Acceptance:
+
+- migrated windows, widgets, bounds and revisions remain intact
+- migrated Mobile layout chooses deterministic Primary, keeps every other Window and never fabricates Split
+- Phone/Tablet/Desktop writes cannot overwrite another class
+- fresh mode performs no persistence
+- no indefinite old/new layout API exists
+
+### MOB-005 — Implement Phone Split and Tablet desktop presentation
+
+Depends on: MOB-004, DESK-003 through DESK-009.
+
+Deliver:
+
+- Phone Single/explicit Split stage, divider, focus and task-switcher integration
+- Portrait top/bottom and Landscape left/right geometry
+- third-app focused-pane replacement and background transition
+- Tablet maximized/tiled defaults and capability-aware free windows
+- logical display-slot restoration for desktop-multi
+
+Acceptance:
+
+- Phone never shows more than two foreground Windows
+- ratio persists only between 25% and 75%
+- orientation/software-keyboard changes do not change layout identity
+- Tablet holds at least two visible apps and supports touch, keyboard and pointer
+
+### MOB-006 — Implement versioned package Surface lifecycle
+
+Depends on: MOB-001, PKG-001, PKG-010, MOB-003.
+
+Deliver:
+
+- exact `Applications[].Surface` manifest fields and async host for activate/deactivate/suspend/resume/Back/dispose
+- Surface lifecycle scheduler and per-app/background preference resolution
+- serialized/idempotent transitions, visible-unfocused state, reason enums, AbortSignal and deadlines
+- instrumentation proving suspended surfaces stop frontend work
+- explicit unsupported-major failure
+
+Acceptance:
+
+- packages cannot enable `keep-surface-active` themselves
+- suspended test app has no timers, polling, rendering, input or display activity
+- dispose and suspend are observably different
+- mobile-capable package without the supported contract does not silently run
+
+### MOB-007 — Migrate Browser and Remote surfaces
+
+Depends on: MOB-006, REM-004, REM-005, BRW-003, BRW-004.
+
+Deliver:
+
+- Browser and Remote Surface implementations that detach display/input/polling on suspend
+- resume against authoritative Session identity/revision
+- separation of element disconnect from Session termination
+- package-specific Back behavior
+
+Acceptance:
+
+- Surface suspend never terminates a Browser/Remote Session by itself
+- Window close still applies the documented Session lifecycle policy
+- resume after Server/PWA reconnect shows current state or explicit expiry
+- no duplicate display connection survives suspend
+
+### MOB-008 — Add Desktop Operation Center
+
+Depends on: API-007, API-010, DESK-002.
+
+Deliver:
+
+- queued/running/recent Operation list and detail
+- owner-scoped cursor API with state/package/time filters and bounded page size
+- `operation.changed` event handling followed by authoritative refresh
+- explicit cancellation action and permission state
+- resume after PWA restart
+
+Acceptance:
+
+- closing/suspending an originating Window does not cancel work
+- at-least-once events do not duplicate Operations
+- progress/failure/cancellation remain visible with stable codes
+
+### MOB-009 — Add Shell-owned Back navigation
+
+Depends on: MOB-006, MOB-007, DESK-006, DESK-007, DESK-012.
+
+Deliver:
+
+- one `ShellNavigationController` and sequence/epoch history state machine without a guard sentinel
+- overlay → app → split/task → workspace → Root ordering
+- `popstate`, supported mouse Back and platform Back integration
+- runtime bridge hook for proxied apps and package Surface hook
+
+Acceptance:
+
+- each layer consumes exactly one Back step
+- multi-entry browser jumps unwind deterministically and rejected/timed-out handlers cannot trap history
+- app returning not-handled continues to Shell history
+- Browser page Back stays inside streamed Browser
+- JulOS Root allows platform exit and cannot trap navigation
+
+### MOB-010 — Complete cross-device PWA release acceptance
+
+Depends on: MOB-002 through MOB-009.
+
+Deliver:
+
+- automated and recorded manual matrix for Android Chrome PWA, iPhone/iPad Home-Screen/Safari, Tablet pointer/keyboard, Desktop PWA/tab and multi-monitor
+- upgrade evidence from viewport layouts
+- measured idle/suspended resource behavior
+
+Acceptance:
+
+- every `MOBILE_PWA.md` acceptance criterion passes on named targets
+- shared layout then device override is verified with two devices
+- durable Operation survives app switch and PWA restart
+- no high-severity accessibility, data-loss or navigation defect remains
+
+### CAT-001 — Implement application-catalog schemas and validator
+
+Depends on: SPEC-001, STAB-001, FND-004.
+
+Deliver:
+
+- `app-catalog-index.v1`, `app-manifest.v1` and optional `app-catalog-keyset.v1` JSON schemas
+- bundle/path/size/symlink rules and `x-julos` schema
+- supported Compose subset validator and deterministic normalization
+- minimum, complete, all-delivery, extension, malformed and unsupported-feature fixtures
+- `catalog-manifests` repository validation stage
+
+Acceptance:
+
+- unknown ordinary fields, traversal, symlinks, duplicate identities and unsupported required features fail
+- unknown `x-*` metadata is preserved but never executed
+- unsupported Compose semantics fail rather than being ignored
+- parse/canonicalize/reparse of every valid fixture produces the same definition and plan digests
+
+### CAT-002 — Implement catalog sources, atomic cache and trust evaluation
+
+Depends on: CAT-001, DB-001, API-007, API-008.
+
+Deliver:
+
+- source persistence and official/HTTPS/Git/OCI/local adapters
+- Git commit and OCI/HTTP digest locking
+- atomic last-valid cache with explicit stale state
+- signature envelope verification, immutable Key ID/fingerprint and rotation/revocation policy
+- persisted Catalog Publisher Key, cached-entry trust evidence and administrator trust decisions
+- source permissions, Secret References, refresh Operation and Problems
+
+Acceptance:
+
+- failed/partial refresh never replaces the last valid cache
+- private source credentials never reach client/logs
+- source identity change and duplicate app identity fail clearly
+- trusted-signed, unknown-signed, unsigned, invalid-signature and digest-mismatch fixtures behave exactly as documented
+
+### PKG-013 — Isolate unknown native extension code
+
+Depends on: PKG-003, PKG-010, CAT-001.
+
+Deliver:
+
+- separate package origin or sandboxed frame with typed message bridge for unknown frontends
+- no JulOS session cookie, Shell DOM or arbitrary Core API on that origin
+- resource-limited Runtime-Manager worker-container profile for unknown backend workers
+- refusal of unknown `process` workers under Server identity
+
+Acceptance:
+
+- malicious fixture cannot read cookies, DOM, tokens or call undeclared endpoints
+- bridge authorization and schema rejection are backend enforced
+- worker receives only declared storage/network/channel and cannot inspect unrelated runtimes
+- trusted official package path remains functional without a duplicate application model
+
+### PKG-014 — Make publisher signatures optional with digest-bound acknowledgement
+
+Depends on: PKG-002, PKG-008, PKG-011, PKG-013, CAT-002.
+
+Deliver:
+
+- four signature/trust presentation states and immutable digest enforcement
+- install/update preview with exact warning codes and plan/artifact digest
+- administrator acknowledgement bound to that digest and operation
+- pause automatic update when source, key, trust or critical rights change
+
+Acceptance:
+
+- unsigned and cryptographically valid unknown-signed artifacts can install after warning through isolated paths
+- claimed-invalid signature and digest mismatch always fail
+- approval cannot be replayed for changed bytes or rights
+- official signed package release flow remains trusted and unchanged
+
+## Phase 7 — Docker, application delivery and Proxmox
+
+### CONN-001 — Implement provider-neutral external Connections
+
+Depends on: DB-001, API-004, API-008, CAT-001, CORE-003.
+
+Deliver:
+
+- Connection Domain/persistence/API from `APPLICATION_CATALOG.md`
+- `connections.read`, `connections.manage` and `connections.validate` permissions with Administrator backfill
+- provider capability name/version instead of implementation reference
+- sanitized endpoint, optional routed Host Connector and versioned settings
+- Connection Secret Bindings, `connection` Secret Reference scope and validation Operation
+- explicit external launch-target registration
+
+Acceptance:
+
+- no endpoint embeds credentials and no API returns a value
+- standalone Connection creation/configuration has no App Installation dependency
+- connection validation is permission-checked, cancellable and observable
+- deleting a Connection never deletes the external service
+- cross-user/package scopes and stale revisions fail
+
+### APP-001 — Implement App Installation domain, lock and preview/apply APIs
+
+Depends on: CAT-002, CONN-001, API-007, PKG-014.
+
+Deliver:
+
+- App Installation with separate lifecycle, desired/observed runtime and health state
+- catalog source tombstone references, provider-validated target Connection, installed/desired versions and deployment lock
+- immutable schema-v1 Deployment Lock and single-use exact-digest Approval persistence
+- mutation-free Preview with expiry, Plan Digest, rights/conflicts/data effects and trust result
+- Apply request containing only Preview ID, Plan Digest, warning acknowledgements and Idempotency Key
+- durable operation and stable errors
+
+Out of scope: Docker apply, adoption, update, backup and uninstall.
+
+Acceptance:
+
+- Preview writes no Installation/resource/external state
+- changed/expired plan cannot reuse acknowledgement
+- native-extension delivery delegates to Package Installation lifecycle
+- Domain contains no Docker or Compose types
+
+### API-011 — Add app-installation Secret Bindings and Connector leases
+
+Depends on: APP-001, API-008, HCON-004.
+
+Deliver:
+
+- `app-installation` Secret Reference scope and App Secret Binding persistence
+- one-use operation-bound lease binding Installation, Connector, Binding, capability, target and approved Plan Digest
+- authenticated out-of-band secret delivery and buffer disposal contract
+- audit metadata without values
+
+Acceptance:
+
+- lease issues only for matching running, non-cancelling Operation
+- secret bytes never enter preview/apply/Operation/Connector queue/result/audit/log persistence
+- expiry/retry obtains a new lease and replay fails
+- Connector zeroes/disposes value after Docker handoff
+
+### DKR-001 — Implement bounded Host Connector Docker adapter
+
+Depends on: HCON-004, CONN-001, PKG-009.
+
+Deliver:
+
+- typed `docker.inventory/1`, `docker.logs/1` and `docker.control/1` adapters
+- provider-validated `docker-engine` Connection settings with one stable Engine ID and optional Host Connector route
+- configured engine scope and independent local validation
+- read versus control permission/scope separation
+- selective port of useful behavior/tests from `origin/agent/docker-phase-completion`, never a wholesale merge
+
+Out of scope: user app deployment and generic Docker API forwarding.
+
+Acceptance:
+
+- Server, Runtime Manager and clients receive no Docker socket/API proxy
+- read scope cannot mutate
+- unknown operation/field/engine fails closed
+- two engines on one host remain distinct Connections and cannot cross scopes
+- deadline, cancellation and output-size limits pass against a real Docker host
+
+### DKR-002 — Implement stable Docker inventory and ownership mapping
 
 Depends on: DKR-001, PKG-005.
 
-Deliver hosts, projects, services, containers, images, volumes and networks.
+Deliver:
+
+- hosts, engines, projects, services, containers, images, volumes and networks
+- stable project/service/resource identities
+- JulOS installation ownership-label map with owned/adopted/external classification
+- bounded observation persistence and stale/offline behavior
 
 Acceptance:
 
-- inventory uses stable service identity
-- transient container ID changes do not duplicate resources
+- container recreation does not duplicate a service/app
+- ephemeral container IDs/IPs never become durable identity
+- unrelated resources are visible only under granted inventory scope and never become owned
+- real Compose fixture verifies project/service/volume/network mapping
+
+### APP-002 — Implement connection delivery and external app registration
+
+Depends on: APP-001, CONN-001.
+
+Deliver:
+
+- `connection` delivery Preview/Apply
+- selection and validation of an existing `ready` Connection through provider capability
+- Application launch target and optional Web rendering policy
+- external ownership and removal behavior
+
+Acceptance:
+
+- apply deploys no container
+- connection secrets remain Secret Bindings
+- Store setup can create a separate draft Connection, but App Preview remains mutation-free
+- App removal leaves the referenced standalone Connection; Connection deletion is a separate confirmation
+- Home Assistant connection fixture opens through an approved target
+
+### DKR-007 — Implement single-image app deployment
+
+Depends on: APP-001, API-011, DKR-002, PKG-009.
+
+Deliver:
+
+- `docker.apps/1` preflight/apply/inspect typed contract
+- deterministic one-service Compose normalization
+- image tag resolution and Deployment Lock digest
+- parameter/Secret Binding, ownership labels, health verification and operation progress
+
+Acceptance:
+
+- wrong architecture, port/mount/name conflict and forbidden rights fail before apply
+- success is recorded only after inspect verifies desired resources and health
+- retry is exact and cannot create a second installation
+- Connector mutates only matching ownership labels
+
+### DKR-008 — Implement supported Compose preview and deployment
+
+Depends on: CAT-001, DKR-007.
+
+Deliver:
+
+- parser/normalizer for the exact supported subset in `APPLICATION_CATALOG.md`
+- multi-service, named-volume and network preflight/apply/inspect
+- critical-right classification and host-policy denial
+- deployment lock retaining normalized plan and image digests
+
+Acceptance:
+
+- `build`, escaping includes/files and unbound host environment are rejected
+- unsupported keys are never ignored
+- privileged/device/host namespace/socket/bind, every `cap_add`, `seccomp=unconfined` and `apparmor=unconfined` right requires exact acknowledgement and host-policy evaluation
+- real multi-service Compose, health, volume, network and recreation tests pass
+
+### APP-006 — Implement explicit Docker adoption
+
+Depends on: APP-001, DKR-002, DKR-008.
+
+Deliver:
+
+- adoption Preview enumerating existing resources, conflicts, ownership and allowed actions
+- explicit administrator approval and ownership-label transition where safe
+- adopted data/resource retention defaults
+
+Acceptance:
+
+- discovery never adopts automatically
+- resource already owned by another installation cannot be adopted
+- shared/external resources remain non-owned
+- removal of an adopted app retains data unless a separate verified ownership action permits deletion
 
 ### DKR-003 — Implement Docker application UI
 
-Depends on: DKR-002, PKG-010.
+Depends on: DKR-002, PKG-010, MOB-006.
 
-Deliver resource navigation, status, logs and actions.
+Deliver resource navigation, status, logs, actions, app-installation links and Surface lifecycle support.
 
 Acceptance:
 
-- write actions are permission-controlled and confirmed
+- write actions are backend permission-controlled and confirmed
 - error cause remains visible
+- suspended UI stops log polling without losing server Operations
+- stable installation/service identity is visible instead of container ID
 
 ### DKR-004 — Implement Docker application discovery
 
@@ -1078,6 +1736,8 @@ Acceptance:
 
 - proposals require approval
 - ignored proposals remain ignored
+- proposals offer Connect or Adopt explicitly and never imply management
+- a workload named Hermes follows the same generic evidence path as any other workload
 
 ### DKR-005 — Implement Docker problems
 
@@ -1089,12 +1749,121 @@ Acceptance:
 
 - repeated observations deduplicate
 - resolved conditions close correctly
+- last-known observations are never presented as live
+
+### DKR-006 — Implement explicit audited container terminal
+
+Depends on: DKR-001, DKR-002, REM-009, HCON-005, API-004, API-009.
+
+Deliver:
+
+- `docker.container.terminal/1` for one current container resolved from stable installation/service identity
+- permission `docker.container.terminal`, explicit confirmation, fixed shell profiles and bounded session
+- Remote terminal presentation and target-bound stream
+- audit open/connect/disconnect/expiry/failure without input/output
+
+Acceptance:
+
+- wrong Connector/engine/installation/service scope fails closed
+- container recreation resolves the current container immediately before exec
+- close, disconnect, idle and maximum timeout terminate and verify the exec process
+- no Host Connector/Server/Runtime Manager host shell exists
+
+### CAT-003 — Implement Store, source management and App Builder
+
+Depends on: CAT-002, APP-001, PKG-014, DKR-008, MOB-006.
+
+Deliver:
+
+- one Store presenting delivery kind and technical trust boundary clearly
+- source add/edit/remove/refresh and stale-cache UI
+- My Apps local catalog and Builder import/edit/validate/test/export
+- install Preview showing source/signature, target, rights, conflicts and data effects
+- English/German and Phone/Tablet/Desktop Surface behavior
+
+Acceptance:
+
+- Connection/Image/Compose/Native flows are distinguishable before apply
+- one warning allows authorized unsigned install; invalid signature remains blocked
+- Builder export/import produces the same definition digest
+- custom source failure leaves last valid content visibly stale
+
+### APP-004 — Implement managed-app backup and restore
+
+Depends on: APP-001, DKR-008, API-011.
+
+Deliver:
+
+- verified archive containing normalized definition/lock, image digests, non-secret config, Secret Reference IDs, ownership map and declared data
+- stop-consistent first implementation and checksum manifest
+- restore preflight, staging/apply and health verification
+- retained backups independent from Installation removal
+
+Acceptance:
+
+- no secret value enters archive or logs
+- checksum failure mutates nothing
+- real named-volume backup restores on a clean target
+- failed restore is observable and retains the prior verified backup
+
+### APP-003 — Implement app update policy and diff
+
+Depends on: CAT-002, APP-004, DKR-008, PKG-014.
+
+Deliver:
+
+- off/notify/automatic policy
+- source/trust/definition/image/rights/data diff and Preview
+- required pre-update backup and explicit safe rollback eligibility
+- desired/install lock update only after health verification
+
+Acceptance:
+
+- automatic update pauses on source/key/trust or critical-right change
+- failed health never advances installed lock
+- data survives update and verified backup can restore
+- no silent downgrade/fallback occurs
+
+### APP-005 — Implement safe managed-app uninstall
+
+Depends on: APP-004, DKR-008.
+
+Deliver:
+
+- Uninstall Preview classifying owned/adopted/external/shared resources
+- retain data, backup then remove owned data, and permanent owned-data removal choices
+- image cleanup candidates separate from data ownership
+
+Acceptance:
+
+- external/shared/adopted resources and retained data are not deleted
+- selected backup is verified before destructive removal
+- backups survive uninstall
+- retry is idempotent and reports partial external failure explicitly
+
+### REL-CAT-001 — Publish official catalog and application template
+
+Depends on: CAT-003, APP-002 through APP-006, DKR-007, DKR-008, PKG-014.
+
+Deliver:
+
+- stable built-in source ID and migration from current embedded official package catalog
+- public catalog/template repositories and validator usage guide
+- immutable release/signature/index generation
+- Home Assistant connection/Compose reference fixtures and generic workload terminal evidence
+
+Acceptance:
+
+- old `/api/v1/packages/catalog` and new catalog are not retained as indefinite parallel authorities
+- existing installed native packages remain Package Installations without fake App Installation backfill
+- official packages remain signed under publisher `juloc-official`
+- fresh install and supported upgrade produce identical source/package visibility
 
 ### PVE-001 — Implement Proxmox connection validation
 
-Depends on: API-008, PKG-005.
+Depends on: CONN-001, API-008, PKG-005.
 
-Deliver API token authentication, endpoint validation and TLS policy.
+Deliver a versioned `proxmox-api` Connection provider with API token authentication, endpoint validation, optional Host Connector routing and TLS policy.
 
 Acceptance:
 
@@ -1167,9 +1936,9 @@ Acceptance:
 - large directories remain usable
 - transfer continues while window is minimized
 
-### FILE-003 — Implement Agent-local provider
+### FILE-003 — Implement Host Connector-local provider
 
-Depends on: FILE-001, AGT-003.
+Depends on: FILE-001, HCON-004.
 
 Acceptance:
 
@@ -1238,7 +2007,7 @@ Acceptance:
 
 ### DISC-001 — Implement discovery observation contracts
 
-Depends on: AGT-003, CORE-003.
+Depends on: HCON-004, CORE-003.
 
 Deliver device/service observations, evidence and lifecycle.
 
@@ -1349,6 +2118,23 @@ Acceptance:
 
 ## Phase 10 — Release and migration
 
+### HCON-006 — Remove the non-executing legacy Agent tombstone
+
+Depends on: HCON-003 and at least one published transition release whose notes announced the removal.
+
+Deliver:
+
+- delete the legacy `/api/v1/agent/*` 426 route and its compatibility-only middleware/fixtures
+- retain historical migrations, audit names and `legacy_agent_commands` retention data only
+- update upgrade diagnostics to report an obsolete Agent binary through current Host Connector/version health rather than a live legacy endpoint
+
+Acceptance:
+
+- no runtime route or executable accepts the legacy protocol
+- supported previous-release upgrade follows the announced Host Connector path
+- historical audit/export remains readable
+- full validation and deployed upgrade smoke pass before 1.0 release
+
 ### REL-001 — Create installation wizard and setup guide
 
 Depends on: core, package manager and deployment stability.
@@ -1373,7 +2159,7 @@ Acceptance:
 Acceptance:
 
 - empty host reaches working desktop
-- Agent, Docker, Proxmox, Browser and Remote setup succeeds
+- Host Connector, Docker, Proxmox, Browser and Remote setup succeeds
 
 ### REL-004 — Validate supported upgrade
 
@@ -1433,7 +2219,7 @@ area:foundation
 area:core
 area:desktop
 area:packages
-area:agent
+area:host-connector
 area:remote
 area:browser
 area:docker

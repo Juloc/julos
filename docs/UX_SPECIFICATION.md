@@ -151,10 +151,11 @@ The status area contains only global items:
 
 - notifications
 - problems
-- Agent connectivity summary
 - current user
 - time
 - settings or power menu
+
+Host Connector administration belongs under Settings → Hosts → Host access. Connector failures appear through Problems/Notifications and inside the package that needs the host; a Connector is not a launcher application or permanent taskbar item.
 
 ## 8. Widgets
 
@@ -216,18 +217,21 @@ Examples:
 
 - package installation completed
 - browser session terminated by inactivity policy
-- Agent enrolled
+- Host Connector enrolled
 - backup completed or failed
 - destructive action completed
 
 Duplicate notifications from repeated observations are suppressed.
 
-## 11. Package manager UX
+## 11. Store and package manager UX
+
+The Store presents catalog applications and JulOS extension packages together while naming the selected delivery clearly: connect existing service, install image, install Compose or install native extension.
 
 Package detail page shows:
 
 - name, publisher and version
 - signature status
+- catalog source and stale state
 - core compatibility
 - applications and widgets contributed
 - permissions requested
@@ -236,6 +240,10 @@ Package detail page shows:
 - configuration state
 - health and logs
 - update notes
+
+Unsigned or unknown-publisher content shows one concise warning with source, digest and runtime-right summary, followed by **Install anyway** for an authorized administrator. An invalid claimed signature is shown as corrupted and cannot run.
+
+Docker/Compose preview additionally shows selected host, ports, networks, mounts, devices, privileged settings, data ownership and the exact resources JulOS will manage. Connection-only delivery states that no service will be deployed or deleted.
 
 Lifecycle actions:
 
@@ -253,6 +261,8 @@ Remove distinguishes:
 - remove runtime and delete package data
 
 Destructive removal requires re-authentication or strong confirmation when secrets, profiles or operational state are deleted.
+
+Managed application removal separately offers retain data, back up then remove owned data, or remove owned data. External, shared and adopted resources default to retain.
 
 ## 12. Browser application UX
 
@@ -332,7 +342,9 @@ Docker and Proxmox applications share interaction patterns:
 
 Write actions are visually separated from read views. Dangerous actions use explicit names such as `Stop VM` rather than ambiguous icons.
 
-## 16. Responsive behavior
+## 16. PWA and responsive behavior
+
+JulOS is installable as a PWA and remains usable as a normal browser tab. Offline mode is not simulated: disconnected state permits Retry and troubleshooting but no fake successful mutation.
 
 ### Desktop viewport
 
@@ -345,17 +357,25 @@ Write actions are visually separated from read views. Dangerous actions use expl
 ### Tablet viewport
 
 - taskbar remains
-- windows default to maximized or split
+- windows default to maximized or split and at least two visible applications are supported
+- free windows are available when screen area and pointer capabilities permit
 - resize and drag handles are enlarged
 - command palette remains available
 
 ### Mobile viewport
 
-- one primary application at a time
+- one primary application by default
+- explicit Split shows at most two foreground applications
+- Portrait splits top/bottom; Landscape splits left/right
 - task switcher replaces free overlapping windows
 - widgets move to a scrollable overview page
 - remote applications default to full screen
-- desktop layout remains stored but is not rewritten
+- Phone, Tablet, desktop-single and desktop-multi layouts remain separate
+- shared layouts may be overridden per registered client device
+
+### 16.1 Surface execution
+
+Phone backgrounds suspend by default. A Shell action on the open application offers **Keep active in background** when the package supports it. Suspension stops frontend timers, polling, rendering and presentation connections without implicitly terminating Browser/Remote sessions or durable Operations. Mobile operating systems may still freeze the complete PWA; the UI never promises guaranteed client-side background execution.
 
 ## 17. Accessibility
 
@@ -386,6 +406,18 @@ Escape            Close active transient overlay
 ```
 
 Shortcuts that conflict with a remote session are captured only when the JulOS session toolbar is active or the user invokes a documented escape chord.
+
+## 18.1 Back behavior
+
+System Back, browser history and supported mouse Back buttons enter the same Shell dispatcher:
+
+1. close the top transient dialog/menu;
+2. invoke the active application's registered Back handler;
+3. collapse Phone split/detail history;
+4. return from task switcher/application view to the workspace;
+5. allow normal browser/PWA exit only at the JulOS Root.
+
+Packages do not mutate top-level browser history. Proxied applications participate only through the versioned runtime bridge; streamed Browser handles its own page navigation.
 
 ## 19. Theme and motion
 

@@ -24,7 +24,7 @@ Test pure rules without databases or network access:
 Test use cases with explicit fake ports:
 
 - package install coordination
-- Agent enrollment and revocation
+- Host Connector enrollment and revocation
 - capability resolution
 - layout persistence
 - problem observation processing
@@ -45,7 +45,7 @@ Architecture tests enforce:
 - Core projects contain no package product namespaces
 - package projects do not reference each other
 - Contracts contain no EF Core or ASP.NET implementation types
-- Agent contains no package-specific business logic
+- Host Connector contains no package-specific business logic, assistant behavior or generic execution path
 - Server is the composition root
 - public package SDK surface is explicitly reviewed
 
@@ -72,6 +72,9 @@ Run against a real supported PostgreSQL container or isolated database:
 - transactional package migration failure
 - backup metadata consistency
 - query pagination and indexes
+- Host Connector rename and viewport-to-workspace upgrade fixtures
+
+The default SQLite store has its own real previous-release file fixtures. Tests run the production migration command and verify identity, credentials, layouts, revisions and audit links. `EnsureCreated` is not accepted as upgrade coverage.
 
 SQLite is not used as a substitute for PostgreSQL behavior.
 
@@ -100,7 +103,10 @@ Start the real ASP.NET Core application with controlled dependencies:
 - idempotency
 - revision conflicts
 - package fault isolation
-- Agent enrollment endpoints
+- Host Connector enrollment endpoints
+- client-device registration/cookie/status/owner behavior and workspace-layout ownership/concurrency
+- owner-scoped cursor-paged Operation list and `operation.changed` refresh
+- catalog preview/apply digest binding and app-installation lifecycle
 - layout and window persistence
 - operation resources
 
@@ -126,7 +132,14 @@ Pure TypeScript tests cover:
 - window store commands
 - snap geometry
 - z-order
-- viewport layout selection
+- workspace/device layout resolution
+- fixed Phone/Tablet/Desktop classification and device override without orientation/keyboard identity changes
+- shared/device partial-index and same-layout Primary/Secondary constraints on PostgreSQL and SQLite
+- Phone Single/Split and foreground limit
+- Tablet multi-window presentation
+- serialized/idempotent Surface lifecycle, visible-unfocused pane, deadline/abort/fault and background preference mapping
+- Shell Back routing for overlay, app, split/task and Root
+- sequence/epoch History reconciliation, multi-entry jump, handler timeout and Root exit without a sentinel trap
 - event deduplication
 - stale-state calculations
 - keyboard shortcut routing
@@ -141,11 +154,15 @@ Playwright tests cover critical journeys:
 - reload layout restoration
 - install and enable a test package
 - faulted package does not break desktop
-- enroll a test Agent
+- enroll a test Host Connector
 - show and acknowledge a problem
 - start and terminate a fake session
 - switch English and German
-- mobile task switching
+- install the PWA and exercise Phone task switching and explicit two-app split
+- use Tablet touch, keyboard and pointer interaction
+- verify shared layouts and a concrete-device override
+- verify a durable Operation survives surface suspension and PWA restart
+- verify service-worker update with clean, dirty, conflict, offline, discarded and multiple-client pages
 
 Full protocol tests for RDP, VNC, SSH and Browser runtime use dedicated integration environments and do not run in every small unit-test job.
 
@@ -162,23 +179,53 @@ Every official package includes:
 - application and widget registration tests
 - upgrade migration tests
 - fault and timeout tests
+- frontend surface-contract tests for every mobile-capable application
 
 A package cannot depend on another package being installed unless it declares a required capability and tests the unavailable-provider state.
 
-## 4. Agent tests
+### 3.1 Catalog and managed-application tests
+
+- `app-catalog-index.v1` and `app-manifest.v1` fixtures for every delivery kind;
+- official, HTTPS, Git, OCI and local source identity/cache behavior;
+- standalone draft Connection, connection-scoped Secret Binding, validation/readiness and in-use deletion behavior;
+- stale last-valid cache after refresh failure;
+- unsigned, unknown-signed, trusted-signed and invalid-signature decisions;
+- key-ID reuse with changed bytes, fingerprint mismatch, not-yet-valid, expired, distrusted and revoked key policy;
+- persisted cached-entry, Deployment Lock and approval trust snapshots remain explainable after source/key changes;
+- image-tag resolution to digest and definition-lock persistence;
+- complete App Installation lifecycle/cancellation/retry/cleanup/reconcile transition matrix;
+- `julos-compose-v1` YAML, short/long nested-field, interpolation, canonicalization and cross-field fixtures;
+- Critical Rights fixtures for capabilities, unconfined security profiles, devices, namespaces, socket and bind paths;
+- Compose supported-subset validation and explicit unsupported-feature errors;
+- preview expiry and changed-digest rejection;
+- Secret References are leased only to a matching running Operation and never serialized into persisted Connector payloads;
+- managed, adopted and external ownership cannot be confused;
+- real Docker/Compose preflight, apply, recreation, health, backup, restore and uninstall with real volumes;
+- shared/external data and backups survive uninstall;
+- Home Assistant connect/install and Hermes generic inventory/terminal acceptance.
+
+## 4. Host Connector tests
 
 - enrollment token consumption
+- client-generated CredentialV1 hash-only storage, exact enrollment retry and no response echo
+- overlap-safe credential rotation crash/retry/timeout matrix
 - credential storage permissions
 - reconnect and backoff
 - heartbeat and offline detection
 - capability allowlist
-- malformed command rejection
+- malformed typed request rejection and legacy Command drain/archive with queued/running fixtures
 - deadline and cancellation
 - output-size limit
 - path normalization
 - Docker target scoping
 - discovery range enforcement
 - upgrade compatibility
+- PostgreSQL/SQLite row-preserving Agent-to-Host-Connector migration
+- protected default/custom/both-file/pending identity migration without re-enrollment or MachineIdentity change
+- read/manage/diagnostics permission backfill and 401/403 role matrix
+- default SQLite backup/restore drill before schema cutover
+- rejection of generic shell, arbitrary TCP and Docker API payloads
+- bounded stream authorization, backpressure, cancellation and expiry
 
 Linux-specific collectors are tested using fixture data plus at least one real integration environment.
 
@@ -235,8 +282,14 @@ Runtime Manager is security-critical. Tests verify:
 - login rate limits
 - unsafe redirect rejection
 - Content Security Policy validation
-- package signature rejection
-- Agent revocation
+- artifact integrity mismatch and claimed-invalid-signature rejection
+- unsigned/unknown trust warning and authorized acknowledgement
+- unknown native frontend isolation from Shell DOM, cookies and arbitrary Core APIs
+- Host Connector revocation
+- client-device cross-user isolation and non-authentication behavior
+- service-worker forbidden-cache coverage
+- service-worker activation never forces reload before per-page flush or explicit local discard
+- Docker installation ownership and terminal permission/scope/audit coverage
 - expired session token rejection
 - path traversal rejection
 - runtime allowlist enforcement
@@ -269,7 +322,8 @@ Measured scenarios:
 - 50 widgets with normal refresh intervals
 - 1000 discovered applications in search
 - 10,000 active and resolved problems with pagination
-- Agent event burst
+- Host Connector event burst
+- catalog refresh and app-installation event burst
 - package worker restart
 - Browser and Remote runtime startup
 
@@ -280,7 +334,8 @@ Regressions against documented budgets require investigation before merge.
 - PostgreSQL unavailable during startup
 - package worker unavailable
 - Runtime Manager unavailable
-- Agent disconnect during operation
+- Host Connector disconnect during operation or bounded stream
+- PWA/browser process suspension during a durable Operation
 - external API timeout
 - Browser runtime exits unexpectedly
 - duplicate event delivery
@@ -352,6 +407,7 @@ Still to be added to the validation stages, with the work item that adds them:
 
 - PostgreSQL integration tests: `API-001`
 - package manifest validation: `PKG-001`
+- application-catalog index, manifest, key-set and Compose validation: `CAT-001`
 - selected end-to-end tests: `DESK-012`
 - dependency and secret scan: `OPS-005`
 

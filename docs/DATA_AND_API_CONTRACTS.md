@@ -13,7 +13,7 @@ This document defines the initial persistent model and transport conventions. Ex
 - Package schemas are isolated from core tables and from each other.
 - JSON columns are used only for genuinely versioned or package-defined structures, not to avoid normal relational modeling.
 
-The first core migration implements the Phase 1 entities that already have domain behavior: packages, applications and launch targets, layouts and placements, session references, Agents and capabilities, problems, notifications, audit events and permission assignments. Persistence ownership fields such as user identifiers and timestamps are stored where the contracts require them, but future authentication, package-manifest, secret and settings fields are not invented before their owning work items.
+The first core migration implements the Phase 1 entities that already have domain behavior: packages, applications and launch targets, layouts and placements, session references, the legacy Agent/target Host Connector model and capabilities, problems, notifications, audit events and permission assignments. Later committed migrations introduce Host Connector naming, client devices, workspace layouts and application installations without rewriting historical migrations.
 
 All these tables live in the `core` schema. The Entity Framework migration history is also schema-qualified. Package data remains in package-owned schemas introduced by `PKG-004`; no package table is mapped by `CoreDbContext`.
 
@@ -58,7 +58,7 @@ GrantedAtUtc
 GrantedByUserId
 ```
 
-Scope can target the whole installation, a package, Agent, connection or external resource.
+Scope can target the whole installation, a package, Host Connector, connection, app installation or external resource.
 
 ### 2.3 Package installation
 
@@ -68,7 +68,9 @@ PackageId
 InstalledVersion
 ManifestSchemaVersion
 Publisher
-SignatureThumbprint
+ArtifactDigest
+SignatureState                  trusted-signed, unknown-signed or unsigned
+SignatureThumbprint             nullable
 State
 ConfigurationState
 HealthState
@@ -167,12 +169,19 @@ Revision
 ```text
 DesktopLayoutId
 UserId
-ViewportClass
+WorkspaceClass                  phone, tablet, desktop-single or desktop-multi
+ClientDeviceId                  null for a shared layout
 Name
-IsDefault
+PresentationMode               freeform, tiled, phone-empty, phone-single or phone-split
+PrimaryWindowId
+SecondaryWindowId
+SplitRatioPermille
+DisplayCount
 Revision
 UpdatedAtUtc
 ```
+
+PostgreSQL and SQLite use separate partial unique indexes for shared (`ClientDeviceId IS NULL`) and device layouts (`ClientDeviceId IS NOT NULL`). Composite foreign keys enforce device ownership and same-layout Primary/Secondary Window references; check constraints enforce the Phone mode/nullability/ratio matrix. `fresh` is enforced by resolver/API because it deliberately selects no persisted row. `MOBILE_PWA.md` defines exact SQL-equivalent rules, selection and deterministic viewport-layout migration.
 
 ### 2.8 Window state
 
@@ -192,13 +201,14 @@ RestoreY
 RestoreWidth
 RestoreHeight
 ZIndex
+DisplaySlot
 SessionReferenceId
 CreatedAtUtc
 UpdatedAtUtc
 Revision
 ```
 
-Window state is never used as proof that a runtime session is still alive.
+Window state is never used as proof that a frontend Surface is active or a runtime Session is still alive.
 
 ### 2.9 Widget placement
 
@@ -237,15 +247,16 @@ Revision
 
 Protocol credentials and transport secrets are not stored in this record.
 
-### 2.11 Agent
+### 2.11 Host Connector
 
 ```text
-AgentId
-Name
+HostConnectorId
+DisplayName
 MachineIdentity
 OperatingSystem
 Architecture
 Version
+ProtocolVersion
 State
 EnrolledAtUtc
 LastSeenAtUtc
@@ -253,11 +264,11 @@ RevokedAtUtc
 Revision
 ```
 
-### 2.12 Agent capability
+### 2.12 Host Connector capability
 
 ```text
-AgentCapabilityId
-AgentId
+HostConnectorCapabilityId
+HostConnectorId
 CapabilityName
 CapabilityVersion
 Enabled
@@ -267,26 +278,238 @@ ObservedAtUtc
 Revision
 ```
 
+### 2.12a Host Connector request
+
+```text
+HostConnectorRequestId
+HostConnectorId
+OperationId                     nullable
+CapabilityName
+CapabilityVersion
+OperationName
+TargetReference
+PayloadSchemaVersion
+Payload
+RequestedAtUtc
+DeadlineAtUtc
+CorrelationId
+MaximumResultBytes
+IdempotencyClassification
+State
+ClaimedAtUtc
+CompletedAtUtc
+FailureCode
+Revision
+```
+
+The tuple capability/version/operation/payload-schema selects a committed typed contract. Unknown fields/tuples fail before persistence. Legacy `agent_commands` never populate this table; HCON-002 drains active rows and retains terminal rows in a read-only historical table with no runtime repository.
+
 ### 2.13 Connection
 
 A connection represents configured access to an external system or provider.
 
 ```text
 ConnectionId
-OwningPackageId
-Name
+ProviderCapabilityName
+ProviderCapabilityVersion
 ConnectionKind
-Endpoint
-SecretReferenceId
+Name
+SanitizedEndpoint
+RouteHostConnectorId             nullable
 SettingsVersion
 Settings
 Enabled
+ConfigurationState               draft, ready or invalid
 LastValidationAtUtc
 LastValidationState
+LastFailureCode
 Revision
 ```
 
-The endpoint is sanitized and must not contain embedded credentials.
+The endpoint is sanitized and must not contain embedded credentials. A provider Package remains authoritative through its versioned capability rather than a Core reference to package implementation code.
+
+```text
+ConnectionSecretBindingId
+ConnectionId
+DestinationParameterName
+SecretReferenceId
+Purpose
+Revision
+```
+
+Connection secrets use Connection Secret Bindings and `connection`-scoped Secret References. `POST /api/v1/connections` creates a non-enabled `draft` from non-secret settings. The caller then creates/binds required secrets and requests validation; only successful validation moves it to `ready`. This keeps standalone Connections independent from App Installation and makes inline Store setup an explicit draft-then-preview sequence rather than a mutating Preview.
+
+### 2.13a Client device and preferences
+
+```text
+ClientDeviceId
+OwnerUserId
+ClientInstanceKeyHash
+DisplayName
+LastDetectedWorkspaceClass
+WorkspaceClassOverride
+CreatedAtUtc
+LastSeenAtUtc
+Revision
+```
+
+```text
+ClientDeviceId
+WorkspaceClass
+LayoutScope                     shared or device
+RestoreMode                     resume or fresh
+Revision
+```
+
+```text
+UserId
+ApplicationDefinitionId
+WorkspaceClass
+ClientDeviceId                  null for shared preference
+BackgroundMode                  suspend or keep-surface-active
+Revision
+```
+
+The client key is not an authentication credential. Server stores only its hash and always scopes resolution through the authenticated user. Workspace override belongs to Client Device so resolution can load it before selecting a workspace-specific preference. Detection uses the fixed `MOBILE_PWA.md` matrix and never uses Visual Viewport, user agent or a hardware fingerprint. Shared and device Application Execution Preferences use the same two-part partial-unique-index strategy as layouts; nullable Client Device ID is never protected by one ordinary unique index.
+
+### 2.13b Catalog source and application installation
+
+Core stores catalog source/cache metadata, desired installation state, approvals, stable external resource references and backup references. It does not copy authoritative Docker state.
+
+```text
+CatalogSourceId
+SourceKind
+DisplayName
+Location
+AuthenticationSecretReferenceId
+TrustLevel
+Enabled
+DeletedAtUtc
+LastSuccessfulRevision
+LastSuccessfulDigest
+LastRefreshAtUtc
+LastRefreshState
+LastFailureCode
+Revision
+```
+
+```text
+CatalogEntryCacheId
+CatalogSourceId
+AppId
+Version
+SourceRevision
+SourceDigest
+DefinitionDigest
+PublisherId
+SignatureKeyId
+PublicKeyFingerprint
+SignatureState
+TrustAssessmentDigest
+CachedAtUtc
+Revision
+```
+
+```text
+CatalogPublisherKeyId
+CatalogSourceId
+PublisherId
+KeyId
+Algorithm
+PublicKeySpki
+PublicKeyFingerprint
+ValidFromUtc
+ValidUntilUtc
+RevokedAtUtc
+AdministratorTrustState
+TrustedByUserId
+TrustedAtUtc
+FirstObservedSourceRevision
+LastObservedSourceRevision
+Revision
+```
+
+The official fingerprint set is release configuration. Administrator trust is bound to source, publisher, key ID and fingerprint. A key ID observed with different bytes fails refresh rather than replacing the record.
+
+```text
+AppInstallationId
+CatalogSourceId
+AppId
+DeliveryKey
+DeliveryKind
+TargetConnectionId
+DeliveryProviderCapabilityName
+DeliveryProviderCapabilityVersion
+ResolvedProviderPackageInstallationId
+OwnershipMode
+InstalledVersion
+DesiredVersion
+InstalledDefinitionDigest
+DesiredDefinitionDigest
+ResolvedArtifactLockVersion
+DeploymentLockSchemaVersion
+DeploymentLockDigest
+UpdatePolicy
+LifecycleState
+DesiredRuntimeState
+ObservedRuntimeState
+HealthState
+LastOperationId
+LastFailureCode
+RemovedAtUtc
+CreatedAtUtc
+UpdatedAtUtc
+Revision
+```
+
+`LifecycleState` is `Installing`, `Installed`, `Updating`, `Removing`, `Failed` or terminal `Removed`. Preview is mutation-free and is never a lifecycle state. Runtime desire, runtime observation and health remain separate axes. Exactly one deployment Operation may own the deployment lock; failures retain the referenced Operation and stable failure code. `APPLICATION_CATALOG.md` owns the transition table and reconciliation rules.
+
+`TargetConnectionId` is null only for targetless local native-extension delivery. Docker delivery uses a provider-validated `docker-engine` Connection; `RouteHostConnectorId` on that Connection resolves target reachability. A Host Connector ID, engine URL, socket path, container ID or display name is never substituted for the Connection identity.
+
+```text
+AppDeploymentLockId
+AppInstallationId
+SchemaVersion
+CatalogSourceId
+CatalogSourceRevision
+CatalogSourceDigest
+AppId
+Version
+DeliveryKey
+DefinitionDigest
+ProviderCapabilityName
+ProviderCapabilityVersion
+TargetConnectionId
+NormalizedPlanDigest
+ResolvedArtifactDigests
+PublisherId
+SignatureKeyId
+PublicKeyFingerprint
+SignatureStateAtApply
+TrustAssessmentDigest
+CriticalRightsDigest
+NonSecretConfigurationDigest
+CreatedAtUtc
+```
+
+```text
+AppDeploymentApprovalId
+PreviewId
+PlanDigest
+DefinitionDigest
+TrustAssessmentDigest
+WarningCodes
+ApprovedByUserId
+ApprovedAtUtc
+ExpiresAtUtc
+ConsumedByOperationId
+ResultingAppInstallationId
+Revision
+```
+
+Approval is single-use and exact-digest-bound. The immutable Deployment Lock is the installed evidence; later source/key trust changes do not rewrite it and are compared during update Preview. `TrustAssessmentDigest` covers signature state plus key trust (`official-pinned`, `administrator-trusted`, `unknown`, `distrusted`, `revoked` or `expired`) and the resulting `normal`, `warning`, `deny-integrity` or `deny-policy` decision.
+
+Related records hold versioned non-secret configuration, App Secret Bindings, owned/adopted/external resource references and verified app-backup metadata. Preview creates no Installation record. Native-extension delivery delegates lifecycle authority to `PackageInstallation`. Exact fields and lifecycle are in `APPLICATION_CATALOG.md`.
 
 ### 2.14 Secret reference
 
@@ -302,7 +525,7 @@ DeletedAtUtc
 Revision
 ```
 
-`OwningScopeType` is `system` or `package` in the first contract. A package scope requires a valid package identity; a system scope has no scope identifier. `Purpose` is stable non-secret metadata and cannot be changed independently of the reference.
+`OwningScopeType` is `system`, `package`, `connection` or `app-installation`. A package scope requires a valid package identity, a connection scope requires a valid Connection, an app-installation scope requires a valid App Installation, and a system scope has no scope identifier. `Purpose` is stable non-secret metadata and cannot be changed independently of the reference.
 
 The Core store additionally owns the encryption-key identifier, 96-bit nonce, ciphertext and 128-bit authentication tag. These fields are never transport members. Active rows require all protected-value fields; deletion clears all four fields and retains only the metadata tombstone.
 
@@ -313,7 +536,7 @@ HTTP contract:
 - `POST /api/v1/secret-references/{id}/rotation` replaces encrypted value material using an expected revision
 - `DELETE /api/v1/secret-references/{id}?revision={revision}` destroys value material
 
-No API returns the secret value after creation. A package or Core worker receives a short-lived operation-specific credential lease through the Application port only while the owning operation is running and not cancelling.
+No API returns the secret value after creation. A package, Core worker or Host Connector receives a short-lived operation-specific credential lease through the Application port only while the owning operation is running and `CancellationRequested` is false. A Connection lease binds Connection, Connection Secret Binding, provider capability and validation Operation. An app lease binds Installation, Host Connector, App Secret Binding and approved Plan Digest. Neither value enters a persisted Connector request.
 
 ### 2.15 Problem
 
@@ -376,7 +599,7 @@ DeduplicationKey
 AuditEventId
 OccurredAtUtc
 UserId
-AgentId
+HostConnectorId
 SourcePackageId
 Action
 TargetType
@@ -528,19 +751,23 @@ POST /api/v1/applications/{applicationId}/launch
 
 Launch returns either a native window descriptor, background operation or session reference.
 
-### 5.4 Desktop layouts
+### 5.4 Client devices and workspace layouts
 
 ```text
-GET  /api/v1/layouts?viewportClass=desktop
-POST /api/v1/layouts
-GET  /api/v1/layouts/{layoutId}
-PUT  /api/v1/layouts/{layoutId}
-DELETE /api/v1/layouts/{layoutId}
-PUT  /api/v1/layouts/{layoutId}/windows/{windowId}
-DELETE /api/v1/layouts/{layoutId}/windows/{windowId}
+POST   /api/v1/client-devices/registration
+GET    /api/v1/client-devices/current
+GET    /api/v1/client-devices
+PUT    /api/v1/client-devices/{clientDeviceId}
+DELETE /api/v1/client-devices/{clientDeviceId}
+GET    /api/v1/client-devices/current/workspace-preferences
+PUT    /api/v1/client-devices/current/workspace-preferences/{workspaceClass}
+GET    /api/v1/workspace-layouts/{workspaceClass}/current
+PUT    /api/v1/workspace-layouts/{workspaceClass}/current
+GET    /api/v1/application-execution-preferences/{applicationDefinitionId}/current?workspaceClass={workspaceClass}
+PUT    /api/v1/application-execution-preferences/{applicationDefinitionId}/current?workspaceClass={workspaceClass}
 ```
 
-Window updates may be batched at `/windows:batch` after a measured need exists.
+Request DTOs, registration idempotency/cookie behavior, response scopes and HTTP statuses are the exact contract in `MOBILE_PWA.md` section 15. `current` resolves the authenticated user's shared/device/fresh preference server-side. All writes require antiforgery and expected revision. A `fresh` workspace returns a transient empty representation and refuses persistence rather than silently writing a shared layout. The old viewport route is removed in the same migration; no indefinite dual API exists.
 
 ### 5.5 Packages
 
@@ -558,17 +785,53 @@ GET  /api/v1/packages/{packageId}/health
 GET  /api/v1/packages/{packageId}/logs
 ```
 
-### 5.6 Agents
+### 5.6 Host Connectors
 
 ```text
-POST /api/v1/agents/enrollment-tokens
-GET  /api/v1/agents
-GET  /api/v1/agents/{agentId}
-POST /api/v1/agents/{agentId}/revoke
-POST /api/v1/agents/{agentId}/rename
+POST /api/v1/host-connectors/enrollment-tokens
+GET  /api/v1/host-connectors
+GET  /api/v1/host-connectors/{hostConnectorId}
+PUT  /api/v1/host-connectors/{hostConnectorId}
+POST /api/v1/host-connectors/{hostConnectorId}/revocation
+POST /api/v1/host-connectors/{hostConnectorId}/credential-rotations
+POST /api/v1/host-connectors/{hostConnectorId}/diagnostics
+GET  /api/v1/host-connectors/{hostConnectorId}/capabilities
 ```
 
-Agent binary communication does not use these browser-facing endpoints.
+Host Connector runtime communication does not use these browser-facing endpoints. There is no browser-facing generic command endpoint.
+
+### 5.6a Catalogs and application installations
+
+```text
+GET    /api/v1/catalog/sources
+POST   /api/v1/catalog/sources
+GET    /api/v1/catalog/sources/{sourceId}
+PUT    /api/v1/catalog/sources/{sourceId}
+DELETE /api/v1/catalog/sources/{sourceId}
+POST   /api/v1/catalog/sources/{sourceId}/refresh
+GET    /api/v1/catalog/apps
+GET    /api/v1/catalog/apps/{sourceId}/{appId}
+GET    /api/v1/connections
+POST   /api/v1/connections
+GET    /api/v1/connections/{connectionId}
+PUT    /api/v1/connections/{connectionId}
+POST   /api/v1/connections/{connectionId}/validation
+PUT    /api/v1/connections/{connectionId}/secret-bindings/{destinationName}
+DELETE /api/v1/connections/{connectionId}/secret-bindings/{destinationName}
+DELETE /api/v1/connections/{connectionId}
+POST   /api/v1/app-installations/previews
+POST   /api/v1/app-installations
+GET    /api/v1/app-installations
+GET    /api/v1/app-installations/{installationId}
+POST   /api/v1/app-installations/{installationId}/update-previews
+POST   /api/v1/app-installations/{installationId}/updates
+POST   /api/v1/app-installations/{installationId}/backups
+POST   /api/v1/app-installations/{installationId}/restores
+POST   /api/v1/app-installations/{installationId}/uninstall-previews
+DELETE /api/v1/app-installations/{installationId}
+```
+
+Every apply references an unexpired preview digest and returns a durable Operation. The full request, ownership and error contract is `APPLICATION_CATALOG.md`.
 
 ### 5.7 Problems and notifications
 
@@ -644,6 +907,8 @@ Event envelope:
 
 Payloads remain small. Events tell clients what changed; APIs return authoritative current state.
 
+New target event types include `host_connector.status.changed`, `client_device.changed`, `workspace_layout.changed`, `app_installation.changed` and `operation.changed`. The legacy `agent.status.changed` event is removed with the Host Connector protocol cutover rather than emitted in parallel.
+
 ## 7. Background operations
 
 Long actions such as package installation, image pull, backup, large file transfer or session startup use a durable operation resource.
@@ -691,12 +956,15 @@ Initial HTTP endpoints:
 
 ```text
 POST /api/v1/operations
+GET  /api/v1/operations?states={csv}&sourcePackageId={id}&createdAfterUtc={instant}&cursor={opaque}&limit={n}
 GET  /api/v1/operations/{operationId}
 GET  /api/v1/operations/{operationId}/events
 POST /api/v1/operations/{operationId}/cancellation
 ```
 
-Creation returns `202 Accepted` and requires an idempotency key. Reusing the same key with the same canonical request returns the original resource; reusing it for different work returns `409 Conflict`. An operation is not reported as successful until its owning executor explicitly verifies the requested state. A running cancellation is stored durably until the worker or Agent acknowledges it. Failed operations expose only a stable code and sanitized safe detail, never an exception, stack trace or credential.
+Creation returns `202 Accepted` and requires an idempotency key. Reusing the same key with the same canonical request returns the original resource; reusing it for different work returns `409 Conflict`. An operation is not reported as successful until its owning executor explicitly verifies the requested state. A running cancellation is stored durably until the worker or Host Connector acknowledges it. Failed operations expose only a stable code and sanitized safe detail, never an exception, stack trace or credential.
+
+List requires `core.operations.read` and always filters `OwnerUserId` to the authenticated user; global permission does not silently make it a cross-user administrative API. `states` is an optional unique subset of the five public states, `sourcePackageId` and `createdAfterUtc` are optional, and `limit` defaults to 50 with maximum 200. Results sort by `(CreatedAtUtc DESC, OperationId DESC)`. Response is `{ items: OperationResponse[], nextCursor: string? }`; the opaque cursor binds the final sort tuple plus the complete filter set, and invalid/filter-reused cursors return `400 operation.cursor_invalid`. Reads return `200`; an inaccessible item is `404 operation.not_found`. `operation.changed` contains Operation ID and Revision only, and Operation Center refetches the list/item.
 
 ## 8. App discovery contracts
 

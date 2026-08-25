@@ -66,18 +66,22 @@ JulOS keeps one shell and one application model.
 
 ### Tablet (`720-1099 px`)
 
-- same desktop model with larger touch targets;
+- same desktop model with maximized/split defaults and at least two visible applications;
+- free windows when usable area and precise pointer input allow them;
 - window title bars and taskbar controls expand for touch;
 - Pointer Events remain the only interaction path.
 
 ### Mobile (`< 720 px`)
 
-- applications use the existing responsive full-screen presentation rather than floating windows;
+- one full-screen application is the default;
+- an explicit Split action presents at most two applications, top/bottom in Portrait and left/right in Landscape;
 - taskbar and launcher respect safe areas and use larger targets;
 - nonessential labels collapse before core actions;
 - launcher becomes a wide bottom flyout;
 - widgets remain excluded by the existing runtime mobile rule;
 - this is not a separate mobile application shell.
+
+The numeric thresholds are initial classification inputs, not persisted identity. `MOBILE_PWA.md` defines Phone/Tablet/desktop workspace classes, capability/user overrides, shared/device layouts, suspension and Back behavior.
 
 ## Accessibility and fallbacks
 
@@ -94,6 +98,7 @@ JulOS keeps one shell and one application model.
 - `interface-plan.css`: final production-shell visual layer.
 - `desktop-runtime.ts`, `window-store.ts`, `window-interactions.ts`, `window-snapping.ts`, `window-taskbar.ts`: remain the only owners of desktop/window behavior.
 - `layout-persistence.ts`: remains the only owner of persisted desktop layout.
+- the new Workspace, Presentation, Surface Lifecycle and Shell Navigation controllers extend these owners; they do not create a second Window store or mobile shell.
 
 ## Validation
 

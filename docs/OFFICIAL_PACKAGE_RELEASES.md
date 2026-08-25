@@ -1,6 +1,6 @@
 ﻿# Official package releases
 
-Official JulOS packages use the same package format and trust boundary as third-party packages. Core does not contain a bypass for first-party code.
+Official JulOS extension packages use the same immutable package format as custom extensions. They always ship signed and use the high-trust native frontend/worker path. Custom unsigned or unknown-publisher extensions remain installable only under the warning and isolation rules in `PACKAGES.md` and `APPLICATION_CATALOG.md`; Core contains no first-party authorization bypass.
 
 ## Integrity contract
 
@@ -17,7 +17,7 @@ The manifest remains strictly validated after archive authentication. Frontend m
 
 ## Publisher identity
 
-The current official publisher ID is `juloc`, matching the official package manifests.
+The current official publisher ID is `juloc-official`, matching `deploy/official-packages/catalog.json` and the official package manifests.
 
 The signing key ID is supplied to the release workflow. Key IDs must identify one immutable public key. Rotation uses a new key ID; an existing key ID must never silently point to different key material.
 
@@ -33,15 +33,15 @@ It must contain an ECDSA P-256 private key in PEM format. The workflow writes it
 
 ## Trusted public key
 
-An installation accepts a package only when the matching publisher/key pair is present in `JulOS:Packages:TrustedPublishers`.
+An installation classifies a package as `trusted-signed` only when the matching publisher/key pair is present in `JulOS:Packages:TrustedPublishers`.
 
-For example, a key published as `juloc` / `official-alpha-2026` is configured under:
+For example, a key published as `juloc-official` / `official-alpha-2026` is configured under:
 
-`JulOS:Packages:TrustedPublishers:juloc:official-alpha-2026`
+`JulOS:Packages:TrustedPublishers:juloc-official:official-alpha-2026`
 
 The value is the ECDSA public key PEM. The package workflow derives and publishes `juloc-package-signing-public.pem` so operators can verify/configure the exact public key without handling the private key.
 
-JulOS intentionally does not auto-trust an unknown public key downloaded beside a package. Trust must exist before package installation.
+JulOS intentionally does not auto-trust an unknown public key downloaded beside a package. A package without configured trust is `unknown-signed` and requires explicit acknowledgement plus the isolated native-code path; it never becomes trusted because its key was bundled beside it.
 
 ## Building and signing
 
@@ -72,7 +72,7 @@ The archive builder can also be used without signing:
 bash tools/build-package-artifact.sh packages/JulOS.HostMetrics ./artifacts/JulOS.HostMetrics-1.0.0.zip
 ```
 
-This is useful for validating archive contents. An unsigned archive is not installable on a normal JulOS deployment and must not be treated as a release.
+This is useful for validating archive contents. An unsigned archive is never an **official release**. After `PKG-013`/`PKG-014`, an administrator may install it as custom untrusted content under the documented warning and isolation policy.
 
 ## Release gate
 

@@ -13,7 +13,7 @@ JulOS Server
   ├─ core database
   ├─ Runtime Manager
   ├─ package workers
-  └─ outbound-connected Agents
+  └─ outbound-connected Host Connectors
        └─ local infrastructure and services
 ```
 
@@ -22,7 +22,7 @@ Separate trust boundaries exist between:
 - browser client and Server
 - Server and package worker
 - Server and Runtime Manager
-- Server and Agent
+- Server and Host Connector
 - package worker and external system
 - remote runtime and target system
 - browser runtime and target network
@@ -131,7 +131,7 @@ Deletion clears the encryption-key identifier, nonce, ciphertext and authenticat
 
 Development examples use generated test-only keys and placeholders only.
 
-## 6. Agents
+## 6. Host Connectors
 
 ### 6.1 Enrollment
 
@@ -139,19 +139,20 @@ Development examples use generated test-only keys and placeholders only.
 - short expiration
 - single successful use
 - administrator-visible requested identity
-- durable Agent identity after enrollment
+- durable Host Connector identity after enrollment
 
 ### 6.2 Connection
 
-- outbound connection from Agent
-- mutual authentication
-- certificate or credential rotation
+- outbound HTTPS heartbeat and bounded long-poll control requests
+- TLS authenticates Server; a 48-byte client-generated bearer credential authenticates the Connector and is stored only as a hash by Server
+- explicit overlap-safe credential rotation; no automatic rotation or silent re-enrollment
 - protocol version negotiation
 - heartbeat and revocation checks
+- target-bound streaming only through an expiring HCON-005 stream grant
 
 ### 6.3 Command restrictions
 
-Agent has no general shell endpoint. Every command is a typed capability with:
+Host Connector has no general shell endpoint. Every request is a typed capability operation with:
 
 - allowlisted operation
 - validated arguments
@@ -160,13 +161,15 @@ Agent has no general shell endpoint. Every command is a typed capability with:
 - correlation ID
 - result limit
 
+There is no generic browser-facing command API, arbitrary TCP destination or Docker API proxy. Bounded streams require a target-bound grant from an already authorized typed operation.
+
 File operations normalize paths and enforce configured roots. Docker operations use configured engine scope. Discovery obeys configured network ranges and rate limits.
 
 ## 7. Package security
 
-### 7.1 Trust model for 1.0
+### 7.1 Trust model
 
-JulOS 1.0 accepts only official or administrator-trusted signed packages.
+JulOS accepts official, administrator-selected and user-managed application sources. Publisher signatures are optional; immutable integrity is not.
 
 Installation verifies:
 
@@ -174,21 +177,35 @@ Installation verifies:
 - publisher
 - manifest schema
 - artifact digest
-- signature chain
+- optional signature and publisher status
 - core compatibility
 - declared permissions
 - declared runtime resources
+
+Unsigned or unknown-publisher content shows a concise warning and may be installed by an authorized administrator. A claimed signature that fails verification is treated as corruption and rejected. Signature status never hides privileged mode, devices, host paths, Docker socket use or new runtime rights.
 
 ### 7.2 Isolation
 
 - backend package workers run out of process
 - each package has private storage credentials
-- frontend modules use Custom Elements and Shadow DOM
+- trusted frontend modules may use Custom Elements and Shadow DOM
+- unknown or unsigned native frontend code uses a separate origin/sandboxed frame and a versioned message bridge
 - package APIs are versioned and authenticated
 - package resource limits are enforced
 - a faulted package can be disabled from safe mode
 
-The 1.0 frontend trust model does not claim hostile JavaScript sandboxing. Public third-party marketplace support requires a separate isolation design.
+Shadow DOM is not a hostile-JavaScript sandbox. `PKG-013` must complete the separate-origin isolation before unknown native code can execute. Unsigned connection, image and Compose definitions remain installable because their code does not execute in the authenticated Shell origin.
+
+### 7.3 Catalog application and Docker security
+
+- Server and Runtime Manager never receive user-workload Docker access;
+- Docker/Compose apply runs only through the Docker package and a target Host Connector;
+- image tags resolve to immutable digests before apply;
+- preview binds the exact definition digest and expires;
+- the target Connector checks stable installation ownership labels before every mutation;
+- adoption is an explicit operation and external resources remain non-owned;
+- app backups contain Secret Reference identifiers, never values;
+- uninstall defaults to retaining external, shared and adopted data.
 
 ## 8. Runtime Manager security
 
@@ -212,6 +229,7 @@ Forbidden:
 - host network by default
 - management of unrelated containers
 - arbitrary Docker API proxying
+- deployment or management of user catalog applications
 
 Server validates package policy before calling Runtime Manager. Runtime Manager independently validates ownership and allowlists.
 
@@ -273,6 +291,17 @@ Local web-application proxy rules:
 
 The detailed local/streamed rendering and dynamic-proxy contract is in `WEB-APP-RENDERING.md` and decision `D035`.
 
+### 11.1 PWA and client-device security
+
+- the client-device key is random, stored in an HTTP-only SameSite-Strict cookie and never accepted as authentication;
+- Server stores only its hash and resolves it through the authenticated user;
+- deleting a device removes only that user's device-scoped layout/preferences;
+- the service worker caches only versioned immutable Shell assets and a non-sensitive disconnected document;
+- authentication, antiforgery, API, Secret Reference, Operation, Session, runtime, display, package-control and proxied-application responses are never persistently cached;
+- logout clears client-side disposable state and authenticated pages cannot be replayed offline;
+- Surface `keep-surface-active` is best effort and never presented as protection from browser/operating-system suspension;
+- reliable background work uses durable Operations.
+
 ## 12. Audit logging
 
 Audit events are required for:
@@ -280,7 +309,9 @@ Audit events are required for:
 - login security changes
 - user and role changes
 - package install, update, enable, disable and removal
-- Agent enrollment, rename and revocation
+- Host Connector enrollment, rename and revocation
+- application source trust changes, deployment, adoption, update, backup, restore and removal
+- container-terminal open, connect, disconnect, expiry and outcome, but never keystrokes or terminal output
 - secret creation, rotation and deletion metadata
 - infrastructure mutations
 - file writes and deletions where configured
@@ -307,7 +338,7 @@ Rules:
 - expected authorization denial is not a server error
 - stack traces remain server-side
 - health failures have stable diagnostic codes
-- package and Agent versions appear in diagnostics
+- package and Host Connector versions appear in diagnostics
 
 ## 14. Health model
 
@@ -350,7 +381,7 @@ package workers
 reverse proxy when not supplied externally
 ```
 
-Agents are deployed on target hosts and connect outbound.
+Host Connectors are deployed on target hosts and connect outbound.
 
 ### 15.3 Networks
 
@@ -359,7 +390,7 @@ Agents are deployed on target hosts and connect outbound.
 - package network: package workers with only required Server access
 - runtime networks: explicit network profiles for Browser and Remote targets
 
-PostgreSQL, Runtime Manager, package control endpoints and Agent control endpoints are never published publicly.
+PostgreSQL, Runtime Manager, package control endpoints and Host Connector control endpoints are never published publicly.
 
 ## 16. Configuration
 
@@ -393,7 +424,7 @@ Runtime containers, temporary profiles, caches and active sessions are recreated
 Initial supported process:
 
 1. enter backup-consistent mode or use database-consistent snapshot procedure
-2. copy the SQLite database file, or create a PostgreSQL logical backup when PostgreSQL is configured
+2. for SQLite, stop mutations, checkpoint WAL and use the DB-001 SQLite backup API into verified staging; for PostgreSQL create a logical backup
 3. archive key ring and required persistent volumes
 4. record JulOS version and installed package versions
 5. encrypt backup at rest
@@ -409,7 +440,7 @@ Initial supported process:
 5. start in safe mode with optional packages disabled
 6. validate core migration state
 7. enable packages one at a time and run compatibility checks
-8. verify Agents, secrets, layouts and package health
+8. verify Host Connectors, secrets, device/workspace layouts, app installations and package health
 9. exit safe mode
 
 A release cannot be marked stable until a clean restore test succeeds.
@@ -418,7 +449,7 @@ A release cannot be marked stable until a clean restore test succeeds.
 
 ### 20.1 Core update
 
-Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Compose runs it as a one-shot service before Server and refuses to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit `core.__ef_migrations_history` or core tables manually.
+Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Compose runs it as a one-shot service before Server and refuses to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit migration history or core tables manually. After `DB-001`, committed ordered migrations apply to both PostgreSQL and SQLite; real previous-beta fixtures are release gates.
 
 - pull versioned images, never an unpinned `latest` deployment reference
 - verify release metadata
@@ -430,7 +461,7 @@ Core migrations are applied by the explicit `JulOS.Server --migrate-database` pr
 
 ### 20.2 Package update
 
-- verify signature and digest
+- verify digest and evaluate optional signature state
 - validate core and capability compatibility
 - stop old worker after draining operations
 - apply package migration
@@ -471,12 +502,14 @@ Cleanup is observable and never deletes active resources. Persistent browser pro
 
 - fresh installation
 - first administrator setup
-- Agent enrollment and revocation
+- Host Connector enrollment, identity migration and revocation
 - package installation and repair
 - Browser runtime failure
 - Remote runtime failure
 - core database backup and restore
-- lost Agent
+- lost Host Connector
+- custom catalog failure and stale-cache recovery
+- managed application backup, restore and safe uninstall
 - full disk
 - broken package migration
 - safe-mode recovery

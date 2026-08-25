@@ -2,10 +2,12 @@
 
 JulOS Desktop supports an active multi-display workspace when the same authenticated JulOS origin is open in multiple browser windows in the same browser profile.
 
+Persisted multi-display presentation is the `desktop-multi` Workspace class. It is separate from `desktop-single` and from any device-scoped override.
+
 ## Behavior
 
 - Each browser window is one active display.
-- Displays are ordered by connection time from left to right.
+- Runtime displays are ordered by connection time from left to right and mapped to stable logical `DisplaySlot` values.
 - A durable JulOS window has one active display owner.
 - Existing persisted windows initially remain on the earliest connected display instead of being duplicated on every display.
 - Releasing a normal window within 12 px of an adjacent display edge starts a handoff.
@@ -13,7 +15,7 @@ JulOS Desktop supports an active multi-display workspace when the same authentic
 - The transferred window enters from the corresponding edge and its size is clamped to the target usable area.
 - Vertical placement is preserved proportionally when displays have different sizes.
 - The taskbar on each display represents the windows owned by that display.
-- The durable layout contains the combined window set from active displays.
+- The durable `desktop-multi` layout contains the combined window set and each Window's logical `DisplaySlot`.
 - If a layout write conflicts with another browser instance, Desktop re-reads the server document and retries only when the returned revision exactly matches the conflict revision.
 - Closing a display sends an explicit leave message. A missing heartbeat is treated as an unexpected disconnect. The earliest surviving display recovers windows owned by the lost display.
 
@@ -21,13 +23,13 @@ JulOS Desktop supports an active multi-display workspace when the same authentic
 
 Display coordination uses the browser `BroadcastChannel` API on `julos.desktop.workspace.v1`.
 
-This channel is presentation-only. It does not authorize operations, expose authentication tokens, move package capabilities into the client or replace server persistence. Every package/API operation still uses the existing authenticated same-origin server contracts.
+This channel is presentation-only. Its participant IDs are ephemeral and are never persisted as `DisplaySlot` or Window identity. It does not authorize operations, expose authentication tokens, move package capabilities into the client or replace server persistence. Every package/API operation still uses the existing authenticated same-origin server contracts.
 
 Browsers without `BroadcastChannel` continue to use the existing single-display Desktop behavior.
 
 ## Scope
 
-The first implementation intentionally does not persist physical monitor topology. Active displays are ordered by connection time, so users should open/place JulOS browser windows in left-to-right order for predictable edge transfer.
+JulOS persists logical slots, not physical monitor serials, coordinates or browser fingerprints. Active displays negotiate slots at runtime; users may correct the logical ordering. A missing slot recovers onto the earliest surviving display without rewriting the stored slot until the user saves a new placement.
 
 Widgets remain viewport presentation state and may appear on more than one active display. Multi-display coordination currently applies to application windows.
 

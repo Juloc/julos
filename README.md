@@ -1,6 +1,6 @@
 ﻿# JulOS
 
-JulOS is a lightweight browser-based desktop environment for homelabs.
+JulOS is a lightweight PWA-first desktop environment and application workspace for homelabs.
 
 It provides a fast desktop shell with independent windows, snapping, widgets, applications, sessions and installable feature packages. Large management features remain in focused services such as Caddy UI. JulOS integrates them through stable package APIs instead of rebuilding every product inside the core.
 
@@ -17,12 +17,15 @@ The alpha is not intended for direct public internet exposure. Docker, Proxmox, 
 ## Product principles
 
 - The core stays small and knows no Docker, Proxmox, Caddy, file or remote protocol details.
-- Features are enabled through explicit signed packages and versioned capabilities.
+- JulOS extensions use versioned capabilities; user applications can come from official, community or self-managed catalogs.
+- Unsigned application definitions are installable after a clear warning; integrity digests and runtime-right previews remain mandatory.
 - Applications run in independent desktop windows; iframe integration is not the general application runtime.
+- Phones, tablets, single-display desktops and multi-display desktops share one application model with separate persisted workspaces.
 - Browser access uses a real isolated Chromium runtime inside the configured target network.
 - Remote sessions reuse Julgate session and transport code through a controlled extraction, not source duplication.
 - Existing products remain authoritative for their domains.
 - Package workers and session runtimes are isolated from the core process.
+- Optional Host Connectors provide typed access to local host resources and are neither AI assistants nor general shells.
 - No workarounds, hidden fallbacks, temporary duplicate implementations or broad exception suppression.
 - Prefer small readable code and proven abstractions over generic frameworks and premature complexity.
 - Documentation changes are part of every functional change.
@@ -49,7 +52,10 @@ Main specifications:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): system boundaries and dependency direction
 - [`docs/TECHNICAL_SPECIFICATION.md`](docs/TECHNICAL_SPECIFICATION.md): concrete runtime and implementation rules
 - [`docs/UX_SPECIFICATION.md`](docs/UX_SPECIFICATION.md): desktop, windows, widgets and responsive behavior
+- [`docs/MOBILE_PWA.md`](docs/MOBILE_PWA.md): PWA, device layouts, split view, surface lifecycle and back behavior
 - [`docs/PACKAGES.md`](docs/PACKAGES.md): package format, lifecycle and package boundaries
+- [`docs/APPLICATION_CATALOG.md`](docs/APPLICATION_CATALOG.md): open catalogs, Docker/Compose apps, trust, update, backup and removal
+- [`docs/HOST_CONNECTOR.md`](docs/HOST_CONNECTOR.md): optional typed host access and Agent migration
 - [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md): data model and API conventions
 - [`docs/SECURITY_AND_OPERATIONS.md`](docs/SECURITY_AND_OPERATIONS.md): security, deployment, backup and recovery
 - [`docs/QUALITY_AND_TESTING.md`](docs/QUALITY_AND_TESTING.md): validation and definition of done
@@ -125,11 +131,11 @@ Set `JULOS_POSTGRES_PASSWORD` in `.env` first; the stack refuses to start withou
 
 ## Repository status
 
-The foundation, core model, persistence, authentication, desktop shell and package platform are implemented. Agent, Remote and Browser foundations are included in the alpha with explicit deployment-validation limits. The remaining official packages and final 1.0 hardening continue through the dependency order in [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md); [`docs/BACKLOG.md`](docs/BACKLOG.md) remains the authoritative item status.
+The foundation, core model, persistence, authentication, desktop shell and extension-package platform are implemented. The legacy Agent, Remote and Browser foundations are included in the beta with explicit deployment-validation limits. Host Connector migration, installable PWA/device workspaces and the open application catalog are accepted target work and are not yet implemented. The remaining work continues through the dependency order in [`docs/WORK_BREAKDOWN.md`](docs/WORK_BREAKDOWN.md); [`docs/BACKLOG.md`](docs/BACKLOG.md) remains the authoritative item status.
 
 ## Initial repository strategy
 
-Core, Desktop, Agent, Package SDK, official packages and runtime images remain in this monorepo until the package contracts and release process are stable. Separate package repositories are not created during the initial implementation.
+Core, Desktop, Host Connector, Package SDK, official packages and runtime images remain in this monorepo until the contracts and release process are stable. Separate official package repositories are not created during the initial implementation.
 
 ## License
 

@@ -21,6 +21,7 @@ This document turns the architecture into concrete implementation rules. Changin
 - no general SPA framework in the initial foundation
 - SignalR for server-originated desktop events and status changes
 - IndexedDB only for disposable client cache, never as the authoritative store
+- installable PWA manifest and a service worker that caches only versioned immutable Shell assets
 
 A frontend framework may be introduced only through an accepted decision showing a concrete maintenance or capability requirement that native modules cannot satisfy cleanly.
 
@@ -42,7 +43,7 @@ src/
   JulOS.Server/
   JulOS.Desktop/
   JulOS.PackageSdk/
-  JulOS.Agent/
+  JulOS.HostConnector/
   JulOS.RuntimeManager/
 packages/
   Browser/
@@ -135,7 +136,8 @@ Contains platform use cases, ports and authorization-independent orchestration. 
 Contains versioned public contracts used across process boundaries:
 
 - HTTP request and response models
-- Agent contracts
+- Host Connector contracts
+- client-device, workspace and application-catalog contracts
 - package manifest and lifecycle contracts
 - capability request and response contracts
 - session references and status contracts
@@ -161,9 +163,9 @@ Contains static TypeScript, HTML, localization resources, design tokens and desk
 
 Contains the smallest stable interfaces and helpers required by package authors. It must not expose internal server services.
 
-### JulOS.Agent
+### JulOS.HostConnector
 
-A single deployable agent binary. It provides only enabled allowlisted capabilities and establishes an outbound connection to Server.
+A single optional deployable Host Connector binary. It provides only enabled versioned typed capabilities and establishes an outbound authenticated connection to Server. It contains no assistant/chat behavior, package UI, package business logic, generic shell or Docker API proxy.
 
 ### JulOS.RuntimeManager
 
@@ -190,7 +192,7 @@ Responsibilities:
 - core application services
 - package lifecycle coordination
 - capability brokerage
-- Agent connections
+- Host Connector connections
 - problem and notification processing
 - audit logging
 
@@ -213,7 +215,7 @@ Browser and Remote sessions run in short-lived or pooled containers managed thro
 
 ## 5. Package frontend model
 
-Official package frontends are signed ES modules described by the package manifest.
+Trusted package frontends may be integrity-checked ES modules described by the package manifest. Unsigned or unknown-publisher native frontends run only after `PKG-013` supplies the isolated package-origin/message-bridge boundary; Shadow DOM is not a hostile-code sandbox.
 
 Each application entry declares:
 
@@ -224,6 +226,7 @@ Each application entry declares:
 - instance policy
 - default window constraints
 - supported viewport classes
+- surface contract version and supported background modes
 
 Package application UI runs as a Custom Element with Shadow DOM. It receives a limited host context containing:
 
@@ -237,7 +240,15 @@ Package application UI runs as a Custom Element with Shadow DOM. It receives a l
 
 It does not receive raw authentication tokens, secret values, global state mutation access or unrestricted access to another package's DOM.
 
-JulOS 1.0 installs only trusted official packages signed by the configured JulOS signing authority. Untrusted third-party package sandboxing is outside 1.0.
+Unsigned and unknown-publisher extension artifacts may be selected after a clear warning. Their integrity digest is still mandatory. Native code that lacks a trusted publisher cannot execute in the Shell origin; it requires the isolated frontend contract. An artifact that claims a signature but fails verification is rejected as corrupted.
+
+### 5.1 Frontend surface lifecycle
+
+The package host owns one versioned Surface handle per Window. The contract supports activate, deactivate, suspend, resume, optional Back handling and dispose. Surface execution is independent from Window and runtime Session lifecycle. Unsupported major versions fail activation; a mobile-capable package is not silently kept alive because it lacks suspend support. `MOBILE_PWA.md` defines exact semantics.
+
+### 5.2 Catalog applications
+
+`app-catalog-index.v1` and `app-manifest.v1` are separate from the extension-package manifest. Catalog entries can connect an existing service, normalize a Docker image into Compose, apply standard Compose or reference a native extension. The Docker package and Host Connector execute user workloads; Runtime Manager remains limited to JulOS control-plane runtimes. `APPLICATION_CATALOG.md` defines schemas, sources, trust, APIs and lifecycle.
 
 ## 6. Package backend communication
 
@@ -263,32 +274,32 @@ The transport is the newline-delimited JSON protocol over the worker's standard 
 - failure returns a typed problem, never an empty success
 - package workers cannot call internal server endpoints outside their declared contract
 
-## 7. Agent transport
+## 7. Host Connector transport
 
-Agents establish an outbound long-lived connection to Server.
+Host Connector protocol v1 uses outbound HTTPS requests only: heartbeat, bounded long-poll for typed requests and result submission. HCON-005 adds a separately authenticated target-bound streaming connection; it does not replace or duplicate the control protocol.
 
 Enrollment flow:
 
 1. Administrator creates one-time enrollment token.
-2. Agent sends token, public key and basic identity.
+2. Host Connector generates a 48-byte random Base64url credential and sends token, credential and basic identity over HTTPS.
 3. Server validates and consumes the token.
-4. Server creates durable Agent identity and issues client credentials.
-5. Agent stores credentials with operating-system permissions.
-6. Later connections use mutual authentication and short-lived session negotiation.
+4. Server creates durable Host Connector identity, stores only the credential hash and returns identity/poll policy without echoing the credential.
+5. Host Connector stores its original credential with operating-system permissions.
+6. Later requests use server-authenticated TLS plus Host Connector ID and bearer credential; exact enrollment/rotation retries are idempotent.
 
-Agent messages use a versioned envelope:
+Host Connector messages use a versioned envelope:
 
 ```text
 MessageId
 ContractVersion
-AgentId
+HostConnectorId
 SentAtUtc
 CorrelationId
 MessageType
 Payload
 ```
 
-Commands are typed capability requests. No arbitrary shell command payload exists.
+Requests are typed capability operations selected by capability, version, operation and payload-schema version. No arbitrary shell, command line, TCP target or Docker request payload exists. Bounded streams require a typed parent operation and target-bound grant. The complete wire and migration contract is `HOST_CONNECTOR.md`.
 
 ## 8. Capability broker
 
@@ -320,11 +331,18 @@ Packages never obtain another package's service instance.
 
 `IOperationService` is the Core-owned boundary for long-running work. A caller creates a queued operation with a user-scoped idempotency key. The owning executor explicitly marks it running, appends progress, and reaches exactly one terminal state. Current status and every accepted progress event are committed in the core database, so reconnects and Server restarts do not invent completion or lose cancellation intent.
 
-A cancellation request for queued work cancels it immediately. A running request sets a durable cancellation timestamp; the worker or Agent must observe that flag and later acknowledge cancellation through the same lifecycle port. Failure completion accepts only a stable code and sanitized safe detail. Raw exceptions remain inside the executor boundary.
+A cancellation request for queued work cancels it immediately. A running request sets a durable cancellation timestamp; the worker or Host Connector must observe that flag and later acknowledge cancellation through the same lifecycle port. Failure completion accepts only a stable code and sanitized safe detail. Raw exceptions remain inside the executor boundary.
 
 ## 9. Window manager implementation
 
 The desktop maintains an in-memory window store synchronized with persisted layout revisions.
+
+Four cooperating owners are required and cannot be replaced by a second window store:
+
+- `WorkspaceController` resolves Phone, Tablet, desktop-single or desktop-multi plus shared/device/fresh scope;
+- `PresentationController` maps durable Windows into freeform, tiled, Phone Single or Phone Split slots;
+- `SurfaceLifecycleScheduler` applies the exact foreground-focused, foreground-visible, background-active, suspended, faulted and terminated state machine;
+- `ShellNavigationController` routes overlay, application, split/task and Root Back behavior.
 
 Window operations are deterministic commands:
 
@@ -349,6 +367,8 @@ Each operation validates:
 - usable viewport bounds
 - current layout revision
 - associated session policy
+
+Phone presentation additionally validates at most two foreground slots. Tablet uses the same Window commands with touch-oriented presentation defaults. A workspace switch flushes the old writable layout before loading and rendering the new one.
 
 Drag and resize update local presentation at animation-frame speed. Persistence is debounced and sent after interaction ends. Server remains authoritative for stored layout revision but is not involved in every pointer movement.
 
@@ -405,9 +425,9 @@ Julgate and guacd implementation details remain behind Remote package contracts.
 
 `CoreDbContext` lives in Infrastructure and owns only the `core` schema. It maps persistence-specific rows to the Phase 1 domain concepts instead of adding EF Core constructors or annotations to Domain. Package-owned schemas never enter this context.
 
-Schema initialization runs only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service; normal Server startup never changes the schema and manual schema edits are unsupported. On PostgreSQL this applies the committed EF Core migrations, tracked in the `core.__ef_migrations_history` table; on the default SQLite store it creates the current model directly through `EnsureCreated`.
+Schema initialization and upgrade run only through the explicit `JulOS.Server --migrate-database` command or the equivalent one-shot Compose service; normal Server startup never changes the schema and manual schema edits are unsupported. PostgreSQL and SQLite both apply committed, ordered migrations after `DB-001`. `EnsureCreated` is permitted only for isolated test stores that are never upgraded. Existing beta SQLite databases receive a deterministic fixture-tested migration path before Host Connector or workspace schema changes land.
 
-The PostgreSQL migrations enforce identities, valid revisions, fault metadata, scope shape, layout bounds and lifecycle timestamps with database keys, foreign keys, unique indexes and check constraints, and add an append-only trigger that rejects updates and deletes on audit events. The default SQLite store creates the same keys, foreign keys and unique indexes but omits the PostgreSQL check constraints and the audit trigger; those invariants are enforced by the Domain and Application rules that apply on both providers.
+PostgreSQL and SQLite migrations enforce equivalent identities, valid revisions, scope shape, layout mode/nullability and lifecycle rules with provider-appropriate keys, partial indexes, foreign keys and check constraints. PostgreSQL additionally uses its append-only audit trigger; SQLite uses a provider-specific equivalent trigger after DB-001. Domain/Application rules remain the first validation layer, but a supported provider may not weaken a documented persistence invariant merely because its DDL syntax differs.
 
 ## 13. Events and real-time updates
 
@@ -417,7 +437,11 @@ Server publishes versioned events through SignalR:
 package.changed
 application.changed
 window.invalidated
-agent.status.changed
+host_connector.status.changed
+client_device.changed
+workspace_layout.changed
+operation.changed
+app_installation.changed
 resource.observed
 problem.changed
 notification.created
@@ -481,7 +505,9 @@ Budget changes require measured evidence and documentation.
 - cross-package database access
 - package logic in Core
 - raw Docker socket access from Server
-- arbitrary Agent command execution
+- arbitrary Host Connector command execution
+- user-workload management through Runtime Manager
+- unsigned native frontend code in the authenticated Shell origin
 - frontend-only authorization
 - secrets in browser storage
 - long-running request polling when an event stream exists

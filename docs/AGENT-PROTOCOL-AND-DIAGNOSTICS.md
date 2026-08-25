@@ -1,6 +1,8 @@
 ﻿# Agent protocol, diagnostics and update foundation
 
-This document is the operational contract for the JulOS 1.0 Agent. It covers protocol compatibility, diagnostics and manual update preparation. It does not authorize automatic Agent updates.
+Status: Implemented migration source only. This document describes the currently released legacy Agent protocol so existing beta deployments can be diagnosed and migrated. No new feature may extend this contract. `HCON-002` replaces it atomically with the Host Connector contract in `HOST_CONNECTOR.md`; the old runtime route then executes no commands and exists, if needed, only as a time-bounded `426 Upgrade Required` tombstone.
+
+This document covers protocol compatibility, diagnostics and manual update preparation for the legacy binary. It does not authorize automatic updates.
 
 ## Protocol version
 

@@ -1,6 +1,8 @@
 ﻿# Host Metrics capability
 
-`host.metrics.read` is the JulOS 1.0 read contract used by the official Host Metrics package.
+Status: `1.0.0` below is the implemented legacy Agent payload. `HCON-002` publishes `host.metrics.read/2.0.0`, replaces `agentId` with `hostConnectorId` and updates the official package artifact in the same vertical migration. No new consumer may add a dependency on the v1 field.
+
+`host.metrics.read` is the current read contract used by the official Host Metrics package.
 
 ## Contract
 

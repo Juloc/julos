@@ -14,15 +14,18 @@ Before changing code, read:
 6. `docs/ARCHITECTURE.md`
 7. `docs/TECHNICAL_SPECIFICATION.md`
 8. `docs/UX_SPECIFICATION.md` for user-facing work
-9. `docs/PACKAGES.md` for package work
-10. `docs/DATA_AND_API_CONTRACTS.md` for persistence or transport work
-11. `docs/SECURITY_AND_OPERATIONS.md` for infrastructure, credentials or deployment work
-12. `docs/QUALITY_AND_TESTING.md`
-13. `docs/IMPLEMENTATION_PLAN.md`
-14. `docs/WORK_BREAKDOWN.md`
-15. `docs/BACKLOG.md`
-16. `docs/DECISIONS.md`
-17. `docs/GLOSSARY.md`
+9. `docs/MOBILE_PWA.md` for Desktop, PWA, layout or lifecycle work
+10. `docs/PACKAGES.md` for package work
+11. `docs/APPLICATION_CATALOG.md` for catalog, Docker application or connection work
+12. `docs/HOST_CONNECTOR.md` for host access, local adapters or Agent migration work
+13. `docs/DATA_AND_API_CONTRACTS.md` for persistence or transport work
+14. `docs/SECURITY_AND_OPERATIONS.md` for infrastructure, credentials or deployment work
+15. `docs/QUALITY_AND_TESTING.md`
+16. `docs/IMPLEMENTATION_PLAN.md`
+17. `docs/WORK_BREAKDOWN.md`
+18. `docs/BACKLOG.md`
+19. `docs/DECISIONS.md`
+20. `docs/GLOSSARY.md`
 
 Read the relevant package documentation and linked external-repository specifications before changing a package or migration target.
 
@@ -42,9 +45,9 @@ Read the relevant package documentation and linked external-repository specifica
 - Do not leave dead code, commented-out implementations or untracked TODO comments.
 - Security and permission checks belong in the backend, not only in the UI.
 - Secrets must never be returned to frontend packages, embedded in URLs or written to logs.
-- No arbitrary shell or Docker API proxy may be exposed through Agent, Server or Runtime Manager.
+- No arbitrary shell or Docker API proxy may be exposed through Host Connector, Server or Runtime Manager.
 - Use stable identities. Never use ephemeral container IDs, IP addresses or display names as persistent application identity.
-- Window lifecycle and runtime-session lifecycle remain separate.
+- Window lifecycle, frontend-surface execution lifecycle and runtime-session lifecycle remain separate.
 - User-facing text is localizable from its first implementation.
 
 ## Documentation rule
@@ -79,6 +82,8 @@ The repository is maintained trunk-based. One completed work item becomes one co
 9. Push regularly so `main` never holds long-lived unpublished work.
 
 Use a `agent/<short-description>` branch and a pull request when a change is large, risky or needs external review before it reaches `main`. The commit content requirements are identical in both cases.
+
+The `agent/` contributor-branch prefix is historical workflow terminology and does not name the JulOS Host Connector product component.
 
 ## Definition of done
 
@@ -138,7 +143,7 @@ The full checklist in `docs/QUALITY_AND_TESTING.md` is authoritative.
 - direct package-to-package references
 - cross-package database reads
 - raw Docker socket in Server
-- arbitrary Agent commands
+- arbitrary Host Connector commands
 - package worker logic hosted inside Core
 - secrets in browser storage
 - manual database edits as a supported recovery procedure

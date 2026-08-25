@@ -37,7 +37,7 @@ Deliver:
 - applications and launch targets
 - layouts, windows and widgets
 - session references
-- Agents
+- the legacy Agent domain that becomes Host Connector through `HCON-002`
 - permissions and scopes
 - problems, notifications and audit metadata
 
@@ -73,7 +73,7 @@ Gate:
 
 ## Phase 3 — Desktop shell
 
-Work items: `DESK-001` through `DESK-012`.
+Work items: `DESK-001` through `DESK-016`.
 
 Deliver:
 
@@ -83,7 +83,7 @@ Deliver:
 - drag, resize, focus and z-order
 - snapping
 - layout persistence
-- responsive desktop/tablet/mobile behavior
+- responsive desktop/tablet/mobile foundation
 - notifications and problem center
 - widget host
 - accessibility and keyboard behavior
@@ -92,24 +92,24 @@ Gate:
 
 - five simultaneous windows remain usable
 - reload restores layout
-- mobile mode uses safe task switching
+- current mobile mode uses safe task switching; PWA, device layouts, Phone Split and surface suspension remain in `MOB-001` through `MOB-010`
 - window interactions meet performance budget
 - keyboard and accessibility checklist passes
 
-## Phase 4 — Package platform
+## Phase 4 — JulOS extension-package platform
 
 Work items: `PKG-001` through `PKG-012`.
 
 Deliver:
 
-- signed manifest schema
+- immutable manifest schema and the initial signed-artifact policy
 - artifact verification
 - Runtime Manager
 - package storage isolation
 - package worker contract
 - install, configure, enable, disable, update and remove
 - capability broker
-- signed frontend module host
+- trusted frontend module host
 - Package Manager UI
 - reference test package
 
@@ -120,26 +120,28 @@ Gate:
 - package schemas are isolated
 - packages communicate only through declared contracts and capabilities
 
-## Phase 5 — Agent and host observability
+## Phase 5 — Legacy Agent and host-observability foundation
 
 Work items: `AGT-001` through `AGT-006`.
 
 Deliver:
 
 - one-time enrollment
-- durable Agent identity
+- durable host-side identity
 - outbound authenticated connection
 - typed command dispatcher
 - Linux host metrics
 - host application and widgets
-- Agent diagnostics
+- legacy Agent diagnostics
 
 Gate:
 
-- revoked Agents cannot reconnect
+- revoked enrolled hosts cannot reconnect
 - no arbitrary shell command exists
 - unavailable metrics are unknown rather than zero
 - offline state appears without page reload
+
+This phase is complete under the former Agent terminology. `HCON-002` performs the one atomic product/API/process cutover; HCON-001 and HCON-003 through HCON-005 prepare, validate and extend that cutover. The completed Agent behavior remains the migration source, not a parallel runtime.
 
 ## Phase 6 — Remote and Browser
 
@@ -163,21 +165,61 @@ Gate:
 - temporary profiles are cleaned
 - supported protocol parity tests pass
 
-## Phase 7 — Docker and Proxmox
+## Phase 6A — Product realignment foundations
 
-Work items: `DKR-001` through `DKR-005` and `PVE-001` through `PVE-005`.
+Work items: `SPEC-001`, `STAB-001`, `DB-001`, `HCON-001` through `HCON-005`, `MOB-001` through `MOB-010`, `CAT-001`, `CAT-002`, `PKG-013` and `PKG-014`.
+
+Delivery uses dependency lanes, not one phase-wide serial blockade:
+
+1. record the accepted target concepts and reconcile every specification (`SPEC-001`), then integrate the real-Kestrel regression fix (`STAB-001`);
+2. start `DB-001`, `HCON-001` and `MOB-001` in parallel; `MOB-002` follows MOB-001 and does not wait for Host Connector;
+3. after STAB-001, CAT-001 may run independently; after DB-001, HCON-002, MOB-003/004 and CAT-002 may advance according to their Work Breakdown dependencies;
+4. HCON-003 deployment validation and HCON-004 typed adapters can proceed in parallel after HCON-002; HCON-005 waits for both;
+5. MOB-005 through MOB-010 follow their own layout/Surface/Browser/Remote dependencies and do not wait for unrelated HCON work;
+6. PKG-013 follows CAT-001; PKG-014 follows isolation plus CAT-002. No unsigned unknown native code runs before both gates.
+
+Gate:
+
+- no current public/product Agent path remains and upgraded identities/data survive PostgreSQL and SQLite;
+- Host Connector has no generic shell, command API, arbitrary TCP proxy or Docker proxy;
+- PWA caching cannot retain authenticated/API/session content;
+- Phone never exposes more than two foreground apps and Tablet supports multiple visible apps;
+- shared/device/fresh layout resolution and logical multi-display slots pass upgrade and concurrency tests;
+- suspended Browser/Remote surfaces do not terminate their runtime Sessions;
+- unsigned/unknown definitions warn, invalid claimed signatures fail, and unknown native code cannot execute in the Shell origin.
+
+The remaining Host Connector tunnel slice of `WEB-001` and rendered Remote/Browser deployment validation complete after `HCON-005`; Phase 7 cannot start before those gates are green.
+
+### Open remote-branch disposition
+
+- `origin/agent/fix-package-route-fallback` contains one current fix commit (`31a11ba`) for Kestrel package-action routing plus its real-host smoke stage. Integrate it only as `STAB-001`, resolve the documentation overlap against current `QUALITY_AND_TESTING.md`, run the real smoke and full validation, then delete the remote branch after `main` contains the verified commit.
+- `origin/agent/docker-phase-completion` diverges from merge base `6efca54` and has two unique Agent-era commits (`7c2659f`, `4804758`) without later `main` work. Do not merge or rebase it as a product branch. During `DKR-001`, port only reviewed Docker client validation, bounded-operation behavior and tests that fit `docker.inventory/1` or `docker.control/1`; during `DKR-007`/`DKR-008`, implement the new typed app-deployment contract from the specification. Record which old tests were ported or rejected, then delete the branch.
+
+Local linked worktree branches are contributor tooling state, not release inputs. They are never merged merely because they exist; cleanup is an explicit local maintenance action after verifying that their commits are reachable or superseded.
+
+## Phase 7 — Open application catalog, Docker and Proxmox
+
+Work items: `CONN-001`, `APP-001` through `APP-006`, `API-011`, `CAT-003`, `REL-CAT-001`, `DKR-001` through `DKR-008`, `REM-009` and `PVE-001` through `PVE-005`.
 
 Deliver:
 
-- Agent Docker capability
-- Docker inventory, application, discovery and problems
+- Host Connector Docker adapter with strict read/control/app/terminal contracts
+- catalog connection, image, standard Compose and optional native-extension delivery
+- Docker inventory, managed/adopted/external ownership, application, discovery and problems
+- Store, custom-source management and App Builder
+- app update diff, backup/restore and safe uninstall
+- provider-neutral terminal transport and explicit container terminal
 - Proxmox connection, inventory, application, widgets and control
 - Proxmox console through Remote capability
 
 Gate:
 
-- Docker socket is not publicly exposed
+- Docker socket is not exposed to Server, Runtime Manager or clients
 - read-only connections cannot mutate
+- a Connector mutates only resources carrying the selected installation's stable ownership
+- unsigned definitions remain installable after warning and image tags are locked to digests
+- backup precedes destructive update/removal and shared/external data is retained
+- Hermes uses the generic Compose/inventory/terminal path with no special platform code
 - discovered applications require approval
 - stable identities survive container recreation
 - Proxmox write actions remain disabled by default
@@ -190,7 +232,7 @@ Deliver:
 
 - provider-neutral file contracts
 - File Manager and transfer queue
-- Agent-local, SMB, SFTP and WebDAV providers
+- Host Connector-local, SMB, SFTP and WebDAV providers
 - Remote and Browser transfer integration
 - Caddy UI integration API
 - JulOS Caddy package
@@ -227,7 +269,7 @@ Gate:
 
 ## Phase 10 — Release and migration
 
-Work items: `REL-001` through `REL-008`.
+Work items: `HCON-006` and `REL-001` through `REL-008`.
 
 Deliver:
 
@@ -258,9 +300,9 @@ Allowed examples:
 
 Forbidden examples:
 
-- building Docker UI before package frontend host and Agent contracts exist
+- building Docker UI before package frontend, catalog and Host Connector contracts exist
 - copying Julgate code while shared extraction design is unresolved
-- implementing package installation with raw Docker access before Runtime Manager
+- implementing user application installation through Server or Runtime Manager Docker access
 - adding file providers before path and permission contracts
 - starting release polish while restore is untested
 

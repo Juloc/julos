@@ -384,10 +384,11 @@ Persistent operational faults belong in Problem Center rather than becoming endl
 Status area:
 
 - time/date;
-- Agent/global connectivity summary;
 - notifications/problems;
 - user/account;
 - Quick Settings/Settings.
+
+Host Connector state is shown under Settings → Hosts → Host access and through actionable Problems. It is not permanent decorative status chrome.
 
 Quick Settings initial scope:
 
@@ -447,7 +448,7 @@ Rules:
 
 ## 14. Responsive and input behavior
 
-Desktop, Tablet and Mobile are first-class supported viewport classes.
+Desktop, Tablet and Mobile remain application viewport classes. Persisted Shell presentation uses Phone, Tablet, desktop-single and desktop-multi Workspace classes from `MOBILE_PWA.md`.
 
 All essential functionality must be usable with the input methods reasonably available on each device.
 
@@ -462,17 +463,21 @@ All essential functionality must be usable with the input methods reasonably ava
 
 - touch-safe controls;
 - larger interaction targets where needed;
-- multi-window remains available where screen size allows;
-- simplified snap zones are allowed;
+- maximized or split windows by default with at least two visible applications;
+- free windows when screen area and precise pointer input permit;
+- keyboard, trackpad, pen and mouse remain first-class;
 - press-and-hold can enter desktop edit mode.
 
 ### Mobile
 
 - one primary maximized application at a time by default;
+- explicit Split with at most two visible applications and a touch-safe divider;
 - reliable task switching;
 - compact widgets where useful;
 - no tiny desktop controls merely scaled down from desktop;
 - all core user journeys remain accessible.
+
+Background surfaces suspend by default. The open-app menu may expose best-effort Keep active when the package declares support. Shell Back behavior is overlay → app → split/task → workspace → platform exit.
 
 Do not create a second mobile application model or separate mobile-only product shell.
 
