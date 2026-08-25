@@ -4,15 +4,17 @@
 // catch-all suppressed sibling parameter routes (package enable/disable/remove
 // and update) under a real Kestrel host. The in-memory TestServer used by the
 // WebApplicationFactory integration tests did NOT reproduce it, so this boots
-// the real published entry point over HTTP and asserts those routes are
-// reachable, while a genuinely unknown route still returns the JulOS 404.
+// the real built server over HTTP and asserts those routes are reachable, while
+// a genuinely unknown route still returns the JulOS 404.
 //
 // Run after the `build` stage. Exits non-zero on the first failed assertion.
+// The built assembly is launched directly (not `dotnet run`) so the process can
+// be killed cleanly; a lingering host would otherwise hang the stage.
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 const port = 8577;
@@ -22,6 +24,20 @@ const password = 'Smoke-Test-Password-42!';
 function fail(message) {
   console.error(`Server smoke test failed: ${message}`);
   process.exitCode = 1;
+}
+
+async function findServerAssembly() {
+  for (const configuration of ['Release', 'Debug']) {
+    const assembly = join(
+      process.cwd(), 'src', 'JulOS.Server', 'bin', configuration, 'net10.0', 'JulOS.Server.dll');
+    try {
+      await access(assembly);
+      return assembly;
+    } catch {
+      // try the next configuration
+    }
+  }
+  throw new Error('JulOS.Server.dll was not found; run the build stage first.');
 }
 
 async function waitForReady(deadlineMs) {
@@ -40,8 +56,7 @@ async function waitForReady(deadlineMs) {
 }
 
 function cookiesFrom(response, jar) {
-  const setCookie = response.headers.getSetCookie?.() ?? [];
-  for (const value of setCookie) {
+  for (const value of response.headers.getSetCookie?.() ?? []) {
     const [pair] = value.split(';', 1);
     const index = pair.indexOf('=');
     if (index > 0) {
@@ -62,39 +77,31 @@ async function codeOf(response) {
   }
 }
 
+const serverAssembly = await findServerAssembly();
 const workDirectory = await mkdtemp(join(tmpdir(), 'julos-smoke-'));
 const keyRingPath = join(workDirectory, 'keys');
 await mkdir(keyRingPath, { recursive: true });
 await writeFile(join(keyRingPath, 'primary.key'), randomBytes(32).toString('base64'));
 
-const server = spawn(
-  'dotnet',
-  [
-    'run',
-    '--project',
-    'src/JulOS.Server',
-    '--no-build',
-    '--no-launch-profile',
-    '--urls',
-    baseUrl,
-  ],
-  {
-    env: {
-      ...process.env,
-      ASPNETCORE_ENVIRONMENT: 'Production',
-      'Database__Provider': 'sqlite',
-      'ConnectionStrings__CoreDatabase': `Data Source=${join(workDirectory, 'core.db')};Cache=Shared`,
-      'Packages__Root': join(workDirectory, 'packages'),
-      'DataProtection__KeyRingPath': join(workDirectory, 'data-protection'),
-      'Secrets__ActiveKeyId': 'primary',
-      'Secrets__KeyRingPath': keyRingPath,
-    },
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
+const server = spawn('dotnet', [serverAssembly, '--urls', baseUrl], {
+  cwd: dirname(serverAssembly),
+  env: {
+    ...process.env,
+    ASPNETCORE_ENVIRONMENT: 'Production',
+    'Database__Provider': 'sqlite',
+    'ConnectionStrings__CoreDatabase': `Data Source=${join(workDirectory, 'core.db')};Cache=Shared`,
+    'Packages__Root': join(workDirectory, 'packages'),
+    'DataProtection__KeyRingPath': join(workDirectory, 'data-protection'),
+    'Secrets__ActiveKeyId': 'primary',
+    'Secrets__KeyRingPath': keyRingPath,
+  },
+  stdio: 'ignore',
+});
+server.on('error', (error) => fail(`could not start the server: ${error.message}`));
 
 try {
-  if (!(await waitForReady(Date.now() + 90_000))) {
-    fail('the server did not become ready within 90 seconds.');
+  if (!(await waitForReady(Date.now() + 60_000))) {
+    fail('the server did not become ready within 60 seconds.');
   } else {
     const jar = new Map();
 
@@ -153,10 +160,16 @@ try {
     }
   }
 } finally {
-  server.kill('SIGINT');
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  if (!server.killed) {
+  try {
     server.kill('SIGKILL');
+  } catch {
+    // already gone
   }
-  await rm(workDirectory, { recursive: true, force: true });
+  // Best-effort temp cleanup. The database file can stay briefly locked after
+  // the host is killed on Windows; a failed cleanup must not fail the stage.
+  await rm(workDirectory, { recursive: true, force: true }).catch(() => {});
 }
+
+// The launched host does not keep the event loop alive, but exit explicitly so
+// the stage can never hang on a stray handle.
+process.exit(process.exitCode ?? 0);
