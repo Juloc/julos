@@ -103,7 +103,7 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Validate .NET
-        run: sh tools/validate.sh --stage version --stage restore --stage build --stage dotnet-test
+        run: sh tools/validate.sh --stage version --stage restore --stage build --stage dotnet-test --stage server-smoke
 
   validate-desktop:
     name: Validate Desktop

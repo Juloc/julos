@@ -90,6 +90,8 @@ Continuous integration starts the pinned supported PostgreSQL image and sets `JU
 
 `tests/JulOS.Integration.Tests` starts the real ASP.NET Core application in memory through `WebApplicationFactory`. It is deliberately not a web SDK project, so the architecture rule keeping `JulOS.Server` the only web project stays strict.
 
+The in-memory `TestServer` does not reproduce every real-host routing decision: an endpoint route table that shadows parameter routes can still match under `TestServer` while failing under Kestrel. The `server-smoke` stage therefore boots the real Server over Kestrel and asserts the affected routes are reachable; treat a routing or endpoint-mapping change as unverified until `server-smoke` passes.
+
 Start the real ASP.NET Core application with controlled dependencies:
 
 - authentication and authorization
@@ -315,6 +317,7 @@ Current stages:
 | `restore` | .NET dependency restore |
 | `build` | .NET solution build |
 | `dotnet-test` | unit and architecture tests |
+| `server-smoke` | boots the real Server over Kestrel and asserts parameter routes (package enable/disable/remove) are reachable and unknown routes return the JulOS 404 |
 | `desktop-install` | Desktop dependencies, skipped when already installed |
 | `desktop-typecheck` | Desktop type checking |
 | `desktop-test` | Desktop logic tests |
