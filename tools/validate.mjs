@@ -165,6 +165,11 @@ const stages = [
     run: () => run('dotnet', ['test', '--solution', 'JulOS.slnx', '--no-build', '--no-restore']),
   },
   {
+    name: 'server-smoke',
+    title: 'Real-host routing smoke test',
+    run: () => run('node', ['tools/smoke-server.mjs']),
+  },
+  {
     name: 'desktop-install',
     title: 'Install Desktop dependencies',
     async run() {

@@ -104,8 +104,26 @@ app.UseRouting();
 app.UseRateLimiter();
 app.UseWebSockets();
 app.UseAuthentication();
-app.UseAuthorization();
 app.UseJulOsWebAppProxy();
+
+// Requests that matched no endpoint return 404 here — before the authorization
+// fallback policy would turn them into 401, and before endpoint execution. This
+// replaces a routed MapFallback whose catch-all pattern suppressed sibling
+// parameter routes (for example package enable/disable/remove) in the endpoint
+// route table. The web-app proxy runs first so proxied target hosts are still
+// handled, and UseStatusCodePages renders the JulOS problem shape for the 404.
+app.Use(async (context, next) =>
+{
+    if (context.GetEndpoint() is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next(context).ConfigureAwait(false);
+});
+
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets()
@@ -140,9 +158,6 @@ app.MapGet(
     "/api/v1/system/version",
     () => new ComponentVersionResponse(ServerVersion.ComponentName, ServerVersion.Current))
     .RequireAuthorization(JulOsAuthorizationPolicies.SystemVersionRead);
-
-app.MapFallback(() => TypedResults.NotFound())
-    .AllowAnonymous();
 
 ServerLog.Starting(app.Logger, ServerVersion.ComponentName, ServerVersion.Current);
 
