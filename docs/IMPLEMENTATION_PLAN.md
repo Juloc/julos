@@ -171,9 +171,9 @@ Work items: `SPEC-001`, `STAB-001`, `DB-001`, `HCON-001` through `HCON-005`, `MO
 
 Delivery uses dependency lanes, not one phase-wide serial blockade:
 
-1. record the accepted target concepts and reconcile every specification (`SPEC-001`), then integrate the real-Kestrel regression fix (`STAB-001`);
-2. start `DB-001`, `HCON-001` and `MOB-001` in parallel; `MOB-002` follows MOB-001 and does not wait for Host Connector;
-3. after STAB-001, CAT-001 may run independently; after DB-001, HCON-002, MOB-003/004 and CAT-002 may advance according to their Work Breakdown dependencies;
+1. `SPEC-001` and the real-Kestrel regression fix `STAB-001` are complete on `main`; `STAB-001` shipped in `0.4.0-beta.19` and must not be repeated;
+2. start `DB-001`, `HCON-001`, `MOB-001` and `CAT-001` in parallel; `MOB-002` follows MOB-001 and does not wait for Host Connector;
+3. after DB-001, HCON-002, MOB-003/004 and CAT-002 may advance according to their Work Breakdown dependencies;
 4. HCON-003 deployment validation and HCON-004 typed adapters can proceed in parallel after HCON-002; HCON-005 waits for both;
 5. MOB-005 through MOB-010 follow their own layout/Surface/Browser/Remote dependencies and do not wait for unrelated HCON work;
 6. PKG-013 follows CAT-001; PKG-014 follows isolation plus CAT-002. No unsigned unknown native code runs before both gates.
@@ -190,9 +190,9 @@ Gate:
 
 The remaining Host Connector tunnel slice of `WEB-001` and rendered Remote/Browser deployment validation complete after `HCON-005`; Phase 7 cannot start before those gates are green.
 
-### Open remote-branch disposition
+### Remote-branch disposition
 
-- `origin/agent/fix-package-route-fallback` contains one current fix commit (`31a11ba`) for Kestrel package-action routing plus its real-host smoke stage. Integrate it only as `STAB-001`, resolve the documentation overlap against current `QUALITY_AND_TESTING.md`, run the real smoke and full validation, then delete the remote branch after `main` contains the verified commit.
+- The former `origin/agent/fix-package-route-fallback` branch contributed regression commit `31a11ba`; its reviewed result is integrated on `main` as `0ef293c`, released in `0.4.0-beta.19`, covered by the real-host smoke stage and fully validated. The source branch is deleted. This is the completion record for `STAB-001`, not selectable work.
 - `origin/agent/docker-phase-completion` diverges from merge base `6efca54` and has two unique Agent-era commits (`7c2659f`, `4804758`) without later `main` work. Do not merge or rebase it as a product branch. During `DKR-001`, port only reviewed Docker client validation, bounded-operation behavior and tests that fit `docker.inventory/1` or `docker.control/1`; during `DKR-007`/`DKR-008`, implement the new typed app-deployment contract from the specification. Record which old tests were ported or rejected, then delete the branch.
 
 Local linked worktree branches are contributor tooling state, not release inputs. They are never merged merely because they exist; cleanup is an explicit local maintenance action after verifying that their commits are reachable or superseded.

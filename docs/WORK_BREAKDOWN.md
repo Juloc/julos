@@ -1108,7 +1108,9 @@ Acceptance:
 
 ### STAB-001 — Integrate the real-Kestrel package-route fix
 
-Depends on: SPEC-001 and the existing regression commit `31a11ba` on `origin/agent/fix-package-route-fallback`.
+Depends on: SPEC-001. Historical source: regression commit `31a11ba` from the former `origin/agent/fix-package-route-fallback` branch.
+
+Completion record: Done on `main` as `0ef293c` and released in `0.4.0-beta.19`; the source branch is deleted. This blueprint remains for traceability and is not selectable work.
 
 Deliver:
 
