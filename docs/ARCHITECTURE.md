@@ -409,7 +409,7 @@ No component receives a generic proxy to another trust boundary.
 ## 16. Security boundaries
 
 - TLS for all remote communication
-- server-authenticated TLS plus client-generated hash-verified Host Connector credential, with explicit overlap-safe rotation
+- server-authenticated TLS plus client-generated hash-verified Host Connector credential, with explicit two-phase overlap rotation that retains the old local/current Server credential until pending-authenticated commit
 - encrypted secret storage and opaque references
 - short-lived session and credential leases
 - backend-enforced permissions and scopes

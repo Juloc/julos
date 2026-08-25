@@ -119,6 +119,7 @@ UpdatedAtUtc
 `DesktopWindow` adds:
 
 ```text
+WorkspaceClass               persisted copy of parent layout class
 DisplaySlot                  stable zero-based logical display position
 ```
 
@@ -141,10 +142,10 @@ Enforcement matrix:
 | device belongs to user | Composite foreign key `(user_id, client_device_id)` to `(owner_user_id, client_device_id)` | authenticated-user check |
 | Primary/Secondary belong to layout | Deferred composite foreign keys `(desktop_layout_id, primary_window_id/secondary_window_id)` to `(desktop_layout_id, window_id)` | aggregate validation before save |
 | Phone/mode nullability and ratio | Check constraint implementing the state matrix | transition methods reject invalid states |
-| stable display slot | Check `display_slot = 0` unless workspace is `desktop-multi` | topology resolver assigns one active display owner per Window |
+| stable display slot | Composite FK `(desktop_layout_id, workspace_class)` to the immutable parent class, then check `display_slot >= 0 AND (workspace_class = 'desktop-multi' OR display_slot = 0)` | topology resolver assigns one active display owner per Window |
 | `fresh` cannot persist | no row is selected for write | API rejects writes with `desktop.layout_persistence_disabled` |
 
-Provider-specific migration SQL is allowed only for the equivalent partial indexes/deferred constraints and is covered by real PostgreSQL and SQLite fixtures. Neither provider may weaken the logical rule.
+`DesktopLayout.WorkspaceClass` is immutable because each class is a different layout identity. Migration backfills each Window's persisted class from its parent before adding the composite parent key and Window foreign key; application writes never accept a separate client-supplied Window class. No database upper bound ties `DisplaySlot` to current `DisplayCount`: a non-negative slot for a temporarily absent display is retained, presented on slot zero for the current session, and restored to its persisted slot when that participant returns. Provider-specific migration SQL is allowed only for equivalent partial indexes/deferred constraints and is covered by real PostgreSQL and SQLite fixtures. Neither provider may weaken the logical rule.
 
 The current viewport-only layouts migrate as follows:
 
@@ -377,7 +378,7 @@ POST   /api/v1/client-devices/registration
 GET    /api/v1/client-devices/current
 GET    /api/v1/client-devices
 PUT    /api/v1/client-devices/{clientDeviceId}
-DELETE /api/v1/client-devices/{clientDeviceId}
+DELETE /api/v1/client-devices/{clientDeviceId}?revision={revision}
 ```
 
 Preferences:
@@ -408,7 +409,7 @@ WorkspaceLayoutWriteRequest       Layout, ExpectedRevision
 
 `POST registration` requires authentication/antiforgery. With a valid cookie owned by the current user it returns `200` and the existing device after coalescing Last Seen/detected-class updates. With a missing, unknown, deleted or differently owned cookie it generates a new key/cookie and returns `201`; it never reveals the other owner. `GET current` returns `404 client_device.not_registered` when registration is required. Removing the current device clears its cookie; deleting another owned device does not.
 
-Device responses include the device record, Detected Workspace Class and resolved Workspace Class. A stale update/delete returns `409` with `currentRevision`; successful delete returns `204`. Workspace/Execution Preference PUT creates with null expected revision (`201`) or updates with exact revision (`200`). Invalid enum/combination returns `400` with a stable field error.
+Device responses include the device record, Detected Workspace Class and resolved Workspace Class. Device DELETE has no body and requires the positive decimal `revision` query value shown in the route; missing or malformed revision returns `400 request.invalid`. A stale update/delete returns `409 request.concurrency_conflict` with `currentRevision`; successful delete returns `204`. Workspace/Execution Preference PUT creates with null expected revision (`201`) or updates with exact revision (`200`). Invalid enum/combination returns `400` with a stable field error.
 
 `current` resolves shared/device/fresh scope server-side from authenticated user, owner-scoped cookie and path Workspace Class. Layout GET returns `{ workspaceClass, layoutScope, restoreMode, persistenceEnabled, layout, revision }`. In fresh mode it returns a transient empty layout with null ID, revision zero and `persistenceEnabled=false`; Layout PUT returns `409 desktop.layout_persistence_disabled`. Normal PUT returns `200`; create-on-first-save is atomic and returns `201`. A client cannot select a Client Device ID or another user's resource through request data.
 

@@ -299,7 +299,11 @@ MessageType
 Payload
 ```
 
-Requests are typed capability operations selected by capability, version, operation and payload-schema version. No arbitrary shell, command line, TCP target or Docker request payload exists. Bounded streams require a typed parent operation and target-bound grant. The complete wire and migration contract is `HOST_CONNECTOR.md`.
+For a control request, `MessageId` is the persisted Host Connector Request ID and the result-route ID. Requests are typed capability operations selected by capability, version, operation, payload-schema version and result-schema version. The registry also fixes `replay-safe` or `reconcile-required`; an unknown-outcome mutation becomes in-time `failed` from journal recovery or deadline `expired`, always with `host_connector.outcome_unknown` and a new read-only reconciliation request rather than replay. Result submission must match the persisted Result Schema Version and has the exact succeeded/failed/cancelled union, bounded canonical digest and idempotent terminal-retry behavior in `HOST_CONNECTOR.md`; successful result JSON is persisted rather than reduced to an unverified success flag.
+
+Credential rotation is two-phase and crash recoverable: Connector persists old active plus pending locally, Server persists only current/pending hashes and an overlap deadline, and the pending-authenticated acknowledgement promotes the hash transactionally. No crash point can leave Connector with only a credential Server never accepted.
+
+No arbitrary shell, command line, TCP target or Docker request payload exists. Bounded streams require a typed parent operation and target-bound grant. The complete wire and migration contract is `HOST_CONNECTOR.md`.
 
 ## 8. Capability broker
 

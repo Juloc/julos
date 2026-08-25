@@ -181,13 +181,14 @@ Revision
 UpdatedAtUtc
 ```
 
-PostgreSQL and SQLite use separate partial unique indexes for shared (`ClientDeviceId IS NULL`) and device layouts (`ClientDeviceId IS NOT NULL`). Composite foreign keys enforce device ownership and same-layout Primary/Secondary Window references; check constraints enforce the Phone mode/nullability/ratio matrix. `fresh` is enforced by resolver/API because it deliberately selects no persisted row. `MOBILE_PWA.md` defines exact SQL-equivalent rules, selection and deterministic viewport-layout migration.
+PostgreSQL and SQLite use separate partial unique indexes for shared (`ClientDeviceId IS NULL`) and device layouts (`ClientDeviceId IS NOT NULL`). Composite foreign keys enforce device ownership and same-layout Primary/Secondary Window references; check constraints enforce the Phone mode/nullability/ratio matrix. `DesktopLayout.WorkspaceClass` is immutable. `DesktopWindow.WorkspaceClass` is a persistence copy constrained by `(DesktopLayoutId, WorkspaceClass)` to its parent; this permits the provider-equivalent check `DisplaySlot >= 0 AND (WorkspaceClass = 'desktop-multi' OR DisplaySlot = 0)` without a cross-table SQL CHECK. Slots above current `DisplayCount` remain valid dormant restoration targets and resolve temporarily to slot zero rather than losing their persisted identity. `fresh` is enforced by resolver/API because it deliberately selects no persisted row. `MOBILE_PWA.md` defines exact SQL-equivalent rules, selection and deterministic viewport-layout migration.
 
 ### 2.8 Window state
 
 ```text
 WindowId
 DesktopLayoutId
+WorkspaceClass
 ApplicationId
 LaunchTargetId
 TitleOverride
@@ -264,6 +265,42 @@ RevokedAtUtc
 Revision
 ```
 
+### 2.11a Host Connector credential rotation
+
+The current credential remains one hash-only row:
+
+```text
+HostConnectorId
+CredentialHash
+CreatedAtUtc
+RotatedAtUtc
+RevokedAtUtc
+Revision
+```
+
+A rotation is a separate durable two-phase record:
+
+```text
+HostConnectorCredentialRotationId
+HostConnectorId
+OperationId
+RequestedByUserId
+IdempotencyKeyHash
+RequestDigest
+PendingCredentialHash             nullable until attempt
+State                             requested | overlap | committed | expired
+RequestedAtUtc
+RequestExpiresAtUtc
+AttemptedAtUtc                    nullable
+OverlapExpiresAtUtc               nullable
+CommittedAtUtc                    nullable
+Revision
+```
+
+`HostConnectorId` is the current-credential primary key. `(RequestedByUserId, IdempotencyKeyHash)` is unique and `RequestDigest` rejects reuse for changed input. A partial unique index permits at most one rotation in `requested` or `overlap` per Connector. `requested` requires null pending/attempt/overlap/commit fields; `overlap` requires pending hash plus attempt/overlap times and null commit; `committed` requires all of those plus commit time; `expired` requires null commit and may retain the pending hash only as non-authenticating retry evidence. `RequestExpiresAtUtc` is exactly fifteen minutes after creation. Only the hash of a pending credential is persisted.
+
+During `overlap`, authentication accepts the unchanged current hash and that rotation's pending hash until `OverlapExpiresAtUtc`. A pending-credential acknowledgement atomically copies the pending hash to the current credential row, records rotation, and marks the rotation committed. Expiry deletes no current credential. `HOST_CONNECTOR.md` defines exact crash recovery and local identity-file phases.
+
 ### 2.12 Host Connector capability
 
 ```text
@@ -282,6 +319,7 @@ Revision
 
 ```text
 HostConnectorRequestId
+ContractVersion
 HostConnectorId
 OperationId                     nullable
 CapabilityName
@@ -289,20 +327,30 @@ CapabilityVersion
 OperationName
 TargetReference
 PayloadSchemaVersion
+ResultSchemaVersion
 Payload
 RequestedAtUtc
 DeadlineAtUtc
 CorrelationId
 MaximumResultBytes
-IdempotencyClassification
+IdempotencyClassification          replay-safe | reconcile-required
 State
 ClaimedAtUtc
 CompletedAtUtc
-FailureCode
+Result                            nullable
+ResultDigest                      nullable
+FailureCode                       nullable
+FailureDetail                     nullable
 Revision
 ```
 
-The tuple capability/version/operation/payload-schema selects a committed typed contract. Unknown fields/tuples fail before persistence. Legacy `agent_commands` never populate this table; HCON-002 drains active rows and retains terminal rows in a read-only historical table with no runtime repository.
+`HostConnectorRequestId` is the dispatched envelope `MessageId` and the `{requestId}` result-path value; three independent identifiers do not exist. The tuple capability/version/operation/payload-schema/result-schema selects one committed typed contract. `State` is `queued`, `claimed`, `succeeded`, `failed`, `cancelled` or `expired`. Unknown fields/tuples fail before persistence.
+
+Transition rules are closed: new work is `queued`; first delivery atomically becomes `claimed`. A queued cancellation becomes `cancelled` with `host_connector.cancelled_before_claim` and no result digest. A `replay-safe` claim may be redelivered only with the same Request ID until its deadline. A `reconcile-required` claim is never redelivered for execution; Connector uses the durable local journal in `HOST_CONNECTOR.md`. Restart from its `executing` phase submits `failed/host_connector.outcome_unknown` instead of replaying. Recovery is a new typed read-only inspection/reconciliation request; it never rewrites the failed/expired row or silently repeats the mutation. A valid in-time result moves `claimed` exactly once to `succeeded`, `failed` or `cancelled`. Any queued or replay-safe claimed request crossing its deadline becomes `expired` with `host_connector.deadline_exceeded`; a reconcile-required claimed request that never reports recovery uses `host_connector.outcome_unknown`.
+
+Database checks require `CompletedAtUtc` and `ResultDigest` for succeeded, failed and Connector-reported cancelled submissions; succeeded has non-null Result and null failure fields, while failed/Connector-cancelled has null Result and non-null FailureCode. A server-cancelled unclaimed row has non-null `CompletedAtUtc`, null `ClaimedAtUtc`/Result/ResultDigest/FailureDetail and exactly `host_connector.cancelled_before_claim`. Expired has non-null completion/failure, null Result/ResultDigest, and exactly one of the two deadline codes above. Queued/claimed rows have null completion/result/digest/failure fields.
+
+A result body contains `messageId`, `resultSchemaVersion`, `outcome`, `result`, `failureCode` and sanitized `failureDetail`. Body `messageId` and `resultSchemaVersion` must equal the persisted request ID/version. `outcome=succeeded` requires a schema-valid bounded `result` and null failure fields; `failed` or `cancelled` requires null result plus a registered stable failure code. Server stores `ResultDigest` as lowercase SHA-256 over RFC 8785 canonical JSON bytes of the complete result body, not only its `result` property. Exact terminal retry returns the original response, while changed bytes after terminal completion return `409 host_connector.result_conflict`; a result after deadline is rejected and cannot turn an expired request into success. Legacy `agent_commands` never populate this table; HCON-002 drains active rows and retains every terminal state in a read-only historical table with no runtime repository.
 
 ### 2.13 Connection
 
@@ -422,14 +470,14 @@ ValidFromUtc
 ValidUntilUtc
 RevokedAtUtc
 AdministratorTrustState
-TrustedByUserId
-TrustedAtUtc
+AdministratorDecisionByUserId
+AdministratorDecisionAtUtc
 FirstObservedSourceRevision
 LastObservedSourceRevision
 Revision
 ```
 
-The official fingerprint set is release configuration. Administrator trust is bound to source, publisher, key ID and fingerprint. A key ID observed with different bytes fails refresh rather than replacing the record.
+The official fingerprint set is release configuration. Administrator trust is bound to source, publisher, key ID and fingerprint. A key ID observed with different bytes fails refresh rather than replacing the record. A check constraint requires both administrator-decision fields to be null for `unknown` and non-null for `trusted`/`distrusted`; API clear/trust/distrust behavior is revisioned exactly as defined in `APPLICATION_CATALOG.md`.
 
 ```text
 AppInstallationId
@@ -491,6 +539,8 @@ CriticalRightsDigest
 NonSecretConfigurationDigest
 CreatedAtUtc
 ```
+
+`AppDeploymentLockId` and `AppInstallationId` are relational row metadata and are excluded from `DeploymentLockDigest`. From `SchemaVersion` through `CreatedAtUtc`, the row materializes exactly `DeploymentLockPayloadV1` from `APPLICATION_CATALOG.md`; no extra payload field is permitted. `TrustAssessmentDigest` is therefore part of the canonical hashed payload, not mutable cache metadata.
 
 ```text
 AppDeploymentApprovalId
@@ -758,7 +808,7 @@ POST   /api/v1/client-devices/registration
 GET    /api/v1/client-devices/current
 GET    /api/v1/client-devices
 PUT    /api/v1/client-devices/{clientDeviceId}
-DELETE /api/v1/client-devices/{clientDeviceId}
+DELETE /api/v1/client-devices/{clientDeviceId}?revision={revision}
 GET    /api/v1/client-devices/current/workspace-preferences
 PUT    /api/v1/client-devices/current/workspace-preferences/{workspaceClass}
 GET    /api/v1/workspace-layouts/{workspaceClass}/current
@@ -809,6 +859,9 @@ GET    /api/v1/catalog/sources/{sourceId}
 PUT    /api/v1/catalog/sources/{sourceId}
 DELETE /api/v1/catalog/sources/{sourceId}
 POST   /api/v1/catalog/sources/{sourceId}/refresh
+GET    /api/v1/catalog/sources/{sourceId}/publisher-keys
+GET    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}
+PUT    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}/administrator-trust
 GET    /api/v1/catalog/apps
 GET    /api/v1/catalog/apps/{sourceId}/{appId}
 GET    /api/v1/connections
@@ -831,7 +884,7 @@ POST   /api/v1/app-installations/{installationId}/uninstall-previews
 DELETE /api/v1/app-installations/{installationId}
 ```
 
-Every apply references an unexpired preview digest and returns a durable Operation. The full request, ownership and error contract is `APPLICATION_CATALOG.md`.
+Every apply references an unexpired preview digest and returns a durable Operation. Publisher-key trust mutations use the exact revisioned DTO, `catalog.trust.manage` permission and status behavior in `APPLICATION_CATALOG.md`; source mutation and publisher-key trust are never conflated. The full request, ownership and error contract is `APPLICATION_CATALOG.md`.
 
 ### 5.7 Problems and notifications
 
@@ -964,7 +1017,7 @@ POST /api/v1/operations/{operationId}/cancellation
 
 Creation returns `202 Accepted` and requires an idempotency key. Reusing the same key with the same canonical request returns the original resource; reusing it for different work returns `409 Conflict`. An operation is not reported as successful until its owning executor explicitly verifies the requested state. A running cancellation is stored durably until the worker or Host Connector acknowledges it. Failed operations expose only a stable code and sanitized safe detail, never an exception, stack trace or credential.
 
-List requires `core.operations.read` and always filters `OwnerUserId` to the authenticated user; global permission does not silently make it a cross-user administrative API. `states` is an optional unique subset of the five public states, `sourcePackageId` and `createdAfterUtc` are optional, and `limit` defaults to 50 with maximum 200. Results sort by `(CreatedAtUtc DESC, OperationId DESC)`. Response is `{ items: OperationResponse[], nextCursor: string? }`; the opaque cursor binds the final sort tuple plus the complete filter set, and invalid/filter-reused cursors return `400 operation.cursor_invalid`. Reads return `200`; an inaccessible item is `404 operation.not_found`. `operation.changed` contains Operation ID and Revision only, and Operation Center refetches the list/item.
+List requires the existing `core.operation.read` permission and always filters `OwnerUserId` to the authenticated user; global permission does not silently make it a cross-user administrative API. `states` is an optional unique subset of the five public states, `sourcePackageId` and `createdAfterUtc` are optional, and `limit` defaults to 50 with maximum 200. Results sort by `(CreatedAtUtc DESC, OperationId DESC)`. Response is `{ items: OperationResponse[], nextCursor: string? }`; the opaque cursor binds the final sort tuple plus the complete filter set, and invalid/filter-reused cursors return `400 operation.cursor_invalid`. Reads return `200`; an inaccessible item is `404 operation.not_found`. `operation.changed` contains Operation ID and Revision only, and Operation Center refetches the list/item.
 
 ## 8. App discovery contracts
 

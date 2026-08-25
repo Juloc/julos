@@ -344,6 +344,7 @@ Trust evaluation first verifies bytes, fingerprint and the key validity interval
 Trust is persisted as evidence, not recomputed into history. `CatalogPublisherKey` stores:
 
 ```text
+CatalogPublisherKeyId
 CatalogSourceId
 PublisherId
 KeyId
@@ -354,8 +355,8 @@ ValidFromUtc
 ValidUntilUtc
 RevokedAtUtc
 AdministratorTrustState         unknown | trusted | distrusted
-TrustedByUserId                 nullable
-TrustedAtUtc                    nullable
+AdministratorDecisionByUserId   nullable
+AdministratorDecisionAtUtc      nullable
 FirstObservedSourceRevision
 LastObservedSourceRevision
 Revision
@@ -363,25 +364,39 @@ Revision
 
 The built-in official fingerprint set is release configuration and cannot be replaced by source content. Administrator trust is bound to `(CatalogSourceId, PublisherId, KeyId, PublicKeyFingerprint)`; a reused key ID with different bytes fails the whole refresh.
 
+`unknown` has null administrator-decision fields. Setting `trusted` or `distrusted` stores the authenticated administrator and decision time; clearing back to `unknown` clears them. The revisioned decision is audited and affects future Preview only. It can never turn a digest mismatch, invalid signature, not-yet-valid key or revoked key into installable content.
+
 Each cached entry records source revision/digest, Definition Digest, publisher ID, key ID, public-key fingerprint and evaluated signature state. Each successful deployment stores an immutable trust snapshot in its Deployment Lock. Current trust can later differ, but history remains explainable and the difference is part of update Preview.
 
-`DeploymentLockSchemaVersion = 1` contains exactly:
+The canonical `DeploymentLockPayloadV1` contains exactly:
 
 ```text
-CatalogSourceId + source revision/digest
-AppId + version + delivery key
+SchemaVersion                    1
+CatalogSourceId
+CatalogSourceRevision
+CatalogSourceDigest
+AppId
+Version
+DeliveryKey
 DefinitionDigest
-DeliveryProviderCapabilityName + version
+ProviderCapabilityName
+ProviderCapabilityVersion
 TargetConnectionId
 NormalizedPlanDigest
-resolved extension/image artifact digests
-publisher ID + key ID + public-key fingerprint + signature state at apply
+ResolvedArtifactDigests
+PublisherId
+SignatureKeyId
+PublicKeyFingerprint
+SignatureStateAtApply
+TrustAssessmentDigest
 CriticalRightsDigest
 NonSecretConfigurationDigest
 CreatedAtUtc
 ```
 
-Resolved artifact digests form an object keyed by stable artifact role with lowercase immutable digest values and lexicographically sorted keys. The lock has no secret, display-only or extension fields. `DeploymentLockDigest` is lowercase SHA-256 over RFC 8785 canonical JSON bytes of the complete schema-v1 lock, including its schema version. Unknown fields or a different schema version fail; implementations do not calculate a partial digest.
+Resolved artifact digests form an object keyed by stable artifact role with lowercase immutable digest values and lexicographically sorted keys. The payload has no database identity, secret, display-only or extension fields. `DeploymentLockDigest` is lowercase SHA-256 over RFC 8785 canonical JSON bytes of the complete payload. Unknown fields or a different schema version fail; implementations do not calculate a partial digest.
+
+The persisted `AppDeploymentLock` row adds only `AppDeploymentLockId` and `AppInstallationId` as relational metadata outside the payload; those two values are not hashed. Every remaining persisted lock column is the exact materialization of one payload field above. `TrustAssessmentDigest` binds the signature state, administrator/official key state and resulting trust decision that the administrator saw.
 
 `AppDeploymentApproval` stores Preview ID, Plan Digest, Definition Digest, Trust Assessment Digest, sorted warning codes, approving user, approval time, expiry, consuming Operation ID and optional resulting App Installation ID. It stores no secret value. An approval is single-use and cannot be consumed after expiry or by another Operation, target, definition, artifact, rights set or trust assessment.
 
@@ -572,6 +587,9 @@ GET    /api/v1/catalog/sources/{sourceId}
 PUT    /api/v1/catalog/sources/{sourceId}
 DELETE /api/v1/catalog/sources/{sourceId}
 POST   /api/v1/catalog/sources/{sourceId}/refresh
+GET    /api/v1/catalog/sources/{sourceId}/publisher-keys
+GET    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}
+PUT    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}/administrator-trust
 GET    /api/v1/catalog/apps
 GET    /api/v1/catalog/apps/{sourceId}/{appId}
 ```
@@ -599,6 +617,8 @@ POST /api/v1/catalog/builder/validations
 POST /api/v1/catalog/builder/exports
 ```
 
+`PUT administrator-trust` accepts `{ administratorTrustState: "unknown" | "trusted" | "distrusted", expectedRevision }`. It requires `catalog.trust.manage`, antiforgery and exact optimistic concurrency. Success returns the sanitized publisher-key metadata with `200`; a stale revision returns the common `409 request.concurrency_conflict`, and an inaccessible key returns `404 catalog.publisher_key_not_found`. `unknown` clears the stored administrator decision. `trusted` never overrides integrity, validity or revocation policy. Publisher-key GETs require `catalog.read` and return fingerprint, algorithm, validity/revocation, observation revisions and administrator-decision metadata; they need not return the full SPKI bytes.
+
 All mutations require antiforgery protection. Long-running mutations return a durable Operation. Preview results contain a digest and expiry; apply must reference the exact preview digest so changed input cannot bypass confirmation.
 
 ## 11. Permissions
@@ -606,6 +626,7 @@ All mutations require antiforgery protection. Long-running mutations return a du
 ```text
 catalog.read
 catalog.sources.manage
+catalog.trust.manage
 catalog.builder.use
 connections.read
 connections.manage
@@ -803,6 +824,7 @@ catalog.definition_invalid
 catalog.integrity_mismatch
 catalog.signature_invalid
 catalog.signature_key_unavailable
+catalog.publisher_key_not_found
 catalog.compose_feature_unsupported
 catalog.preview_expired
 catalog.preview_changed

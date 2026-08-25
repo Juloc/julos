@@ -91,7 +91,14 @@ ServerValue  = SHA256(decoded CredentialV1 bytes)
 
 Enrollment request contains token, credential, display name, Machine Identity, OS, architecture, version and protocol version. It is accepted only over HTTPS except loopback development. Server stores only `ServerValue` and returns Host Connector ID, accepted protocol and polling intervals; it never echoes the credential. An exact retry using the same token, credential hash and identity returns the original enrollment result; any changed token reuse fails. Runtime requests send `X-JulOS-Host-Connector-Id` plus `Authorization: Bearer <CredentialV1>`. Authentication uses constant-time hash comparison, and access/header logs redact Authorization.
 
-Credential rotation is administrator-initiated through `POST /api/v1/host-connectors/{id}/credential-rotations`. The Connector receives a one-use Rotation ID through its authenticated request poll, generates a new CredentialV1 and submits its hash-bound attempt while the old credential remains valid for at most ten minutes. Server accepts exact retry, Connector atomically writes/verifies the new identity file, acknowledges with the new credential, and only then Server revokes the old hash. Timeout keeps the old credential and fails the rotation visibly; it never leaves both credentials valid indefinitely or enrolls a new Host Connector.
+Credential rotation is administrator-initiated through `POST /api/v1/host-connectors/{id}/credential-rotations` and uses a durable two-phase protocol. The protected local identity keeps its active `CredentialV1` plus an optional `PendingRotation { rotationId, pendingCredentialV1, phase, overlapExpiresAtUtc? }`; pending secret values never leave that file except in the TLS-protected attempt/acknowledgement requests.
+
+1. Connector receives a one-use Rotation ID, generates a new CredentialV1 and atomically persists it as `phase=prepared` while the old credential remains active.
+2. Authenticated with the old credential, it submits `{ newCredentialV1 }` to the attempt endpoint. Server stores only its hash, persists `overlap`, returns the exact expiry, and accepts old or pending authentication for at most ten minutes.
+3. Connector persists `phase=overlap` and acknowledges authenticated with the pending credential. In one Server transaction, that hash becomes current, the old hash stops authenticating and the rotation becomes `committed`.
+4. Only after a committed acknowledgement response does Connector promote the pending value to active and clear `PendingRotation` atomically.
+
+Every step is exact-retry idempotent. A crash before Server commit leaves the old active value and recoverable pending value locally. Before any normal poll after restart, Connector first retries acknowledgement with the pending value; committed Server state returns the same success. If pending authentication is rejected, Connector retries the exact attempt with the still-stored old active value: an expired Server rotation returns `host_connector.credential_rotation_expired`, after which Connector clears the pending block and keeps the old value. Rejection of both credentials is a visible hard failure and never triggers enrollment. It never owns only an unaccepted credential and never leaves two hashes valid indefinitely.
 
 ## 5. Protocol
 
@@ -129,7 +136,7 @@ POST /api/v1/host-connector/credential-rotations/{rotationId}/attempt
 POST /api/v1/host-connector/credential-rotations/{rotationId}/acknowledgement
 ```
 
-The request poll is one bounded long-poll, returns `204` when empty and never becomes an arbitrary server-push channel. Disconnect retries use capped exponential backoff with jitter; a claimed idempotent request is returned with the same Request ID until a terminal result is accepted. Non-idempotent operations are never automatically replayed after an unknown outcome and require provider inspection/reconciliation.
+The request poll is one bounded long-poll, returns `204` when empty and never becomes an arbitrary server-push channel. Disconnect retries use capped exponential backoff with jitter. Every registered operation declares `replay-safe` or `reconcile-required`. A replay-safe claim may be redelivered only with the same Request ID before deadline. A reconcile-required claim is never redelivered for execution: Connector journals its ID before the external call and its canonical result before submission. In-time restart from an uncertain `executing` phase submits `failed/host_connector.outcome_unknown` with a canonical digest; if no report arrives by deadline, Server records `expired/host_connector.outcome_unknown` without a result digest. Both require a new typed read-only inspection/reconciliation request and neither rewrites or replays the original mutation. `DATA_AND_API_CONTRACTS.md` owns the closed state-transition matrix.
 
 Every dispatched request has:
 
@@ -143,14 +150,64 @@ CapabilityVersion
 OperationName
 TargetReference
 PayloadSchemaVersion
+ResultSchemaVersion
 Payload
 RequestedAtUtc
 DeadlineAtUtc
 CorrelationId
 MaximumResultBytes
+IdempotencyClassification     replay-safe | reconcile-required
 ```
 
-The tuple `CapabilityName + CapabilityVersion + OperationName + PayloadSchemaVersion` selects a committed schema. Unknown tuples and unknown required fields are rejected before execution. `Payload` is not permission to accept arbitrary commands.
+`MessageId` is exactly the persisted `HostConnectorRequestId` and the `{requestId}` path value used for result submission. The tuple `CapabilityName + CapabilityVersion + OperationName + PayloadSchemaVersion + ResultSchemaVersion` selects committed request and result schemas. Unknown tuples and unknown required fields are rejected before execution. `Payload` is not permission to accept arbitrary commands.
+
+Result submission body:
+
+```text
+MessageId
+ResultSchemaVersion
+Outcome                     succeeded | failed | cancelled
+Result                      nullable typed JSON
+FailureCode                 nullable stable code
+FailureDetail               nullable sanitized bounded text
+```
+
+The authenticated Connector ID, body Message ID and Result Schema Version must match the claimed request, URL and persisted result version exactly. `succeeded` requires a schema-valid Result and null failure fields; `failed`/`cancelled` require null Result and a registered failure code. Result bytes must fit `MaximumResultBytes`, contain no credential and canonicalize deterministically. Server stores the full canonical result-body digest before returning `200 { requestId, state, revision }`. An exact retry returns the same response; changed bytes after terminal completion return `409 host_connector.result_conflict`. Late success cannot revive an expired request. Binary or interactive data uses an authorized stream, never this JSON result.
+
+### 5.1 Durable local request journal
+
+Before executing a claimed request, Connector writes `/var/lib/julos-host-connector/request-journal/<requestId>.json` on Linux or `%ProgramData%\JulOS\HostConnector\request-journal\<requestId>.json` on Windows. `JULOS_HOST_CONNECTOR_JOURNAL_PATH` may replace the directory only with an absolute path; relative paths are rejected. The file schema is:
+
+```text
+JournalSchemaVersion             1
+HostConnectorId
+RequestId
+ContractVersion
+CapabilityName
+CapabilityVersion
+OperationName
+PayloadSchemaVersion
+ResultSchemaVersion
+IdempotencyClassification       replay-safe | reconcile-required
+RequestCanonicalJson
+RequestDigest
+DeadlineAtUtc
+Phase                           prepared | executing | result-ready
+ResultCanonicalJson             nullable
+ResultDigest                    nullable
+UpdatedAtUtc
+```
+
+The canonical request is the exact validated non-secret dispatch envelope; operation-bound Secret Leases and stream bytes are never journal fields. Request/Result digests are lowercase SHA-256 over RFC 8785 bytes. The journal directory is owner-only (`0700`) and each regular non-symlink file is `0600`; Windows uses an owner-only ACL. Each phase change writes a same-directory temporary file, flushes file contents, atomically replaces the target and flushes the directory (Windows: write-through atomic replace) before continuing.
+
+Execution order is strict:
+
+1. persist `prepared` before invoking any capability code;
+2. persist `executing` before the first external side-effect call;
+3. canonicalize the complete result and persist `result-ready` before HTTP submission;
+4. delete and directory-flush only after Server returns the matching terminal `200` acknowledgement.
+
+At startup Connector resolves journal files before polling new work. `prepared` before deadline may execute. `executing` may execute again only for `replay-safe`; for `reconcile-required`, Connector instead persists and submits a canonical failed result with `host_connector.outcome_unknown`. `result-ready` resubmits its exact bytes. A terminal rejection or passed deadline never causes execution: Connector creates a Problem and atomically replaces the journal with an owner-only `<requestId>.orphan.json` containing exactly `OrphanSchemaVersion=1`, Host Connector ID, Request ID, Request Digest, nullable Result Digest, terminal Failure Code, `OrphanedAtUtc` and `DeleteAfterUtc = OrphanedAtUtc + 7 days`. Canonical bodies are not retained; the orphan is deleted and directory-flushed at that instant. Malformed, duplicate-ID, symlink or permission-invalid journal files block request execution and create a Problem; they are never ignored or repaired silently.
 
 ## 6. Capabilities
 
@@ -207,6 +264,8 @@ GET  /api/v1/host-connectors/{hostConnectorId}/capabilities
 
 All mutations require antiforgery protection. Rename uses optimistic concurrency. Diagnostics returns a durable Operation when target contact is required. The public API has no generic command-creation endpoint.
 
+Credential-rotation creation requires `host_connectors.manage`, `Idempotency-Key` and `{ expectedRevision }`. It returns `202` with the durable Operation and Rotation ID; exact idempotency retry returns the same pair. A partial unique constraint rejects another `requested`/`overlap` rotation with `409 host_connector.credential_rotation_active`. An unattempted request expires after exactly fifteen minutes. Connector revocation atomically expires any active rotation and rejects both current and pending hashes.
+
 Permissions:
 
 ```text
@@ -260,7 +319,8 @@ New migrations rename, without drop/recreate:
 ```text
 agents                         → host_connectors
 agent_capabilities             → host_connector_capabilities
-agent_credentials              → host_connector_credentials
+agent_credentials              → host_connector_credentials (current hash)
+new table                      → host_connector_credential_rotations
 agent_enrollment_tokens        → host_connector_enrollment_tokens
 agent_commands                 → legacy_agent_commands (read-only retention)
 agent_metric_samples           → host_connector_metric_samples
@@ -268,7 +328,11 @@ agent_id                       → host_connector_id
 redeemed_by_agent_id           → redeemed_by_host_connector_id
 ```
 
-`host_connector_requests` is a new table matching the typed request envelope; legacy Command JSON is never copied into it. Before schema migration, Server enters upgrade drain: reject new legacy command creation, wait for running work to reach terminal state within the configured deadline, mark still-queued commands `failed` with `agent.command_cancelled_for_upgrade`, and fail migration if any running row remains. Succeeded/failed/expired rows move unchanged to read-only `legacy_agent_commands` for audit retention and have no runtime repository or endpoint. Tests inject queued, completed and stuck-running rows and prove that no unknown side effect is reported as success.
+`host_connector_requests` is a new table matching the typed request/result envelope; legacy Command JSON is never copied into it. `host_connector_credential_rotations` provides the pending-hash/expiry/commit state defined in `DATA_AND_API_CONTRACTS.md`; the renamed credential row remains the single current hash.
+
+HCON-002 ships a migration-only pre-cutover mode: `JulOS.Server --drain-legacy-agent-requests --deadline-seconds {60..3600}`. It runs against the old schema after every normal Server instance is stopped, binds the normal Agent-facing URL, exposes only legacy authentication, heartbeat, empty `commands/next` and completion for IDs already in `running`, and has no browser/admin/package/command-creation route. At startup it atomically marks queued rows `failed` with `agent.command_cancelled_for_upgrade`; exact completion retry for an already-terminal row remains idempotent. It exits zero only when no queued/running row exists, exits nonzero at deadline without changing a running row, and is stopped before schema migration. The migration independently rejects queued/running rows and an active drain process. This bounded migration tool is not a second product runtime or compatibility fallback.
+
+Existing `succeeded`, `failed`, `expired` and `cancelled` rows move unchanged to read-only `legacy_agent_commands` for audit retention and have no runtime repository or endpoint. Tests inject queued, running and every terminal state and prove that no unknown side effect is reported as success.
 
 IDs, credentials, capabilities, metrics, timestamps, revisions and audit history remain intact. PostgreSQL and SQLite upgrade fixtures prove this.
 
@@ -332,13 +396,18 @@ host_connector.protocol_incompatible
 host_connector.capability_unavailable
 host_connector.request_invalid
 host_connector.deadline_exceeded
+host_connector.cancelled_before_claim
+host_connector.outcome_unknown
 host_connector.result_too_large
+host_connector.result_conflict
 host_connector.stream_not_authorized
 host_connector.stream_expired
 host_connector.identity_migration_failed
 host_connector.identity_migration_conflict
 host_connector.upgrade_requests_active
 host_connector.credential_rotation_failed
+host_connector.credential_rotation_active
+host_connector.credential_rotation_expired
 ```
 
 Package adapters add package-owned codes without returning raw host errors or command output as safe detail.
@@ -352,9 +421,9 @@ Package adapters add package-owned codes without returning raw host errors or co
 5. `HCON-004` — add the reusable typed host-adapter request registry for Docker/Files/Discovery without a generic payload path.
 6. `HCON-005` — implement the authenticated multiplexed stream.
 7. `HCON-006` — after the announced transition release, remove the non-executing legacy 426 tombstone before 1.0.
-7. `DKR-001` — port the bounded Docker adapter onto the Host Connector.
-8. `REM-009` — implement the terminal display transport.
-9. `DKR-006` — implement the audited container terminal.
+8. `DKR-001` — port the bounded Docker adapter onto the Host Connector.
+9. `REM-009` — implement the terminal display transport.
+10. `DKR-006` — implement the audited container terminal.
 
 Each item updates tests, migrations, current specifications and `BACKLOG.md` in the same commit.
 

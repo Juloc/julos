@@ -73,6 +73,7 @@ Run against a real supported PostgreSQL container or isolated database:
 - backup metadata consistency
 - query pagination and indexes
 - Host Connector rename and viewport-to-workspace upgrade fixtures
+- shared/device partial indexes, same-layout Primary/Secondary foreign keys, Window WorkspaceClass composite key, negative DisplaySlot rejection and dormant out-of-range slot persistence on PostgreSQL and SQLite
 
 The default SQLite store has its own real previous-release file fixtures. Tests run the production migration command and verify identity, credentials, layouts, revisions and audit links. `EnsureCreated` is not accepted as upgrade coverage.
 
@@ -104,7 +105,7 @@ Start the real ASP.NET Core application with controlled dependencies:
 - revision conflicts
 - package fault isolation
 - Host Connector enrollment endpoints
-- client-device registration/cookie/status/owner behavior and workspace-layout ownership/concurrency
+- client-device registration/cookie/status/owner behavior, required delete revision and workspace-layout ownership/concurrency
 - owner-scoped cursor-paged Operation list and `operation.changed` refresh
 - catalog preview/apply digest binding and app-installation lifecycle
 - layout and window persistence
@@ -134,7 +135,7 @@ Pure TypeScript tests cover:
 - z-order
 - workspace/device layout resolution
 - fixed Phone/Tablet/Desktop classification and device override without orientation/keyboard identity changes
-- shared/device partial-index and same-layout Primary/Secondary constraints on PostgreSQL and SQLite
+- topology fallback presents a dormant out-of-range Window on slot zero without overwriting its persisted slot, then restores it when the display returns
 - Phone Single/Split and foreground limit
 - Tablet multi-window presentation
 - serialized/idempotent Surface lifecycle, visible-unfocused pane, deadline/abort/fault and background preference mapping
@@ -191,7 +192,8 @@ A package cannot depend on another package being installed unless it declares a 
 - stale last-valid cache after refresh failure;
 - unsigned, unknown-signed, trusted-signed and invalid-signature decisions;
 - key-ID reuse with changed bytes, fingerprint mismatch, not-yet-valid, expired, distrusted and revoked key policy;
-- persisted cached-entry, Deployment Lock and approval trust snapshots remain explainable after source/key changes;
+- persisted cached-entry, canonical Deployment Lock payload versus relational IDs, and approval trust snapshots remain explainable after source/key changes;
+- publisher-key list/read/trust API permission, antiforgery, audit, clear and stale-revision matrix;
 - image-tag resolution to digest and definition-lock persistence;
 - complete App Installation lifecycle/cancellation/retry/cleanup/reconcile transition matrix;
 - `julos-compose-v1` YAML, short/long nested-field, interpolation, canonicalization and cross-field fixtures;
@@ -208,12 +210,15 @@ A package cannot depend on another package being installed unless it declares a 
 
 - enrollment token consumption
 - client-generated CredentialV1 hash-only storage, exact enrollment retry and no response echo
-- overlap-safe credential rotation crash/retry/timeout matrix
+- two-phase credential rotation crash/retry/lost-response/expiry matrix with current and pending hash persistence
 - credential storage permissions
 - reconnect and backoff
 - heartbeat and offline detection
 - capability allowlist
-- malformed typed request rejection and legacy Command drain/archive with queued/running fixtures
+- malformed typed request/result rejection, exact Result Schema Version match, result exact-retry versus changed-result conflict and bounded successful-result persistence
+- replay-safe redelivery versus reconcile-required journal/disconnect matrix, including in-time `failed/outcome_unknown` and no-report deadline `expired/outcome_unknown`
+- journal malformed-file/permission/symlink rejection, atomic phase crash injection, exact-result restart, acknowledgement deletion and seven-day scrubbed orphan retention
+- real migration-only drain host rejects creation, accepts only exact running completion, times out safely, and archives queued/running/succeeded/failed/expired/cancelled fixtures
 - deadline and cancellation
 - output-size limit
 - path normalization
@@ -287,6 +292,7 @@ Runtime Manager is security-critical. Tests verify:
 - unknown native frontend isolation from Shell DOM, cookies and arbitrary Core APIs
 - Host Connector revocation
 - client-device cross-user isolation and non-authentication behavior
+- publisher-key trust mutation requires `catalog.trust.manage` and cannot override integrity/validity/revocation failure
 - service-worker forbidden-cache coverage
 - service-worker activation never forces reload before per-page flush or explicit local discard
 - Docker installation ownership and terminal permission/scope/audit coverage

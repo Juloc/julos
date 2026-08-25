@@ -1174,15 +1174,15 @@ Deliver:
 
 - committed public/runtime contract fixtures from `HOST_CONNECTOR.md`
 - canonical Host Connector IDs, event names, errors, permissions, paths and headers
-- CredentialV1 enrollment/rotation and heartbeat/long-poll runtime endpoint fixtures
+- CredentialV1 enrollment/two-phase rotation, heartbeat/long-poll and typed result endpoint fixtures
 - documented `MachineIdentityNamespaceV1` retaining the legacy hash namespace
-- complete database and identity-file migration map
+- complete database, credential-rotation and identity-file migration map
 
 Out of scope: executable rename or compatibility adapter.
 
 Acceptance:
 
-- fixtures cover minimum, complete, malformed and unsupported-major messages
+- fixtures cover minimum, complete, malformed, result exact-retry/conflict and unsupported-major messages
 - no target contract contains a generic command, shell, TCP destination or Docker API payload
 - old protocol can only become a non-executing 426 tombstone during the cutover
 
@@ -1193,9 +1193,9 @@ Depends on: HCON-001, DB-001, completed AGT-001 through AGT-006, DESK-014 and PK
 Deliver in one vertical commit:
 
 - project, namespace, type, API, protocol-v1 heartbeat/long-poll, environment, service/image and current documentation rename
-- PostgreSQL and SQLite table/column/index/constraint migration preserving durable IDs/history, draining and archiving legacy Commands instead of coercing them into typed requests
+- PostgreSQL and SQLite table/column/index/constraint migration preserving durable IDs/history, with a bounded old-schema drain-only host that archives legacy Commands instead of coercing them into typed requests
 - protected default/custom-path identity migration preserving ID, CredentialV1 and MachineIdentityV1, including both-file conflict handling
-- client-generated credential enrollment plus administrator-initiated overlap-safe rotation
+- client-generated credential enrollment plus administrator-initiated two-phase rotation with pending-hash persistence and crash recovery
 - Host Connector permission creation, explicit role/assignment backfill and endpoint policy cutover
 - Host Metrics `2.0.0` with `hostConnectorId`
 - Settings → Hosts → Host access administration
@@ -1212,8 +1212,8 @@ Out of scope:
 Acceptance:
 
 - clean install, PostgreSQL fixture, SQLite fixture and real identity-file upgrade pass
-- enrollment, exact retry, credential rotation, heartbeat/long-poll, metrics, diagnostics, rename and revoke work under new contracts
-- queued legacy Commands become failed archive rows with `agent.command_cancelled_for_upgrade`; active legacy work blocks migration and never becomes fake success
+- enrollment, exact retry, credential rotation crash/timeout recovery, heartbeat/long-poll, typed success/failure/cancelled results, metrics, diagnostics, rename and revoke work under new contracts
+- queued legacy Commands become failed archive rows with `agent.command_cancelled_for_upgrade`; active legacy work blocks migration; succeeded/failed/expired/cancelled rows retain their exact terminal data and never become fake success
 - read/manage/diagnostics/Admin and 401/403 permission migration matrix passes idempotently
 - revoked and legacy binaries execute no request after cutover
 - current UI/API/assemblies contain no product Agent surface outside explicit historical allowlist
@@ -1243,8 +1243,9 @@ Depends on: HCON-002, PKG-009.
 
 Deliver:
 
-- registry keyed by capability name/version, operation name and payload schema version
-- per-operation request validator, authorization/scope descriptor, deadline and result-size policy
+- registry keyed by capability name/version, operation name, payload schema version and result schema version
+- per-operation request/result validators, authorization/scope descriptor, deadline, replay-safe/reconcile-required classification and result-size policy
+- protected atomic local request/result journal with prepared/executing/result-ready restart rules, acknowledgement deletion and bounded scrubbed orphan retention
 - internal dispatch API for package-owned providers
 - rejection of unknown/disabled capabilities before queue persistence
 
@@ -1255,6 +1256,8 @@ Acceptance:
 - an unregistered tuple cannot be queued or executed
 - target scope is checked by Server and independently by Connector
 - cancellation/deadline/result limit propagate end to end
+- disconnect before result redelivers only replay-safe work; reconcile-required unknown outcome terminates visibly as failed/expired and can only use a new read-only reconciliation request
+- crash injection at every journal write/call/submit/ack boundary never duplicates reconcile-required execution and exact result bytes survive restart
 - architecture tests prove packages do not reference Connector implementation types
 
 ### HCON-005 — Add target-bound multiplexed Host Connector streams
@@ -1321,7 +1324,7 @@ Deliver:
 
 - `ClientDevice`, `DeviceWorkspacePreference` and `ApplicationExecutionPreference` persistence
 - server-generated random device key, Secure/HTTP-only/SameSite-Strict cookie, hash-only storage and owner-scoped APIs
-- fixed capability classification, device-level Workspace override and exact registration/re-registration DTO/status behavior
+- fixed capability classification, device-level Workspace override and exact registration/re-registration/delete-revision DTO/status behavior
 - Settings UI to name/remove devices and choose shared/device plus resume/fresh
 - `client_device.changed`, antiforgery, optimistic concurrency and documented audit behavior
 
@@ -1341,7 +1344,7 @@ Deliver:
 
 - Workspace-class/layout-scope Domain and API model
 - PostgreSQL and SQLite migration from desktop/tablet/mobile shared layouts
-- provider-equivalent partial unique indexes, composite ownership/window references and Phone state checks
+- provider-equivalent partial unique indexes, composite ownership/window references, denormalized immutable Window Workspace Class and Phone/display-slot state checks
 - resolver for shared, device and fresh modes
 - stable `DisplaySlot` field and separate desktop-multi initialization
 - deletion of the old viewport route in the same cutover
@@ -1494,7 +1497,8 @@ Deliver:
 - Git commit and OCI/HTTP digest locking
 - atomic last-valid cache with explicit stale state
 - signature envelope verification, immutable Key ID/fingerprint and rotation/revocation policy
-- persisted Catalog Publisher Key, cached-entry trust evidence and administrator trust decisions
+- persisted Catalog Publisher Key, cached-entry trust evidence and revisioned administrator trust decisions
+- separate `catalog.trust.manage` permission with Administrator backfill and exact publisher-key list/read/trust API
 - source permissions, Secret References, refresh Operation and Problems
 
 Acceptance:
@@ -1503,6 +1507,7 @@ Acceptance:
 - private source credentials never reach client/logs
 - source identity change and duplicate app identity fail clearly
 - trusted-signed, unknown-signed, unsigned, invalid-signature and digest-mismatch fixtures behave exactly as documented
+- trust/distrust/clear requires its dedicated permission, is audited, rejects stale revisions and cannot override invalid/revoked content
 
 ### PKG-013 — Isolate unknown native extension code
 
@@ -1582,6 +1587,7 @@ Acceptance:
 
 - Preview writes no Installation/resource/external state
 - changed/expired plan cannot reuse acknowledgement
+- Deployment Lock digest excludes relational row IDs, includes Trust Assessment, and rejects every unknown payload field
 - native-extension delivery delegates to Package Installation lifecycle
 - Domain contains no Docker or Compose types
 

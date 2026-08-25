@@ -12,6 +12,7 @@ After `HCON-002`, create a short-lived enrollment token through the authenticate
 - `JULOS_HOST_CONNECTOR_ENROLLMENT_TOKEN`: one short-lived token used only until durable enrollment succeeds.
 - `JULOS_HOST_CONNECTOR_NAME`: optional administrator-visible host name.
 - `JULOS_HOST_CONNECTOR_IDENTITY_PATH`: optional absolute path; defaults to `/var/lib/julos-host-connector/identity.json` on Linux.
+- `JULOS_HOST_CONNECTOR_JOURNAL_PATH`: optional absolute directory for the protected durable request journal; defaults to `/var/lib/julos-host-connector/request-journal` on Linux.
 - `JULOS_HOST_CONNECTOR_MACHINE_ID_PATH`: optional absolute machine-identity source; defaults to `/etc/machine-id`.
 
 The Host Connector creates its durable credential locally, writes a pending identity document atomically, and retries only the exact same enrollment attempt after transient failures. The Server accepts an exact retry for recovery from a lost response and rejects any changed reuse of the token.
@@ -52,12 +53,14 @@ Run `tools/diagnostics.sh`. The bundle contains version, kernel, health response
 1. Produce and verify a backup.
 2. Read release notes and irreversible migration warnings.
 3. Pull immutable image digests.
-4. Run database migration as a one-shot job.
-5. For HCON-002, enter legacy-request drain, terminalize queued Commands with the documented upgrade failure code and stop if running work does not finish by the deadline.
-6. Start Server and verify readiness.
-7. Run the documented legacy identity migration and upgrade Host Connectors without automatic downgrade.
-8. Update packages only after preview approval.
-9. Verify package, Host Connector, application-installation and problem-center health.
+4. Block browser/package mutations at ingress and stop every normal old Server instance plus any external Command producer. Start the new release's migration-only `JulOS.Server --drain-legacy-agent-requests --deadline-seconds {60..3600}` on the normal Agent-facing URL; do not run it beside a normal Server.
+5. The drain marks queued Commands failed with `agent.command_cancelled_for_upgrade`, serves only completion for already-running IDs, and exits zero only after none remain. Abort the cutover on nonzero exit. Preserve every existing terminal state, including `cancelled`, for archival.
+6. Stop the drain host and every legacy Agent binary. Verify no normal/drain Server or package/tool process can write the old schema and that the migration job holds the exclusive database migration lock.
+7. Run database migration as one one-shot job. Its preflight independently rejects queued/running legacy rows, so skipping the drain cannot silently continue.
+8. Run the documented legacy identity migration while the old Agent is stopped.
+9. Start Server, verify readiness, then start the new Host Connectors without automatic downgrade.
+10. Update packages only after preview approval.
+11. Verify package, Host Connector, application-installation and problem-center health.
 
 ## Rollback
 

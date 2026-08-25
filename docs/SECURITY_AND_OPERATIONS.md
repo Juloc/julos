@@ -145,7 +145,8 @@ Development examples use generated test-only keys and placeholders only.
 
 - outbound HTTPS heartbeat and bounded long-poll control requests
 - TLS authenticates Server; a 48-byte client-generated bearer credential authenticates the Connector and is stored only as a hash by Server
-- explicit overlap-safe credential rotation; no automatic rotation or silent re-enrollment
+- explicit two-phase credential rotation: the Connector retains old active plus pending locally until committed, Server stores only current/pending hashes with a bounded overlap, and exact retry recovers every crash point; no automatic rotation or silent re-enrollment
+- owner-only, atomic/fsync-backed Host Connector request journal; it contains only typed non-secret control envelopes/results, never Secret Lease values or stream bytes, and reconcile-required execution cannot replay after an uncertain crash point
 - protocol version negotiation
 - heartbeat and revocation checks
 - target-bound streaming only through an expiring HCON-005 stream grant
@@ -183,6 +184,8 @@ Installation verifies:
 - declared runtime resources
 
 Unsigned or unknown-publisher content shows a concise warning and may be installed by an authorized administrator. A claimed signature that fails verification is treated as corruption and rejected. Signature status never hides privileged mode, devices, host paths, Docker socket use or new runtime rights.
+
+Publisher-key trust decisions require the separate `catalog.trust.manage` permission, optimistic concurrency and antiforgery protection. They are audited with source/key fingerprint and decision metadata but never key material or source credentials. Trusting a key cannot override a digest mismatch, invalid/not-yet-valid signature or revocation.
 
 ### 7.2 Isolation
 
