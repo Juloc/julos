@@ -1,0 +1,48 @@
+﻿<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#1f6feb" />
+    <title>JulOS is not reachable</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #0d1117;
+        color: #e6edf3;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      main { max-width: 30rem; text-align: center; }
+      h1 { font-size: 1.4rem; margin: 0 0 0.75rem; }
+      p { margin: 0.5rem 0; line-height: 1.5; color: #9da7b3; }
+      button {
+        margin-top: 1.5rem;
+        padding: 0.7rem 1.4rem;
+        font-size: 1rem;
+        border: 0;
+        border-radius: 0.6rem;
+        background: #1f6feb;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:hover { background: #388bfd; }
+      .hint { font-size: 0.85rem; margin-top: 1.5rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>JulOS is not reachable</h1>
+      <p>The JulOS server could not be reached. Your data is safe — nothing was changed.</p>
+      <p lang="de">Der JulOS-Server ist nicht erreichbar. Deine Daten sind sicher — es wurde nichts geändert.</p>
+      <button type="button" onclick="location.reload()">Retry / Erneut versuchen</button>
+      <p class="hint">Check that the JulOS server and your network connection are running, then retry.</p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="JulOS">
+  <!-- Maskable: keep the mark inside the safe zone (center 80%). -->
+  <rect width="512" height="512" fill="#0d419d"/>
+  <path d="M300 170h44v126c0 47-35 79-85 79-44 0-75-24-84-64l44-12c5 19 18 31 40 31 23 0 41-16 41-42z"
+        fill="#ffffff"/>
+</svg>

@@ -1,5 +1,6 @@
 ﻿import { installInterfacePlan } from './interface-plan.js';
 import { findMissingPlatformFeatures, probeBrowser } from './platform-support.js';
+import { registerServiceWorker } from './pwa.js';
 import { defineJulOsShell } from './shell.js';
 
 /**
@@ -23,4 +24,5 @@ if (missingFeatures.length > 0) {
 } else {
   defineJulOsShell();
   installInterfacePlan(document);
+  registerServiceWorker();
 }

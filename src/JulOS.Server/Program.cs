@@ -145,6 +145,28 @@ app.UseAntiforgery();
 app.MapStaticAssets()
     .AllowAnonymous();
 
+// The Shell service worker is served here rather than through the fingerprinted
+// static-asset pipeline: a service-worker registration cannot consume the
+// compressed, immutable-cached asset response, and the worker must stay
+// no-cache so browsers can detect a new build. Served uncompressed from the web
+// root with the header that lets a /sw.js worker take the whole-origin scope.
+app.MapGet("/sw.js", async (HttpContext context, IWebHostEnvironment environment) =>
+{
+    var webRoot = environment.WebRootPath
+        ?? Path.Combine(environment.ContentRootPath, "wwwroot");
+    var serviceWorkerPath = Path.Combine(webRoot, "service-worker.js");
+    if (!File.Exists(serviceWorkerPath))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    context.Response.ContentType = "text/javascript";
+    context.Response.Headers.CacheControl = "no-cache";
+    context.Response.Headers["Service-Worker-Allowed"] = "/";
+    await context.Response.SendFileAsync(serviceWorkerPath).ConfigureAwait(false);
+}).AllowAnonymous();
+
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
     .AllowAnonymous();
 app.MapHealthChecks(
