@@ -1,4 +1,5 @@
-﻿import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
+import { JulOsApiError } from './api-client.js';
+import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
 import { desktopNotificationCenter } from './desktop-observability.js';
 import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
@@ -17,6 +18,7 @@ import { classifyViewport, deriveResponsiveDesktop } from './responsive-desktop.
 import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
 import { WebAppCatalog, WebAppPackageId } from './web-app-catalog.js';
+import { isDynamicWebAppBrowserAvailable } from './webapp-availability.js';
 import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
@@ -86,6 +88,7 @@ export class DesktopRuntime {
   #launcher: LauncherIndex | null = null;
   #launcherQuery = '';
   #viewport: DesktopViewport = 'desktop';
+  #webAppBrowserAvailable = false;
   #layoutLoaded = false;
   #restoringLayout = false;
   #unsubscribeWindows: (() => void) | null = null;
@@ -144,7 +147,11 @@ export class DesktopRuntime {
 
     this.#ensureStyles();
     this.#viewport = classifyViewport(Math.max(this.#elements.windowLayer.clientWidth, 320));
-    const [packageApplications, widgets] = await this.#readPackageCatalog();
+    const [[packageApplications, widgets], webAppBrowserAvailable] = await Promise.all([
+      this.#readPackageCatalog(),
+      this.#readWebAppBrowserAvailability(),
+    ]);
+    this.#webAppBrowserAvailable = webAppBrowserAvailable;
     this.#replaceCatalog(packageApplications, widgets);
 
     let layout: DesktopLayoutDocument | null = null;
@@ -257,12 +264,27 @@ export class DesktopRuntime {
     return [applications, widgets];
   }
 
+  async #readWebAppBrowserAvailability(): Promise<boolean> {
+    try {
+      return isDynamicWebAppBrowserAvailable(await this.#api.readWebProxyConfig());
+    } catch (error) {
+      if (error instanceof JulOsApiError && error.kind === 'forbidden') {
+        return false;
+      }
+      this.#onFailure(error);
+      return false;
+    }
+  }
+
   #replaceCatalog(
     packageApplications: readonly DesktopApplication[],
     widgets: readonly DesktopWidget[],
   ): void {
+    const coreApplications = this.#coreApplications.applications()
+      .filter((application) => this.#webAppBrowserAvailable
+        || application.applicationDefinitionId !== CoreApplicationIds.webappBrowser);
     const applications = [
-      ...this.#coreApplications.applications(),
+      ...coreApplications,
       ...this.#webApps.applications(),
       ...packageApplications,
     ];
@@ -302,10 +324,12 @@ export class DesktopRuntime {
   }
 
   async #refreshPackageCatalog(): Promise<void> {
-    const [, [packageApplications, widgets]] = await Promise.all([
+    const [webAppBrowserAvailable, , [packageApplications, widgets]] = await Promise.all([
+      this.#readWebAppBrowserAvailability(),
       this.#webApps.refresh(),
       this.#readPackageCatalog(),
     ]);
+    this.#webAppBrowserAvailable = webAppBrowserAvailable;
     this.#replaceCatalog(packageApplications, widgets);
 
     const availableApplications = new Set(this.#applications.keys());
