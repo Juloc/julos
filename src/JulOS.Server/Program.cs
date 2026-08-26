@@ -3,6 +3,7 @@
 
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Agents;
+using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
@@ -95,6 +96,21 @@ var app = builder.Build();
 if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
 {
     await CoreDatabaseMigrator.MigrateAsync(coreDatabase).ConfigureAwait(false);
+}
+
+// Grant the administrator role any permission added to the catalog since setup
+// completed (for example after an upgrade). This is best-effort: a database that
+// is not reachable at startup must not stop the host, and the seeder is
+// idempotent, so it re-runs harmlessly on every boot.
+try
+{
+    await SystemAuthorizationReconciler
+        .ReconcileAdministratorPermissionsAsync(app.Services)
+        .ConfigureAwait(false);
+}
+catch (Exception exception)
+{
+    ServerLog.AdministratorPermissionReconciliationSkipped(app.Logger, exception);
 }
 
 app.UseJulOsErrorHandling();

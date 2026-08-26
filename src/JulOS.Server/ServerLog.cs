@@ -14,4 +14,12 @@ internal static partial class ServerLog
         Level = LogLevel.Information,
         Message = "{Component} {Version} is starting.")]
     internal static partial void Starting(ILogger logger, string component, string version);
+
+    [LoggerMessage(
+        EventId = 1001,
+        Level = LogLevel.Warning,
+        Message = "Administrator permission reconciliation was skipped at startup.")]
+    internal static partial void AdministratorPermissionReconciliationSkipped(
+        ILogger logger,
+        Exception exception);
 }
