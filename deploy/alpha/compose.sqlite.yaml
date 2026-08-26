@@ -1,11 +1,11 @@
-# JulOS 0.4.0-beta.19 single-service stack using SQLite.
+# JulOS 0.4.0-beta.20 single-service stack using SQLite.
 # Do not run more than one server replica against this database file.
 
 name: julos-beta
 
 services:
   server:
-    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.19}
+    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.20}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
