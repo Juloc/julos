@@ -111,6 +111,23 @@ public sealed partial class PostgresPackageStorageProvisioner
         }
 
         var databasePath = Path.Combine(this.packageRoot, packageId, "data", "package.db");
+
+        // The package database is opened with connection pooling, so a pooled
+        // connection keeps the file open after every SqliteConnection is disposed.
+        // Clear the pool for this database before deleting its files: otherwise the
+        // delete throws "file in use" on Windows and leaks the open handle on Linux,
+        // where the unlinked file lingers until the pool is recycled.
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Shared,
+        }.ToString();
+        using (var pooledConnection = new SqliteConnection(connectionString))
+        {
+            SqliteConnection.ClearPool(pooledConnection);
+        }
+
         DeleteIfPresent(databasePath);
         DeleteIfPresent(databasePath + "-wal");
         DeleteIfPresent(databasePath + "-shm");
