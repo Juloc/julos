@@ -5,6 +5,7 @@ export const WebAppBrowserApplicationId = 'core.webapp-browser';
 
 const Base32Alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
 const MaximumLabelLength = 63;
+const LocalWebReadyMessage = 'Local Web is for compatible internal web apps. Use the Browser package for general websites or apps that stay blank.';
 
 export interface ParsedAddress {
   readonly origin: string;
@@ -49,7 +50,7 @@ export function encodeProxyHost(origin: string, zone: string): string {
   const payload = new Uint8Array([schemeByte, ...new TextEncoder().encode(authority)]);
   const label = `wa${base32Encode(payload)}`;
   if (label.length > MaximumLabelLength) {
-    throw new Error('This address is too long for local mode; use the streamed browser instead.');
+    throw new Error('This address is too long for Local Web; use the Browser package instead.');
   }
 
   return `${label}.${zone}`;
@@ -93,13 +94,19 @@ export interface CoreSurfaceHandle {
 }
 
 /**
- * Builds the browser surface: an address bar plus a sandboxed iframe that renders the proxied
- * target locally. The parent cannot read the cross-origin iframe location, so the address bar
- * reflects only the last user-submitted URL.
+ * Builds Local Web: an address bar plus a sandboxed iframe that renders a proxied internal target
+ * in the user's browser. This is deliberately separate from the installable Browser package,
+ * which uses an isolated Chromium runtime and the interactive display transport.
  */
 export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHandle {
   const root = document.createElement('section');
   root.className = 'core-app webapp-browser';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'Local Web';
+  const explanation = document.createElement('p');
+  explanation.className = 'webapp-description';
+  explanation.textContent = LocalWebReadyMessage;
 
   const toolbar = document.createElement('form');
   toolbar.className = 'webapp-toolbar';
@@ -120,16 +127,19 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
 
   const status = document.createElement('div');
   status.className = 'webapp-status';
+  status.setAttribute('role', 'status');
 
   const frame = document.createElement('iframe');
   frame.className = 'window-webapp';
+  frame.title = 'Local Web application';
   frame.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-downloads');
   frame.referrerPolicy = 'no-referrer';
 
-  root.append(toolbar, status, frame);
+  root.append(heading, explanation, toolbar, status, frame);
 
   let zone: string | null = null;
   let nav: NavigationState = { entries: [], index: -1 };
+  let loadingTarget = false;
 
   const applyButtons = (): void => {
     back.disabled = nav.index <= 0;
@@ -145,9 +155,11 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     address.value = url;
     try {
       const parsed = parseAddressInput(url);
+      loadingTarget = true;
+      status.textContent = 'Opening through the Local Web proxy…';
       frame.src = buildIframeSrc(encodeProxyHost(parsed.origin, zone), parsed.pathQuery);
-      status.textContent = '';
     } catch (error) {
+      loadingTarget = false;
       status.textContent = error instanceof Error ? error.message : String(error);
     }
     applyButtons();
@@ -158,6 +170,21 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     loadCurrent();
   };
 
+  frame.addEventListener('load', () => {
+    if (!loadingTarget || frame.src === 'about:blank') {
+      return;
+    }
+    loadingTarget = false;
+    status.textContent = 'Loaded through Local Web. If the app is blank or broken, open it with the Browser package.';
+  });
+  frame.addEventListener('error', () => {
+    if (!loadingTarget) {
+      return;
+    }
+    loadingTarget = false;
+    status.textContent = 'Local Web could not render this target. Use the Browser package for the streamed Chromium session.';
+  });
+
   toolbar.addEventListener('submit', (event) => {
     event.preventDefault();
     if (zone === null) {
@@ -165,7 +192,6 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     }
     try {
       const parsed = parseAddressInput(address.value);
-      status.textContent = '';
       dispatch({ type: 'open', url: `${parsed.origin}${parsed.pathQuery}` });
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : String(error);
@@ -176,27 +202,28 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
   reload.addEventListener('click', () => loadCurrent());
 
   toolbar.hidden = true;
-  status.textContent = 'Loading…';
+  status.textContent = 'Loading Local Web configuration…';
   void api.readWebProxyConfig().then(
     (config) => {
       if (!config.enabled || config.proxyZone.length === 0) {
-        status.textContent = 'Local web-app mode is not enabled on this deployment.';
+        status.textContent = 'Local Web is not enabled on this deployment. The Browser package is separate and does not require Local Web mode.';
         return;
       }
       zone = config.proxyZone;
       toolbar.hidden = false;
-      status.textContent = 'Enter an internal address to open it locally.';
+      status.textContent = 'Enter a compatible internal address.';
       applyButtons();
       address.focus();
     },
     () => {
-      status.textContent = 'Could not load the web-app proxy configuration.';
+      status.textContent = 'Could not load the Local Web proxy configuration.';
     },
   );
 
   return {
     element: root,
     dispose: () => {
+      loadingTarget = false;
       frame.src = 'about:blank';
     },
   };
