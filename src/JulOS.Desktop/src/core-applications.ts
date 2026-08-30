@@ -282,7 +282,7 @@ export class CoreApplicationCatalog {
         artifact: artifactFile,
         signature: signatureFile,
         publisherId: publisher.input.value,
-        publisherKeyId: publisherKey.input.value,
+        publisherKeyId: publisher.input.value,
       }).then(async () => {
         form.reset();
         status.textContent = text(language, 'installed');
