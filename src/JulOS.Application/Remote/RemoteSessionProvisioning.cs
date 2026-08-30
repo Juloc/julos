@@ -17,3 +17,13 @@ public interface IRemoteSessionProvisioningReconciler
         int limit,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>Coalesces wake-up signals for the durable Remote provisioning worker.</summary>
+public interface IRemoteSessionProvisioningSignal
+{
+    /// <summary>Requests a provisioning reconciliation pass without carrying session state in memory.</summary>
+    void Signal();
+
+    /// <summary>Waits until provisioning work may be available.</summary>
+    ValueTask WaitAsync(CancellationToken cancellationToken = default);
+}
