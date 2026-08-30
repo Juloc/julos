@@ -6,6 +6,9 @@ namespace JulOS.Server.Remote;
 
 internal static class RemoteProviderEventEndpoints
 {
+    private const string ProviderInternalFailurePrefix = "remote.provider_";
+    private const string ProviderStartupFailureDetail = "The Remote provider runtime failed to initialize.";
+
     internal static IEndpointRouteBuilder MapJulOsRemoteProviderEvents(
         this IEndpointRouteBuilder endpoints)
     {
@@ -98,14 +101,19 @@ internal static class RemoteProviderEventEndpoints
         {
             return InvalidRequest("Remote failed event payload is invalid.");
         }
+
+        var failure = NormalizeFailure(
+            request.FailureCode,
+            request.FailureDetail,
+            request.Retryable);
         var response = await connections.FailAsync(
             new FailRemoteSessionCommand(
                 request.SessionId,
                 request.RuntimeId,
                 request.ExpectedRevision,
-                request.FailureCode,
-                request.FailureDetail,
-                request.Retryable),
+                failure.Code,
+                failure.Detail,
+                failure.Retryable),
             cancellationToken).ConfigureAwait(false);
         return Results.Ok(response);
     }
@@ -126,6 +134,22 @@ internal static class RemoteProviderEventEndpoints
             new RecordRemoteSessionActivityCommand(request.SessionId, request.RuntimeId),
             cancellationToken).ConfigureAwait(false);
         return Results.NoContent();
+    }
+
+    private static RemoteSessionFailureResponse NormalizeFailure(
+        string code,
+        string detail,
+        bool retryable)
+    {
+        if (code.StartsWith(ProviderInternalFailurePrefix, StringComparison.Ordinal))
+        {
+            return new RemoteSessionFailureResponse(
+                RemoteSessionFailureCodes.RuntimeUnavailable,
+                ProviderStartupFailureDetail,
+                Retryable: true);
+        }
+
+        return new RemoteSessionFailureResponse(code, detail, retryable);
     }
 
     private static IResult InvalidRequest(

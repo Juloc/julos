@@ -33,7 +33,9 @@ The provider runtime is one container image, launched once per Remote session by
 
 Apache Guacamole requires `GUAC_DATA_SOURCE`, `GUAC_ID` and `GUAC_TYPE` to resolve the requested connection. A valid `token` without those selectors can still establish the WebSocket transport and exchange keepalive `ping` traffic without starting the JSON-auth connection. The deployed symptom of only keepalive `ping` traffic therefore identifies an incomplete tunnel-selection request rather than proof of a working display session.
 
-The encrypted JSON-auth `data`, Guacamole `authToken`, target credential and callback token remain runtime-private and are never returned through the JulOS browser API or written to normal logs. The session ID used as `GUAC_ID` is non-secret runtime identity. The token exchange has a bounded timeout and fails the runtime with a stable provider error instead of falling through to a tunnel that can only exchange keepalive traffic.
+The encrypted JSON-auth `data`, Guacamole `authToken`, target credential and callback token remain runtime-private and are never returned through the JulOS browser API or written to normal logs. The session ID used as `GUAC_ID` is non-secret runtime identity. The token exchange has a bounded timeout and fails the runtime with a provider-internal diagnostic instead of falling through to a tunnel that can only exchange keepalive traffic.
+
+Provider-internal bootstrap diagnostics such as `remote.provider_guacd_unavailable`, `remote.provider_webapp_unavailable` and `remote.provider_listener_unavailable` are accepted only by the authenticated private provider-event endpoint. JulOS Server normalizes that internal diagnostic family to caller-safe `remote.runtime_unavailable` with bounded generic detail before mutating the durable session. Provider exception text and bootstrap implementation details therefore cannot leak through the public Remote session contract, and a valid startup failure cannot be rejected merely because its provider-private diagnostic is not a public session failure code.
 
 ## Credential shape
 
@@ -53,6 +55,8 @@ Repository regression coverage in `tests/JulOS.Architecture.Tests/RemoteProvider
 - nginx must supply `GUAC_DATA_SOURCE=json`, `GUAC_ID=<session ID>` and `GUAC_TYPE=c` to the private Guacamole tunnel;
 - `FinalizeAsync` must not report `connected`;
 - the launcher must report `connected` only after the `8081` readiness loop has completed.
+
+`tests/JulOS.Integration.Tests/Remote/RemoteProviderEventEndpointTests.cs` additionally verifies that provider-private bootstrap failure codes are normalized to the stable caller-safe `remote.runtime_unavailable` failure before they reach the session service.
 
 A WebSocket `101 Switching Protocols` or Guacamole `ping` frames alone are not functional display acceptance. Deployed acceptance requires actual Guacamole protocol/display traffic and a rendered target session. RDP, VNC, browser/Android display and SSH re-confirmation remain deployment gates after a provider image containing the complete token-exchange and tunnel-selector correction is published.
 
