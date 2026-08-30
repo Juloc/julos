@@ -24,6 +24,7 @@ public static class RemoteOrchestrationServiceCollectionExtensions
             configuration,
             serviceProvider.GetRequiredService<TimeProvider>()));
         services.AddScoped<IRemoteSessionProvisioner, PostgresRemoteSessionProvisioner>();
+        services.AddScoped<IRemoteSessionProvisioningReconciler, PostgresRemoteSessionProvisioningReconciler>();
         services.AddScoped<IRemoteSessionLifecycleService, PostgresRemoteSessionLifecycleService>();
         services.AddScoped<IRemoteSessionConnectionService, PostgresRemoteSessionConnectionService>();
         services.AddScoped<PostgresRemoteDisplayAuthorizationService>();
