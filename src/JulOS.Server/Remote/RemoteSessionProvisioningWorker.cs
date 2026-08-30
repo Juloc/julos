@@ -2,45 +2,54 @@
 
 namespace JulOS.Server.Remote;
 
-/// <summary>Continuously resumes durable Remote runtime provisioning outside client requests.</summary>
+/// <summary>Resumes durable Remote runtime provisioning outside client requests.</summary>
 internal sealed class RemoteSessionProvisioningWorker : BackgroundService
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(1);
+    private const int BatchSize = 10;
     private static readonly Action<ILogger, Exception?> ReconciliationFailed = LoggerMessage.Define(
         LogLevel.Error,
         new EventId(6110, nameof(ReconciliationFailed)),
         "Remote provisioning reconciliation failed.");
 
     private readonly IServiceScopeFactory scopeFactory;
-    private readonly TimeProvider timeProvider;
+    private readonly IRemoteSessionProvisioningSignal signal;
     private readonly ILogger<RemoteSessionProvisioningWorker> logger;
 
     public RemoteSessionProvisioningWorker(
         IServiceScopeFactory scopeFactory,
-        TimeProvider timeProvider,
+        IRemoteSessionProvisioningSignal signal,
         ILogger<RemoteSessionProvisioningWorker> logger)
     {
         this.scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        this.signal = signal ?? throw new ArgumentNullException(nameof(signal));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Recover sessions that were requested or provisioning when the previous
+        // Server process stopped. Subsequent work is signalled by capability create.
+        await this.ReconcileUntilDrainedAsync(stoppingToken).ConfigureAwait(false);
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            await this.ReconcileAsync(stoppingToken).ConfigureAwait(false);
-            await Task.Delay(Interval, this.timeProvider, stoppingToken).ConfigureAwait(false);
+            await this.signal.WaitAsync(stoppingToken).ConfigureAwait(false);
+            await this.ReconcileUntilDrainedAsync(stoppingToken).ConfigureAwait(false);
         }
     }
 
-    private async Task ReconcileAsync(CancellationToken cancellationToken)
+    private async Task ReconcileUntilDrainedAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await using var scope = this.scopeFactory.CreateAsyncScope();
-            var reconciler = scope.ServiceProvider.GetRequiredService<IRemoteSessionProvisioningReconciler>();
-            _ = await reconciler.ReconcilePendingAsync(10, cancellationToken).ConfigureAwait(false);
+            RemoteProvisioningReconciliationResult result;
+            do
+            {
+                await using var scope = this.scopeFactory.CreateAsyncScope();
+                var reconciler = scope.ServiceProvider.GetRequiredService<IRemoteSessionProvisioningReconciler>();
+                result = await reconciler.ReconcilePendingAsync(BatchSize, cancellationToken).ConfigureAwait(false);
+            }
+            while (result.Examined == BatchSize && !cancellationToken.IsCancellationRequested);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
