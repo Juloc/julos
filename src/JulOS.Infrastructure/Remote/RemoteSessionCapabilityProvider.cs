@@ -18,19 +18,16 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
     private const string CredentialPurpose = "remote.credential";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IRemoteSessionService sessions;
-    private readonly IRemoteSessionProvisioner provisioner;
     private readonly IRemoteSessionLifecycleService lifecycle;
     private readonly ISecretReferenceService secrets;
 
     /// <summary>Creates the Remote session capability provider.</summary>
     public RemoteSessionCapabilityProvider(
         IRemoteSessionService sessions,
-        IRemoteSessionProvisioner provisioner,
         IRemoteSessionLifecycleService lifecycle,
         ISecretReferenceService secrets)
     {
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
-        this.provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
         this.lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         this.secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
     }
@@ -160,16 +157,7 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
         var created = await this.sessions.CreateAsync(
             new CreateRemoteSessionCommand(ownerUserId, callerPackageId, request),
             cancellationToken).ConfigureAwait(false);
-        var provisioned = await this.provisioner.ProvisionAsync(
-            new ProvisionRemoteSessionCommand(
-                ownerUserId,
-                callerPackageId,
-                created.SessionId,
-                created.Revision),
-            cancellationToken).ConfigureAwait(false);
-        return provisioned.Failure is null
-            ? Success(provisioned)
-            : Failure(provisioned.Failure.Code, provisioned.Failure.Detail);
+        return Success(created);
     }
 
     private async Task<CapabilityResponse> CreateCredentialAsync(
