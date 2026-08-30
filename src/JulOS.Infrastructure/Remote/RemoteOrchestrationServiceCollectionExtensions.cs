@@ -23,7 +23,9 @@ public static class RemoteOrchestrationServiceCollectionExtensions
         services.AddSingleton(serviceProvider => RemoteDisplayGateway.Read(
             configuration,
             serviceProvider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IRemoteSessionProvisioningSignal, RemoteSessionProvisioningSignal>();
         services.AddScoped<IRemoteSessionProvisioner, PostgresRemoteSessionProvisioner>();
+        services.AddScoped<IRemoteSessionProvisioningReconciler, PostgresRemoteSessionProvisioningReconciler>();
         services.AddScoped<IRemoteSessionLifecycleService, PostgresRemoteSessionLifecycleService>();
         services.AddScoped<IRemoteSessionConnectionService, PostgresRemoteSessionConnectionService>();
         services.AddScoped<PostgresRemoteDisplayAuthorizationService>();
