@@ -18,16 +18,19 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
     private const string CredentialPurpose = "remote.credential";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IRemoteSessionService sessions;
+    private readonly IRemoteSessionProvisioningSignal provisioningSignal;
     private readonly IRemoteSessionLifecycleService lifecycle;
     private readonly ISecretReferenceService secrets;
 
     /// <summary>Creates the Remote session capability provider.</summary>
     public RemoteSessionCapabilityProvider(
         IRemoteSessionService sessions,
+        IRemoteSessionProvisioningSignal provisioningSignal,
         IRemoteSessionLifecycleService lifecycle,
         ISecretReferenceService secrets)
     {
         this.sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        this.provisioningSignal = provisioningSignal ?? throw new ArgumentNullException(nameof(provisioningSignal));
         this.lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
         this.secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
     }
@@ -157,6 +160,7 @@ public sealed class RemoteSessionCapabilityProvider : ICapabilityProvider
         var created = await this.sessions.CreateAsync(
             new CreateRemoteSessionCommand(ownerUserId, callerPackageId, request),
             cancellationToken).ConfigureAwait(false);
+        this.provisioningSignal.Signal();
         return Success(created);
     }
 
