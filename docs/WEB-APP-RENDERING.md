@@ -1,12 +1,12 @@
 ﻿# Web application rendering
 
-Status: In progress. Design accepted in decision `D035`. The static transparent proxy, dynamic encoded-origin proxy and address-bar browser foundation are implemented; Host Connector-tunnel reachability, credential injection, compatibility fallback and the remaining release gates are still open.
+Status: In progress. Design accepted in decision `D035`. The static transparent proxy, dynamic encoded-origin proxy and Local Web address-bar foundation are implemented; Host Connector-tunnel reachability, credential injection, compatibility fallback and the remaining release gates are still open.
 
 ## 1. Goal
 
 An internal web application must render in the user's own browser, inside a movable JulOS desktop window, so that video, canvas, WebGL and other interactive content decode and run locally with hardware acceleration.
 
-Pixel-streaming a remote browser is heavy, discards local hardware decoding and is the wrong transport for media and interactive local content. It is retained only as a fallback and for isolation and true remote desktops.
+Pixel-streaming a remote browser is heavy, discards local hardware decoding and is the wrong transport for media and interactive local content. It remains available where isolation or full browser compatibility is required.
 
 Concrete targets that must work in local mode:
 
@@ -17,12 +17,23 @@ Concrete targets that must work in local mode:
 
 ## 2. Two rendering modes
 
-Every web-application target resolves to one of two modes:
+Every managed web-application target resolves to one of two modes:
 
-- **Local (default):** JulOS reverse-proxies the target and the user's browser renders it in a desktop-window iframe. Local, fast, hardware-accelerated.
-- **Streamed (fallback):** JulOS runs the target in an isolated browser runtime and streams its display, as specified in [`BROWSER-RUNTIME.md`](BROWSER-RUNTIME.md) and decision `D005`. Used only when local mode is incompatible, when isolation is required, or for RDP, VNC and SSH.
+- **Local:** JulOS reverse-proxies the target and the user's browser renders it in a desktop-window iframe. Local, fast, hardware-accelerated.
+- **Streamed:** JulOS runs the target in an isolated browser runtime and streams its display, as specified in [`BROWSER-RUNTIME.md`](BROWSER-RUNTIME.md) and decision `D005`. Used when local mode is incompatible, when isolation is required, and by the installable Browser package.
 
 A window is presentation state; the rendering mode is a property of the target, not of the window (see the window and session separation in [`ARCHITECTURE.md`](ARCHITECTURE.md)).
+
+### 2.1 Product boundary: Local Web versus Browser
+
+JulOS exposes these modes as two deliberately different user-facing applications:
+
+- **Local Web** (`core.webapp-browser`) is the lightweight dynamic transparent-proxy tool for compatible internal HTTP/HTTPS applications. It requires `WebApps:Dynamic` configuration, wildcard DNS/TLS and the Local Web allowlist.
+- **Browser** (`de.juloc.julos.browser`) is the installable general-purpose browser. It creates an `interactive.session`, runs Chromium in the isolated browser runtime and renders the display through the Remote transport. It does not use the Local Web iframe proxy.
+
+The two applications must not share the same display name. A blank or incompatible Local Web target is not evidence that the Browser package is broken. Likewise, disabling Local Web must not disable the streamed Browser package.
+
+The Local Web address bar does not silently switch to the Browser package. An eventual `auto` transition for managed targets must be explicit and observable, as required by `D011`.
 
 ## 3. Local mode: per-target transparent host proxy
 
@@ -49,7 +60,7 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
 
 ### 3.3 Dynamic address-bar targets
 
-The Web Browser core application can encode a typed HTTP or HTTPS origin into one host label under `WebApps:Dynamic:ProxyZone`:
+The **Local Web** core application can encode a typed HTTP or HTTPS origin into one host label under `WebApps:Dynamic:ProxyZone`:
 
 ```text
 https://grafana.lan:3000
@@ -70,26 +81,33 @@ For every dynamic request JulOS resolves the target before opening a connection,
 
 This resolved-address rule is the SSRF boundary for dynamic mode. Adding a broad CIDR is therefore an explicit administrator decision, not an inferred private-network fallback.
 
-### 3.4 Why this renders locally
+### 3.4 Compatibility boundary
+
+Local Web is a transparent-proxy compatibility mode, not a general browser engine. It can still fail for applications that hard-code their original scheme/origin, depend on browser behavior tied to the original host, or use client-side mechanisms that cannot be made transparent by response-header handling alone.
+
+The UI must therefore keep Local Web visibly distinct from Browser and explain a blank/broken target instead of presenting an empty surface as if the general browser had failed. The general Browser package is the correct choice when full Chromium compatibility is required.
+
+### 3.5 Why this renders locally
 
 The proxy is a transparent byte transport, not a remote browser. The application's HTML, JavaScript, WebSocket frames and media streams reach the user's own browser, which parses, executes and hardware-decodes them. A media stream plays with local hardware decoding; an interactive canvas runs on the local GPU.
 
 ## 4. Streamed mode
 
-Streamed mode is unchanged from [`BROWSER-RUNTIME.md`](BROWSER-RUNTIME.md) and `D005`: an isolated browser runtime in the target network, displayed through the Remote transport. It remains the correct choice for:
+Streamed mode is defined in [`BROWSER-RUNTIME.md`](BROWSER-RUNTIME.md) and `D005`: an isolated browser runtime in the target network, displayed through the Remote transport. It is the mode used by the installable Browser package and remains the correct choice for:
 
-- a target that still does not function after transparent proxying (rare: applications that hard-code their own scheme and host in client script, or reject any modified header);
+- a target that does not function after transparent proxying;
 - a target that must be isolated from the user's browser for containment;
+- general web browsing through the JulOS Browser package;
 - RDP, VNC and SSH sessions, which are not web applications.
 
 ## 5. Mode selection
 
-Each target carries a rendering policy: `local`, `streamed` or `auto`.
+Managed targets may carry a rendering policy: `local`, `streamed` or `auto`.
 
 - `local` and `streamed` force the mode.
-- `auto` attempts local mode first. If a readiness probe or the initial load fails in a way that indicates the application cannot be proxied transparently, the target falls back to streamed mode, and the fallback is recorded on the target so the next open is immediate.
+- `auto` is planned to attempt local mode first. If a readiness probe or the initial load fails in a way that indicates the application cannot be proxied transparently, the target can transition to streamed mode and record that decision so the next open is immediate.
 
-Fallback is an explicit, observable transition, not a hidden retry (see the no-silent-fallback rule, `D011`).
+Fallback is an explicit, observable transition, not a hidden retry (see the no-silent-fallback rule, `D011`). The current Local Web address-bar tool does not implement automatic fallback.
 
 ## 6. Security model
 
@@ -106,20 +124,22 @@ Fallback is an explicit, observable transition, not a hidden retry (see the no-s
 
 `D005` rejects iframes as the general application runtime because a foreign origin can forbid framing and because internal services must not be exposed. Local mode does use an iframe, but only for a JulOS-controlled host whose framing headers JulOS itself sets, reached through the Host Connector tunnel and never publicly exposed. The reasons behind `D005` do not apply to this case. Framing a foreign origin directly remains forbidden. Decision `D035` records this boundary.
 
+The installable Browser package remains on the streamed interactive-session architecture and therefore does not depend on this iframe exception.
+
 ## 8. Prerequisite
 
-Local mode depends on wildcard DNS for `*.<julos-domain>` and a wildcard TLS certificate, issued and renewed through the Caddy integration and a supported DNS-provider API. Where wildcard hostnames are unavailable, only streamed mode is offered until the prerequisite is met. A path-based proxy is not adopted as a substitute, because it cannot serve the target applications reliably.
+Local mode depends on wildcard DNS for `*.<julos-domain>` and a wildcard TLS certificate, issued and renewed through the Caddy integration and a supported DNS-provider API. Where wildcard hostnames are unavailable, Local Web is unavailable; the streamed Browser package remains a separate capability. A path-based proxy is not adopted as a substitute, because it cannot serve the target applications reliably.
 
 The JulOS session cookie must also be scoped to the deployment's parent domain (`Authentication:CookieDomain`, for example `.os.juloc.de`) so the authenticated session reaches each target subdomain. It is host-only by default, and without the parent-domain scope the embedded target would receive no session and the proxy would reject it.
 
 ## 9. Milestones
 
 - **M0 — Done:** accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
-- **M1 — In progress:** transparent local proxy, WebSocket transport, framing/cookie/redirect policy, configured-target launcher integration, dynamic encoded-origin backend and address-bar browser are implemented. Real target/browser acceptance and the remaining dynamic compatibility work are still required.
+- **M1 — In progress:** transparent local proxy, WebSocket transport, framing/cookie/redirect policy, configured-target launcher integration, dynamic encoded-origin backend and Local Web address bar are implemented. Local Web and the streamed Browser package are separate user-facing applications. Real target/browser acceptance and the remaining dynamic compatibility work are still required.
 - **M2 — Open, depends on `HCON-005`:** reach targets through a target-bound Host Connector stream and inject target credentials through an operation-bound secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
 - **M3 — Partially complete:** resolved-IP SSRF validation and connection pinning are implemented. Rendering-policy resolution with `auto` and an observable fallback to streamed mode remains.
 - **M4 — Open:** remaining cookie/redirect edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
-- **M5 — Open:** security and footprint review and the remote-access runbook, as release gates before the mode is enabled by default.
+- **M5 — Open:** security and footprint review and the remote-access runbook, as release gates before local mode is enabled by default.
 
 ## 10. Configuration
 
@@ -133,7 +153,7 @@ WebApps:AllowInvalidUpstreamCertificates  false   # opt-in for self-signed inter
 Authentication:CookieDomain      .os.juloc.de     # parent-domain scope so the session reaches target subdomains
 ```
 
-Dynamic address-bar mode is explicit and default-deny:
+Dynamic Local Web address-bar mode is explicit and default-deny:
 
 ```text
 WebApps:Dynamic:Enabled          true
