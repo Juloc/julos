@@ -124,6 +124,35 @@ public sealed class RemoteProviderEventEndpointTests
         Assert.AreEqual(sessionId, connections.Activity.SessionId);
     }
 
+    [TestMethod]
+    public async Task InternalProviderFailureIsSanitizedBeforeSessionMutation()
+    {
+        var connections = new RecordingConnectionService();
+        using var host = CreateHost(connections);
+        using var client = host.CreateClient(ClientOptions);
+        var sessionId = Guid.Parse("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+        const string runtimeId = "remote-cccccccccccc4ccc8ccccccccccccccc";
+        var token = Issue(host, sessionId, runtimeId);
+
+        using var request = ProviderRequest(
+            token,
+            new RemoteProviderEventRequest(
+                sessionId,
+                runtimeId,
+                RemoteProviderEventContract.Failed,
+                ExpectedRevision: 3,
+                FailureCode: "remote.provider_webapp_unavailable",
+                FailureDetail: "Tomcat startup output that must remain provider-private.",
+                Retryable: false));
+        using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.IsNotNull(connections.Failed);
+        Assert.AreEqual(RemoteSessionFailureCodes.RuntimeUnavailable, connections.Failed.Code);
+        Assert.AreEqual("The Remote provider runtime failed to initialize.", connections.Failed.Detail);
+        Assert.IsTrue(connections.Failed.Retryable);
+    }
+
     private static ServerHost CreateHost(RecordingConnectionService connections) =>
         new(
             UnreachableDatabase,
