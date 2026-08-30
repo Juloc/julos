@@ -11,6 +11,8 @@ namespace JulOS.Infrastructure.Tests.Remote;
 [TestClass]
 public sealed class RemoteSessionCapabilityProviderTests
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     [TestMethod]
     public async Task CreateReturnsDurableRequestedSessionAndSignalsProvisioning()
     {
@@ -50,7 +52,7 @@ public sealed class RemoteSessionCapabilityProviderTests
         Assert.IsTrue(result.Succeeded, result.ErrorDetail);
         Assert.AreEqual(1, sessions.CreateCount);
         Assert.AreEqual(1, signal.SignalCount);
-        var response = result.Payload.Deserialize<RemoteSessionResponse>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var response = result.Payload.Deserialize<RemoteSessionResponse>(JsonOptions);
         Assert.IsNotNull(response);
         Assert.AreEqual(sessionId, response.SessionId);
         Assert.AreEqual(RemoteSessionStates.Requested, response.State);
