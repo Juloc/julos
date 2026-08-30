@@ -1,0 +1,54 @@
+{
+  "SchemaVersion": "1",
+  "PackageId": "de.juloc.julos.adaptive-browser",
+  "Version": "0.1.0",
+  "PublisherId": "juloc-official",
+  "DisplayNameKey": "package.adaptive-browser.name",
+  "DescriptionKey": "package.adaptive-browser.description",
+  "Runtime": {
+    "Kind": "process",
+    "Image": null,
+    "EntryPoint": "worker/JulOS.AdaptiveBrowser.Worker.dll",
+    "MemoryLimitMegabytes": 256,
+    "CpuLimit": 1,
+    "StartupTimeoutSeconds": 30,
+    "NetworkAccess": false
+  },
+  "Permissions": [
+    "core.system.version.read"
+  ],
+  "Applications": [
+    {
+      "StableKey": "adaptive-browser",
+      "DisplayNameKey": "app.adaptive-browser.name",
+      "InstancePolicy": "multiple-instances",
+      "DefaultWidth": 1180,
+      "DefaultHeight": 780,
+      "MinimumWidth": 640,
+      "MinimumHeight": 420,
+      "Viewports": [
+        "desktop",
+        "tablet",
+        "mobile"
+      ],
+      "ElementName": "julos-adaptive-browser-app"
+    }
+  ],
+  "Widgets": [],
+  "Capabilities": [
+    {
+      "Name": "interactive.session",
+      "Direction": "requires",
+      "ContractVersion": "1.0.0",
+      "Required": true
+    }
+  ],
+  "Migrations": [],
+  "Frontend": {
+    "ModulePath": "frontend/browser.js",
+    "Sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "ExportedElements": [
+      "julos-adaptive-browser-app"
+    ]
+  }
+}
