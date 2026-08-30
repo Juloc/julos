@@ -12,13 +12,15 @@ namespace JulOS.Infrastructure.Tests.Remote;
 public sealed class RemoteSessionCapabilityProviderTests
 {
     [TestMethod]
-    public async Task CreateReturnsDurableRequestedSessionWithoutRuntimeProvisioningDependency()
+    public async Task CreateReturnsDurableRequestedSessionAndSignalsProvisioning()
     {
         var sessionId = Guid.Parse("11111111-2222-4333-8444-555555555555");
         var ownerUserId = Guid.Parse("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
         var sessions = new RecordingSessionService(sessionId);
+        var signal = new RecordingProvisioningSignal();
         var provider = new RemoteSessionCapabilityProvider(
             sessions,
+            signal,
             new UnusedLifecycleService(),
             new UnusedSecretReferenceService());
         var now = DateTimeOffset.UtcNow;
@@ -47,6 +49,7 @@ public sealed class RemoteSessionCapabilityProviderTests
 
         Assert.IsTrue(result.Succeeded, result.ErrorDetail);
         Assert.AreEqual(1, sessions.CreateCount);
+        Assert.AreEqual(1, signal.SignalCount);
         var response = result.Payload.Deserialize<RemoteSessionResponse>(new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.IsNotNull(response);
         Assert.AreEqual(sessionId, response.SessionId);
@@ -93,6 +96,16 @@ public sealed class RemoteSessionCapabilityProviderTests
         public Task<RemoteSessionResponse> CancelAsync(
             CancelRemoteSessionCommand command,
             CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class RecordingProvisioningSignal : IRemoteSessionProvisioningSignal
+    {
+        internal int SignalCount { get; private set; }
+
+        public void Signal() => this.SignalCount++;
+
+        public ValueTask WaitAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 
