@@ -1,12 +1,24 @@
 ﻿using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 namespace JulOS.AdaptiveBrowser.Runtime;
 
-internal sealed class BrowserStreamSession
+internal sealed class BrowserStreamSession : IDisposable
 {
     private const int MaximumClientMessageBytes = 64 * 1024;
+    private static readonly Action<ILogger, Exception?> LogStreamClosed = LoggerMessage.Define(
+        LogLevel.Information,
+        new EventId(2100, nameof(LogStreamClosed)),
+        "Adaptive Browser stream closed.");
+    private static readonly Action<ILogger, Exception?> LogStreamFailed = LoggerMessage.Define(
+        LogLevel.Warning,
+        new EventId(2101, nameof(LogStreamFailed)),
+        "Adaptive Browser stream failed.");
+    private static readonly Action<ILogger, Exception?> LogStateReadFailed = LoggerMessage.Define(
+        LogLevel.Debug,
+        new EventId(2102, nameof(LogStateReadFailed)),
+        "Adaptive Browser state could not be read from Chromium.");
+
     private readonly WebSocket browser;
     private readonly ILogger logger;
     private readonly SemaphoreSlim browserSendLock = new(1, 1);
@@ -33,11 +45,11 @@ internal sealed class BrowserStreamSession
         }
         catch (WebSocketException exception)
         {
-            this.logger.LogInformation(exception, "Adaptive Browser stream closed.");
+            LogStreamClosed(this.logger, exception);
         }
         catch (Exception exception)
         {
-            this.logger.LogWarning(exception, "Adaptive Browser stream failed.");
+            LogStreamFailed(this.logger, exception);
             await this.TrySendErrorAsync(
                 "adaptive-browser.stream_failed",
                 "The server browser stream failed.",
@@ -49,9 +61,14 @@ internal sealed class BrowserStreamSession
             {
                 this.cdp.EventReceived -= this.OnCdpEventAsync;
                 await this.cdp.DisposeAsync().ConfigureAwait(false);
+                this.cdp = null;
             }
-            this.browserSendLock.Dispose();
         }
+    }
+
+    public void Dispose()
+    {
+        this.browserSendLock.Dispose();
     }
 
     private async Task ReceiveCommandsAsync(CancellationToken cancellationToken)
@@ -97,7 +114,7 @@ internal sealed class BrowserStreamSession
             JsonDocument document;
             try
             {
-                document = JsonDocument.Parse(message.GetBuffer().AsSpan(0, checked((int)message.Length)));
+                document = JsonDocument.Parse(message.GetBuffer().AsMemory(0, checked((int)message.Length)));
             }
             catch (JsonException)
             {
@@ -360,7 +377,7 @@ internal sealed class BrowserStreamSession
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException)
         {
-            this.logger.LogDebug(exception, "Adaptive Browser state could not be read from Chromium.");
+            LogStateReadFailed(this.logger, exception);
         }
     }
 
