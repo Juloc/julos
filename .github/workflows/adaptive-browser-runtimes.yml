@@ -1,6 +1,11 @@
 name: Adaptive Browser runtimes
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - packages/JulOS.AdaptiveBrowser/**
   workflow_dispatch:
 
 permissions:
@@ -30,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF_NAME" != "main" ]]; then
-            echo "Adaptive Browser runtimes must be dispatched from main, got: $GITHUB_REF_NAME" >&2
+            echo "Adaptive Browser runtimes must run from main, got: $GITHUB_REF_NAME" >&2
             exit 1
           fi
           version="$(tr -d '\r\n' < VERSION)"
