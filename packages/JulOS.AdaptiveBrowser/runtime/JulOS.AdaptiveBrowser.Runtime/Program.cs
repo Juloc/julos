@@ -57,7 +57,7 @@ app.Map("/stream", async context =>
     var logger = context.RequestServices
         .GetRequiredService<ILoggerFactory>()
         .CreateLogger("JulOS.AdaptiveBrowser.Runtime.Stream");
-    var session = new BrowserStreamSession(socket, logger);
+    using var session = new BrowserStreamSession(socket, logger);
     await session.RunAsync(context.RequestAborted).ConfigureAwait(false);
 });
 
