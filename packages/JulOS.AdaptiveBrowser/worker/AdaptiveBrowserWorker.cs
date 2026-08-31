@@ -22,11 +22,14 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
     private AdaptiveBrowserPolicy? policy;
     private bool running;
 
+    /// <summary>Creates the Adaptive Browser package worker.</summary>
+    /// <param name="timeProvider">Authoritative worker clock.</param>
     public AdaptiveBrowserWorker(TimeProvider timeProvider)
     {
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
+    /// <inheritdoc />
     public Task<PackageValidationResult> ValidateConfigurationAsync(
         IReadOnlyDictionary<string, string> configuration,
         CancellationToken cancellationToken)
@@ -83,6 +86,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
         return Task.FromResult(new PackageValidationResult(issues.Count == 0, issues));
     }
 
+    /// <inheritdoc />
     public Task ConfigureAsync(PackageWorkerContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -97,6 +101,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public Task<PackageRegistration> RegisterAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -122,6 +127,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
             ]));
     }
 
+    /// <inheritdoc />
     public Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -133,6 +139,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -140,6 +147,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public Task<PackageHealthSnapshot> ReadHealthAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -153,6 +161,7 @@ public sealed class AdaptiveBrowserWorker : IJulOsPackageWorker, IJulOsPackageCo
             }));
     }
 
+    /// <inheritdoc />
     public Task<PackageWorkerCommandResult> InvokeCommandAsync(
         PackageWorkerCommand command,
         CancellationToken cancellationToken)
