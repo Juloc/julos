@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "usage: $0 <output-directory> <digest-pinned-browser-runtime-image> <digest-pinned-adaptive-browser-runtime-image>" >&2
+if [[ $# -ne 2 ]]; then
+  echo "usage: $0 <output-directory> <digest-pinned-browser-runtime-image>" >&2
   exit 64
 fi
 
 output_dir="$(realpath -m "$1")"
 browser_runtime_image="$2"
-adaptive_browser_runtime_image="$3"
+adaptive_browser_pin_file="deploy/runtime-pins/adaptive-browser-runtime.txt"
+adaptive_browser_runtime_image="${JULOS_ADAPTIVE_BROWSER_RUNTIME_IMAGE:-}"
+if [[ -z "$adaptive_browser_runtime_image" && -f "$adaptive_browser_pin_file" ]]; then
+  adaptive_browser_runtime_image="$(tr -d '\r\n' < "$adaptive_browser_pin_file")"
+fi
+if [[ ! "$adaptive_browser_runtime_image" =~ ^ghcr\.io/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "Adaptive Browser runtime must be published and digest-pinned in $adaptive_browser_pin_file before staging official packages." >&2
+  exit 78
+fi
 
 if [[ -z "${PACKAGE_SIGNING_KEY:-}" || -z "${PACKAGE_KEY_ID:-}" ]]; then
   echo "PACKAGE_SIGNING_KEY and PACKAGE_KEY_ID are required for official package staging." >&2
