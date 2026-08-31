@@ -10,6 +10,9 @@
     <Project Path="src/JulOS.Server/JulOS.Server.csproj" />
   </Folder>
   <Folder Name="/packages/">
+    <Project Path="packages/JulOS.AdaptiveBrowser/provider/JulOS.AdaptiveBrowser.Provider/JulOS.AdaptiveBrowser.Provider.csproj" />
+    <Project Path="packages/JulOS.AdaptiveBrowser/runtime/JulOS.AdaptiveBrowser.Runtime/JulOS.AdaptiveBrowser.Runtime.csproj" />
+    <Project Path="packages/JulOS.AdaptiveBrowser/worker/JulOS.AdaptiveBrowser.Worker.csproj" />
     <Project Path="packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj" />
     <Project Path="packages/JulOS.HostMetrics/worker/JulOS.HostMetrics.Worker.csproj" />
     <Project Path="packages/JulOS.ReferencePackage/worker/JulOS.ReferencePackage.Worker.csproj" />
@@ -18,6 +21,7 @@
     <Project Path="packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/JulOS.AdaptiveBrowser.Worker.Tests/JulOS.AdaptiveBrowser.Worker.Tests.csproj" />
     <Project Path="tests/JulOS.Agent.Tests/JulOS.Agent.Tests.csproj" />
     <Project Path="tests/JulOS.Architecture.Tests/JulOS.Architecture.Tests.csproj" />
     <Project Path="tests/JulOS.Browser.Worker.Tests/JulOS.Browser.Worker.Tests.csproj" />

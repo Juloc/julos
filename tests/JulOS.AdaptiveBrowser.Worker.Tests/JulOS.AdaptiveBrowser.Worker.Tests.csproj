@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Behavior tests for the JulOS Adaptive Browser worker.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\packages\JulOS.AdaptiveBrowser\worker\JulOS.AdaptiveBrowser.Worker.csproj" />
+    <ProjectReference Include="..\..\src\JulOS.PackageSdk\JulOS.PackageSdk.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" />
+  </ItemGroup>
+
+</Project>

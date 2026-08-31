@@ -37,6 +37,10 @@ public sealed class ProjectReferenceTests
             "packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj",
             PlatformProjects.PackageSdk,
         ],
+        ["tests/JulOS.AdaptiveBrowser.Worker.Tests/JulOS.AdaptiveBrowser.Worker.Tests.csproj"] = [
+            "packages/JulOS.AdaptiveBrowser/worker/JulOS.AdaptiveBrowser.Worker.csproj",
+            PlatformProjects.PackageSdk,
+        ],
     };
 
     [TestMethod]
