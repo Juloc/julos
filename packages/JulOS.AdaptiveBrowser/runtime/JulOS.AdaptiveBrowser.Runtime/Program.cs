@@ -4,6 +4,12 @@ using System.Text;
 
 using JulOS.AdaptiveBrowser.Runtime;
 
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
 const string StreamSubprotocol = "julos-browser-stream.v1";
 
 var streamToken = Environment.GetEnvironmentVariable("JULOS_BROWSER_STREAM_TOKEN");
