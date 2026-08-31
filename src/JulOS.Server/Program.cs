@@ -1,6 +1,7 @@
 ﻿// JulOS Server composition root.
 // Local authentication protects the control plane; feature endpoints follow later work items.
 
+using JulOS.Application.Packages;
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Agents;
 using JulOS.Infrastructure.Authorization;
@@ -30,6 +31,7 @@ using JulOS.Server.WebApps;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -112,6 +114,23 @@ try
 catch (Exception exception)
 {
     ServerLog.AdministratorPermissionReconciliationSkipped(app.Logger, exception);
+}
+
+// Package worker processes do not survive a host restart, so restart the worker
+// of every enabled package. Without this a redeployed server keeps packages
+// Enabled in the database while their workers are dead, and any capability call
+// (for example an interactive session) fails with "Package worker is unavailable".
+try
+{
+    await using var packageWorkerScope = app.Services.CreateAsyncScope();
+    await packageWorkerScope.ServiceProvider
+        .GetRequiredService<IPackageManagementService>()
+        .StartEnabledWorkersAsync()
+        .ConfigureAwait(false);
+}
+catch (Exception exception)
+{
+    ServerLog.EnabledPackageWorkerRestartSkipped(app.Logger, exception);
 }
 
 app.UseJulOsErrorHandling();

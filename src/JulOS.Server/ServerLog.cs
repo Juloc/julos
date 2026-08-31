@@ -22,4 +22,12 @@ internal static partial class ServerLog
     internal static partial void AdministratorPermissionReconciliationSkipped(
         ILogger logger,
         Exception exception);
+
+    [LoggerMessage(
+        EventId = 1002,
+        Level = LogLevel.Warning,
+        Message = "Restarting enabled package workers was skipped at startup.")]
+    internal static partial void EnabledPackageWorkerRestartSkipped(
+        ILogger logger,
+        Exception exception);
 }

@@ -89,6 +89,14 @@ public interface IPackageManagementService
         string packageId,
         PackageRemovalInput input,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Restarts the worker of every enabled package after a host restart.
+    /// Worker processes do not survive a restart, so this reconciles the running
+    /// worker set with the enabled state persisted in the database. It is
+    /// best-effort per package and never throws for an individual worker.
+    /// </summary>
+    Task StartEnabledWorkersAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>Stable caller-safe package management failure.</summary>

@@ -478,6 +478,62 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         }
     }
 
+    public async Task StartEnabledWorkersAsync(CancellationToken cancellationToken = default)
+    {
+        // Worker processes do not survive a host restart, so the in-memory worker
+        // set starts empty while packages stay Enabled in the database. Restart
+        // each enabled package's worker so its capabilities work again after a
+        // redeploy. Best-effort: a package whose worker cannot restart is faulted
+        // and skipped instead of failing startup or blocking the other packages.
+        await this.lifecycleLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var enabledPackageIds = await this.context.PackageInstallations
+                .AsNoTracking()
+                .Where(row => row.State == PackageInstallationState.Enabled)
+                .Select(row => row.PackageId)
+                .ToArrayAsync(cancellationToken).ConfigureAwait(false);
+
+            foreach (var packageId in enabledPackageIds)
+            {
+                var row = await RequireRowAsync(packageId, cancellationToken).ConfigureAwait(false);
+                InstalledPackageMetadata metadata;
+                try
+                {
+                    metadata = await ReadMetadataAsync(packageId, cancellationToken).ConfigureAwait(false);
+                }
+                catch (PackageManagementException)
+                {
+                    continue;
+                }
+                var database = metadata.Database;
+                if (database is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await this.workers.StartAsync(
+                        metadata.Manifest,
+                        metadata.Configuration,
+                        database,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    Console.Error.WriteLine($"[worker-reconcile] StartAsync {packageId} FAILED: {exception.Message}");
+                    _ = await FaultAsync(row, metadata, "package.worker_start_failed", exception, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+        finally
+        {
+            this.lifecycleLock.Release();
+        }
+    }
+
     private async Task<PackageInstallationSnapshot> FaultAsync(
         PackageInstallationRow row,
         InstalledPackageMetadata metadata,
