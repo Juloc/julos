@@ -137,7 +137,7 @@ jobs:
           node-version-file: src/JulOS.Desktop/.nvmrc
 
       - name: Validate package frontends
-        run: sh tools/validate.sh --stage remote-frontend-install --stage remote-frontend-build --stage remote-frontend-test --stage browser-frontend-test
+        run: sh tools/validate.sh --stage remote-frontend-install --stage remote-frontend-build --stage remote-frontend-test --stage browser-frontend-test --stage adaptive-browser-frontend-test
 
   validate-meta:
     name: Validate metadata
@@ -472,11 +472,11 @@ jobs:
           file: packages/JulOS.Remote/runtime/Dockerfile
           platforms: linux/amd64
           push: true
-          cache-from: type=gha,scope=julos-remote-provider
-          cache-to: type=gha,mode=max,scope=julos-remote-provider
           tags: ghcr.io/juloc/julos-remote-provider:${{ needs.validate-dotnet.outputs.version }}
           build-args: |
             JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
+          cache-from: type=gha,scope=julos-remote-provider
+          cache-to: type=gha,mode=max,scope=julos-remote-provider
           provenance: false
           sbom: true
 
