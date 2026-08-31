@@ -25,6 +25,8 @@ internal sealed class BrowserStreamSession : IDisposable
     private readonly ILogger logger;
     private readonly SemaphoreSlim browserSendLock = new(1, 1);
     private ChromiumDevToolsClient? cdp;
+    private int viewportWidth = 1280;
+    private int viewportHeight = 800;
 
     internal BrowserStreamSession(WebSocket browser, ILogger logger)
     {
@@ -168,6 +170,8 @@ internal sealed class BrowserStreamSession : IDisposable
                     var width = Math.Clamp(ReadInt(command, "width"), 320, 3840);
                     var height = Math.Clamp(ReadInt(command, "height"), 240, 2160);
                     var scale = Math.Clamp(ReadDouble(command, "deviceScaleFactor"), 0.5d, 3d);
+                    this.viewportWidth = width;
+                    this.viewportHeight = height;
                     await this.cdp.CallAsync(
                         "Emulation.setDeviceMetricsOverride",
                         new { width, height, deviceScaleFactor = scale, mobile = false },
@@ -182,10 +186,10 @@ internal sealed class BrowserStreamSession : IDisposable
                         new
                         {
                             type = "mouseWheel",
-                            x = ReadDouble(command, "x"),
-                            y = ReadDouble(command, "y"),
-                            deltaX = ReadDouble(command, "deltaX"),
-                            deltaY = ReadDouble(command, "deltaY"),
+                            x = this.ReadCoordinate(command, "x", this.viewportWidth),
+                            y = this.ReadCoordinate(command, "y", this.viewportHeight),
+                            deltaX = ReadBoundedDouble(command, "deltaX", -100000d, 100000d),
+                            deltaY = ReadBoundedDouble(command, "deltaY", -100000d, 100000d),
                         },
                         cancellationToken).ConfigureAwait(false);
                     break;
@@ -237,17 +241,22 @@ internal sealed class BrowserStreamSession : IDisposable
         {
             throw new BrowserCommandException("Pointer button is invalid.");
         }
+        var buttons = command.TryGetProperty("buttons", out var buttonsElement) && buttonsElement.TryGetInt32(out var parsedButtons)
+            ? parsedButtons
+            : 0;
+        if (buttons is < 0 or > 31)
+        {
+            throw new BrowserCommandException("Pointer buttons are invalid.");
+        }
         await this.cdp.CallAsync(
             "Input.dispatchMouseEvent",
             new
             {
                 type,
-                x = ReadDouble(command, "x"),
-                y = ReadDouble(command, "y"),
+                x = this.ReadCoordinate(command, "x", this.viewportWidth),
+                y = this.ReadCoordinate(command, "y", this.viewportHeight),
                 button = kind == "move" ? "none" : button,
-                buttons = command.TryGetProperty("buttons", out var buttonsElement) && buttonsElement.TryGetInt32(out var buttons)
-                    ? Math.Clamp(buttons, 0, 31)
-                    : 0,
+                buttons,
                 clickCount = kind == "move" ? 0 : 1,
             },
             cancellationToken).ConfigureAwait(false);
@@ -270,8 +279,12 @@ internal sealed class BrowserStreamSession : IDisposable
             throw new BrowserCommandException("Keyboard text is invalid.");
         }
         var modifiers = command.TryGetProperty("modifiers", out var modifiersElement) && modifiersElement.TryGetInt32(out var parsedModifiers)
-            ? Math.Clamp(parsedModifiers, 0, 15)
+            ? parsedModifiers
             : 0;
+        if (modifiers is < 0 or > 15)
+        {
+            throw new BrowserCommandException("Keyboard modifiers are invalid.");
+        }
         var type = kind switch
         {
             "down" => text.Length > 0 ? "keyDown" : "rawKeyDown",
@@ -431,6 +444,16 @@ internal sealed class BrowserStreamSession : IDisposable
         }
     }
 
+    private double ReadCoordinate(JsonElement source, string name, int maximum)
+    {
+        var value = ReadDouble(source, name);
+        if (value < 0d || value > maximum)
+        {
+            throw new BrowserCommandException($"{name} is outside the viewport.");
+        }
+        return value;
+    }
+
     private static string ReadString(JsonElement source, string name, int maximumLength)
     {
         if (!source.TryGetProperty(name, out var value)
@@ -459,6 +482,16 @@ internal sealed class BrowserStreamSession : IDisposable
             throw new BrowserCommandException($"{name} is invalid.");
         }
         return result;
+    }
+
+    private static double ReadBoundedDouble(JsonElement source, string name, double minimum, double maximum)
+    {
+        var value = ReadDouble(source, name);
+        if (value < minimum || value > maximum)
+        {
+            throw new BrowserCommandException($"{name} is outside the supported range.");
+        }
+        return value;
     }
 
     private sealed class BrowserCommandException : Exception
