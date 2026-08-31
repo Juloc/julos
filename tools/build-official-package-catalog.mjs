@@ -4,12 +4,22 @@ import path from 'node:path';
 
 const outputDirectory = path.resolve(process.argv[2] ?? '');
 const browserRuntimeImage = process.argv[3] ?? '';
+const adaptiveBrowserRuntimeImage = process.argv[4] ?? '';
 const privateKeyPem = process.env.PACKAGE_SIGNING_KEY ?? '';
 const publisherId = process.env.PACKAGE_PUBLISHER_ID ?? 'juloc-official';
 const keyId = process.env.PACKAGE_KEY_ID ?? '';
+const digestPinnedImage = /^ghcr\.io\/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$/u;
 
-if (!outputDirectory || !/^ghcr\.io\/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$/u.test(browserRuntimeImage)) {
-  throw new Error('usage: node build-official-package-catalog.mjs <output-directory> <digest-pinned-browser-runtime-image>');
+if (
+  !outputDirectory
+  || !digestPinnedImage.test(browserRuntimeImage)
+  || !digestPinnedImage.test(adaptiveBrowserRuntimeImage)
+) {
+  throw new Error(
+    'usage: node build-official-package-catalog.mjs '
+      + '<output-directory> <digest-pinned-browser-runtime-image> '
+      + '<digest-pinned-adaptive-browser-runtime-image>',
+  );
 }
 if (!privateKeyPem || !publisherId || !keyId) {
   throw new Error('Official package signing configuration is incomplete.');
@@ -31,6 +41,7 @@ function readPackageVersion(manifestPath) {
 }
 
 const browserVersion = readPackageVersion('packages/JulOS.Browser/manifest.json');
+const adaptiveBrowserVersion = readPackageVersion('packages/JulOS.AdaptiveBrowser/manifest.json');
 const remoteVersion = readPackageVersion('packages/JulOS.Remote/manifest.json');
 const hostMetricsVersion = readPackageVersion('packages/JulOS.HostMetrics/manifest.json');
 
@@ -49,6 +60,21 @@ const packageDefinitions = [
       allowedNetworks: 'julos-remote',
       defaultNetwork: 'julos-remote',
       runtimeImage: browserRuntimeImage,
+    },
+  },
+  {
+    packageId: 'de.juloc.julos.adaptive-browser',
+    version: adaptiveBrowserVersion,
+    archive: `JulOS.AdaptiveBrowser-${adaptiveBrowserVersion}.zip`,
+    displayNameEn: 'Adaptive Browser',
+    displayNameDe: 'Adaptive Browser',
+    descriptionEn: 'Browser with selectable local-device or isolated JulOS-server rendering.',
+    descriptionDe: 'Browser mit wählbarer lokaler Darstellung oder isoliertem Chromium auf dem JulOS-Server.',
+    defaultConfiguration: {
+      idleTimeoutMinutes: '30',
+      allowedNetworks: 'julos-remote',
+      defaultNetwork: 'julos-remote',
+      runtimeImage: adaptiveBrowserRuntimeImage,
     },
   },
   {
