@@ -224,7 +224,7 @@
       const [tab] = this.#tabs.splice(index, 1);
       await this.#disposeTab(tab);
       tab.pane.remove();
-      if (this.#tabs.length === 0) this.#tabs.push(this.#createTab(''));
+      if (this.#tabs.length === 0) this.#createTab('');
       if (this.#activeTabId === id) {
         const next = this.#tabs[Math.min(index, this.#tabs.length - 1)];
         this.#activeTabId = next.id;
@@ -393,8 +393,8 @@
         if (this.#activeTabId !== tab.id) return;
         const rect = canvas.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
-        const x = (event.clientX - rect.left) * (canvas.width / rect.width);
-        const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
         this.#sendActiveControl({ type: 'pointer', kind, x, y, button: mouseButton(event.button), buttons: event.buttons }, false);
       };
       canvas.addEventListener('pointermove', (event) => pointer(event, 'move'));
@@ -404,7 +404,8 @@
       canvas.addEventListener('wheel', (event) => {
         if (this.#activeTabId !== tab.id) return;
         const rect = canvas.getBoundingClientRect();
-        this.#sendActiveControl({ type: 'wheel', x: (event.clientX - rect.left) * (canvas.width / Math.max(1, rect.width)), y: (event.clientY - rect.top) * (canvas.height / Math.max(1, rect.height)), deltaX: event.deltaX, deltaY: event.deltaY }, false);
+        if (rect.width <= 0 || rect.height <= 0) return;
+        this.#sendActiveControl({ type: 'wheel', x: event.clientX - rect.left, y: event.clientY - rect.top, deltaX: event.deltaX, deltaY: event.deltaY }, false);
         event.preventDefault();
       }, { passive: false });
       tab.socket = socket;
