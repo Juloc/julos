@@ -56,6 +56,14 @@ A later session service must persist both `operationKey` and `requestIdentity`:
 
 Idempotency is scoped to the authenticated user and authorized caller package. One user or package cannot recover another caller's session by reusing its operation key.
 
+## Durable provisioning
+
+A successful `remote.session/create` call means the validated session request has been persisted durably. It returns the authoritative session snapshot immediately, normally in `requested`; it does not wait for an image pull, Runtime Manager allocation, Guacamole startup or provider connection.
+
+After the durable create commits, the capability provider emits only a process-local wake-up signal. The signal contains no session state and may be coalesced. A Server background worker reads `requested` and interrupted `provisioning` sessions from the core database and invokes the idempotent Remote provisioner. The same reconciliation pass runs once when the Server starts, so a process restart does not require the browser to recreate the session. The database remains authoritative; the wake-up signal is only a latency optimization.
+
+A caller disconnect or reverse-proxy timeout after durable create therefore cannot cancel provider startup. The browser observes progress through `read`: `requested` → `provisioning` → `connecting` → `connected` or a terminal state.
+
 ## Time and size bounds
 
 - protocol identity: 1 through 32 lowercase identifier characters
