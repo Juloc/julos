@@ -1,11 +1,6 @@
 name: Adaptive Browser runtimes
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - packages/JulOS.AdaptiveBrowser/**
   workflow_dispatch:
 
 permissions:
@@ -22,7 +17,7 @@ jobs:
   validate:
     name: Validate Adaptive Browser
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     outputs:
       version: ${{ steps.version.outputs.value }}
     steps:
@@ -64,6 +59,9 @@ jobs:
           --stage dotnet-test
           --stage adaptive-browser-frontend-test
           --stage package-manifests
+
+      - name: Adaptive Browser container smoke
+        run: node tools/smoke-adaptive-browser.mjs
 
   publish:
     name: Publish Adaptive Browser images
