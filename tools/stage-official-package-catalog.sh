@@ -11,7 +11,12 @@ browser_runtime_image="$2"
 adaptive_browser_pin_file="deploy/runtime-pins/adaptive-browser-runtime.txt"
 adaptive_browser_runtime_image="${JULOS_ADAPTIVE_BROWSER_RUNTIME_IMAGE:-}"
 if [[ -z "$adaptive_browser_runtime_image" && -f "$adaptive_browser_pin_file" ]]; then
-  adaptive_browser_runtime_image="$(tr -d '\r\n' < "$adaptive_browser_pin_file")"
+  # The pin file is stored BOM+CRLF per the repository encoding policy, so strip
+  # the byte-order mark and surrounding whitespace before the regex check.
+  adaptive_browser_runtime_image="$(node -e '
+    const fs = require("fs");
+    process.stdout.write(fs.readFileSync(process.argv[1], "utf8").replace(/^﻿/, "").trim());
+  ' "$adaptive_browser_pin_file")"
 fi
 if [[ ! "$adaptive_browser_runtime_image" =~ ^ghcr\.io/[a-z0-9./_-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "Adaptive Browser runtime must be published and digest-pinned in $adaptive_browser_pin_file before staging official packages." >&2

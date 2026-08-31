@@ -1,0 +1,1 @@
+﻿ghcr.io/juloc/julos-adaptive-browser-runtime@sha256:ef951f0479554d35075bbdf28db546ced0ecc7dfeac8a15efb80fb0acfef79e3
