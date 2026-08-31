@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -40,22 +40,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
-
-      - name: Apply Adaptive Browser wiring
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash tools/apply-adaptive-browser-wiring.sh
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add --renormalize .
-            git commit -m "Wire Adaptive Browser validation and release pipeline"
-            git push origin "HEAD:${{ github.head_ref }}"
-          fi
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
