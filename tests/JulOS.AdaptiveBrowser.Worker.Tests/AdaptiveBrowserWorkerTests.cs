@@ -11,7 +11,7 @@ public sealed class AdaptiveBrowserWorkerTests
     private const string RuntimeImage = "ghcr.io/juloc/julos-adaptive-browser-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     [TestMethod]
-    public async Task ResolvePlan_UsesBrowserStreamWithoutVnc()
+    public async Task ResolvePlanUsesBrowserStreamWithoutVnc()
     {
         var worker = await CreateStartedWorkerAsync().ConfigureAwait(false);
         var request = new CreateInteractiveSessionRequest(
@@ -44,7 +44,7 @@ public sealed class AdaptiveBrowserWorkerTests
     }
 
     [TestMethod]
-    public async Task ResolvePlan_RejectsDeviceModeBecauseItNeedsNoServerRuntime()
+    public async Task ResolvePlanRejectsDeviceModeBecauseItNeedsNoServerRuntime()
     {
         var worker = await CreateStartedWorkerAsync().ConfigureAwait(false);
         var request = new CreateInteractiveSessionRequest(
@@ -68,7 +68,7 @@ public sealed class AdaptiveBrowserWorkerTests
     }
 
     [TestMethod]
-    public async Task ValidateConfiguration_RejectsMutableRuntimeImage()
+    public async Task ValidateConfigurationRejectsMutableRuntimeImage()
     {
         var worker = new AdaptiveBrowserWorker(TimeProvider.System);
         var result = await worker.ValidateConfigurationAsync(
