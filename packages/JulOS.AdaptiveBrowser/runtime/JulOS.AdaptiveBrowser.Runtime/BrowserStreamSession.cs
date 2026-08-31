@@ -186,8 +186,8 @@ internal sealed class BrowserStreamSession : IDisposable
                         new
                         {
                             type = "mouseWheel",
-                            x = this.ReadCoordinate(command, "x", this.viewportWidth),
-                            y = this.ReadCoordinate(command, "y", this.viewportHeight),
+                            x = ReadCoordinate(command, "x", this.viewportWidth),
+                            y = ReadCoordinate(command, "y", this.viewportHeight),
                             deltaX = ReadBoundedDouble(command, "deltaX", -100000d, 100000d),
                             deltaY = ReadBoundedDouble(command, "deltaY", -100000d, 100000d),
                         },
@@ -253,8 +253,8 @@ internal sealed class BrowserStreamSession : IDisposable
             new
             {
                 type,
-                x = this.ReadCoordinate(command, "x", this.viewportWidth),
-                y = this.ReadCoordinate(command, "y", this.viewportHeight),
+                x = ReadCoordinate(command, "x", this.viewportWidth),
+                y = ReadCoordinate(command, "y", this.viewportHeight),
                 button = kind == "move" ? "none" : button,
                 buttons,
                 clickCount = kind == "move" ? 0 : 1,
@@ -444,7 +444,7 @@ internal sealed class BrowserStreamSession : IDisposable
         }
     }
 
-    private double ReadCoordinate(JsonElement source, string name, int maximum)
+    private static double ReadCoordinate(JsonElement source, string name, int maximum)
     {
         var value = ReadDouble(source, name);
         if (value < 0d || value > maximum)
