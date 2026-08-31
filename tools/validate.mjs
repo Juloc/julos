@@ -14,6 +14,7 @@ import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mj
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
 const remoteFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Remote', 'frontend');
 const browserFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Browser', 'frontend');
+const adaptiveBrowserFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.AdaptiveBrowser', 'frontend');
 const semanticVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 const passed = (detail) => ({ status: 'passed', detail });
@@ -218,6 +219,11 @@ const stages = [
     name: 'browser-frontend-test',
     title: 'Run Browser package frontend tests',
     run: () => run('npm', ['test'], browserFrontendDirectory),
+  },
+  {
+    name: 'adaptive-browser-frontend-test',
+    title: 'Run Adaptive Browser package frontend tests',
+    run: () => run('npm', ['test'], adaptiveBrowserFrontendDirectory),
   },
   {
     name: 'markdown-links',
