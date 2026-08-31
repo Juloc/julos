@@ -1,4 +1,4 @@
-# JulOS Adaptive Browser
+﻿# JulOS Adaptive Browser
 
 Adaptive Browser is an additional JulOS browser package. It does not replace `JulOS.Browser` or the Core Local Web surface.
 

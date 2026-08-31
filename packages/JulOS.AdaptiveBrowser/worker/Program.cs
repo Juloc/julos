@@ -1,4 +1,4 @@
-using JulOS.AdaptiveBrowser.Worker;
+﻿using JulOS.AdaptiveBrowser.Worker;
 using JulOS.PackageSdk;
 
 return await PackageWorkerHost.RunAsync(
