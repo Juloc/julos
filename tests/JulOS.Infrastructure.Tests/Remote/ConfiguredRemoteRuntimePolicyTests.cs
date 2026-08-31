@@ -13,6 +13,8 @@ public sealed class ConfiguredRemoteRuntimePolicyTests
 
     private const string ProviderImage =
         "ghcr.io/juloc/julos-remote@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string BrowserProviderImage =
+        "ghcr.io/juloc/julos-adaptive-browser-provider@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     [TestMethod]
     public void AllowlistedProviderTargetPortAndNetworkResolveExactly()
@@ -29,6 +31,36 @@ public sealed class ConfiguredRemoteRuntimePolicyTests
         Assert.AreEqual(ProviderImage, selection.Provider.Image);
         Assert.AreEqual(1, selection.NetworkProfile.RuntimeNetworks.Count);
         Assert.AreEqual("julos-remote", selection.NetworkProfile.RuntimeNetworks[0]);
+    }
+
+    [TestMethod]
+    public void BrowserStreamSelectsItsOwnProviderWithoutChangingRemoteProtocols()
+    {
+        var browserProvider = new RemoteProviderRuntimeDefinition(
+            "browser-stream",
+            "de.juloc.julos.adaptive-browser-provider",
+            "0.1.0",
+            BrowserProviderImage,
+            new RuntimeResourceLimits(256, 1m, 128));
+        var network = NetworkProfile() with
+        {
+            AllowedTargetPatterns = ["julos-interactive-*"],
+            AllowedPorts = [8080, 3389],
+        };
+        var policy = new ConfiguredRemoteRuntimePolicy([Provider(), browserProvider], [network]);
+
+        var selection = policy.Resolve(
+            "browser-stream",
+            NetworkProfileId,
+            new RemoteTargetContract("julos-interactive-a1b2c3", 8080));
+
+        Assert.AreEqual("de.juloc.julos.adaptive-browser-provider", selection.Provider.ProviderPackageId);
+        Assert.AreEqual(BrowserProviderImage, selection.Provider.Image);
+        Assert.AreEqual("browser-stream", selection.Provider.Protocol);
+        Assert.AreEqual("de.juloc.julos.remote-provider", policy.Resolve(
+            "rdp",
+            NetworkProfileId,
+            new RemoteTargetContract("julos-interactive-a1b2c3", 3389)).Provider.ProviderPackageId);
     }
 
     [TestMethod]
