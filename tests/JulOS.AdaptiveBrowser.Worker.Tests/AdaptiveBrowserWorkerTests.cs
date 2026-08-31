@@ -9,6 +9,7 @@ namespace JulOS.AdaptiveBrowser.Worker.Tests;
 public sealed class AdaptiveBrowserWorkerTests
 {
     private const string RuntimeImage = "ghcr.io/juloc/julos-adaptive-browser-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [TestMethod]
     public async Task ResolvePlanUsesBrowserStreamWithoutVnc()
@@ -32,7 +33,7 @@ public sealed class AdaptiveBrowserWorkerTests
         var result = await worker.InvokeCommandAsync(command, CancellationToken.None).ConfigureAwait(false);
 
         Assert.IsTrue(result.Succeeded, result.ErrorDetail);
-        var plan = result.Payload.Deserialize<InteractiveSessionRuntimePlan>();
+        var plan = result.Payload.Deserialize<InteractiveSessionRuntimePlan>(JsonOptions);
         Assert.IsNotNull(plan);
         Assert.AreEqual("browser-stream", plan.PresentationProtocol);
         Assert.AreEqual(8080, plan.PresentationPort);
