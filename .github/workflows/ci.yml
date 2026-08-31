@@ -18,7 +18,7 @@ jobs:
   validate:
     name: Validate repository
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     env:
       JULOS_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=postgres;Username=julos;Password=julos-test-only
 
@@ -62,6 +62,9 @@ jobs:
 
       - name: Validate
         run: sh tools/validate.sh
+
+      - name: Adaptive Browser container smoke
+        run: node tools/smoke-adaptive-browser.mjs
 
       - name: Verify clean tree
         run: |
