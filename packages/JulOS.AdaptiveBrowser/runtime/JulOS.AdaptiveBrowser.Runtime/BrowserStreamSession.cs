@@ -1,6 +1,8 @@
 ﻿using System.Net.WebSockets;
 using System.Text.Json;
 
+using Microsoft.Extensions.Logging;
+
 namespace JulOS.AdaptiveBrowser.Runtime;
 
 internal sealed class BrowserStreamSession : IDisposable
