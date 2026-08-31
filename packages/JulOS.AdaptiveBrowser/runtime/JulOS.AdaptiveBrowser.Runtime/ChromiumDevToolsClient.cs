@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Text;
 using System.Text.Json;
 
 namespace JulOS.AdaptiveBrowser.Runtime;
@@ -174,7 +173,8 @@ internal sealed class ChromiumDevToolsClient : IAsyncDisposable
                 }
                 while (!result.EndOfMessage);
 
-                using var document = JsonDocument.Parse(message.GetBuffer().AsSpan(0, checked((int)message.Length)));
+                using var document = JsonDocument.Parse(
+                    message.GetBuffer().AsMemory(0, checked((int)message.Length)));
                 var root = document.RootElement;
                 if (root.TryGetProperty("id", out var idElement) && idElement.TryGetInt64(out var id))
                 {
