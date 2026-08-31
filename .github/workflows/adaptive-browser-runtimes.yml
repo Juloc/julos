@@ -1,6 +1,11 @@
 name: Adaptive Browser runtimes
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
   workflow_dispatch:
 
 permissions:
