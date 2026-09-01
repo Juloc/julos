@@ -562,6 +562,13 @@ export class JulOsShell extends HTMLElement {
         element.setAttribute('title', translate(this.#language, key));
       }
     }
+
+    for (const element of this.shadowRoot?.querySelectorAll<HTMLElement>('[data-placeholder]') ?? []) {
+      const key = element.dataset['placeholder'] as ShellMessageKey | undefined;
+      if (key !== undefined) {
+        element.setAttribute('placeholder', translate(this.#language, key));
+      }
+    }
   }
 
   #updateClock(): void {
@@ -578,24 +585,42 @@ export class JulOsShell extends HTMLElement {
     const launcher = this.#requiredElement<HTMLButtonElement>('launcher-button');
     const launcherPanel = this.#requiredElement<HTMLElement>('launcher-panel');
     const search = this.#requiredElement<HTMLButtonElement>('search-button');
+    const searchInput = this.#requiredElement<HTMLInputElement>('launcher-search');
     const aboutButton = this.#requiredElement<HTMLButtonElement>('about-button');
     const aboutDialog = this.#requiredElement<HTMLDialogElement>('about-dialog');
     const aboutClose = this.#requiredElement<HTMLButtonElement>('about-close');
     const authenticationForm = this.#requiredElement<HTMLFormElement>('authentication-form');
 
-    launcher.addEventListener('click', () => {
-      const expanded = launcher.getAttribute('aria-expanded') === 'true';
-      launcher.setAttribute('aria-expanded', String(!expanded));
-      launcherPanel.hidden = expanded;
-      if (!expanded) {
+    const setLauncherOpen = (open: boolean): void => {
+      launcher.setAttribute('aria-expanded', String(open));
+      launcherPanel.hidden = !open;
+      searchInput.value = '';
+      this.#desktopRuntime?.search('');
+      if (open) {
         launcherPanel.focus();
+      }
+    };
+
+    launcher.addEventListener('click', () => {
+      setLauncherOpen(launcher.getAttribute('aria-expanded') !== 'true');
+    });
+
+    searchInput.addEventListener('input', () => {
+      this.#desktopRuntime?.search(searchInput.value);
+    });
+
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        this.shadowRoot
+          ?.querySelector<HTMLButtonElement>('#application-launcher-entries .launcher-entry')
+          ?.click();
       }
     });
 
     search.addEventListener('click', () => {
-      launcher.setAttribute('aria-expanded', 'true');
-      launcherPanel.hidden = false;
-      launcherPanel.focus();
+      setLauncherOpen(true);
+      searchInput.focus();
     });
 
     aboutButton.addEventListener('click', () => aboutDialog.showModal());
@@ -678,6 +703,7 @@ export class JulOsShell extends HTMLElement {
             <strong>JulOS</strong>
             <span data-message="launcher"></span>
           </header>
+          <input id="launcher-search" class="launcher-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" data-placeholder="commandPalette" data-label="commandPalette" />
           <div id="application-launcher-entries" class="application-launcher-entries"></div>
           <div class="launcher-system-entries">
             <button type="button" class="launcher-entry" data-label="settings">

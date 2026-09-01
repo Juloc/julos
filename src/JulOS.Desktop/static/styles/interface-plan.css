@@ -135,6 +135,29 @@
   letter-spacing: -0.025em;
 }
 
+.launcher-search {
+  width: 100%;
+  height: 42px;
+  margin: 0 0 10px;
+  padding: 0 14px;
+  border: 1px solid var(--julos-color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--julos-color-subtle) 72%, transparent);
+  color: var(--julos-color-text);
+  /* 16px keeps mobile Safari from auto-zooming the viewport on focus. */
+  font-size: 16px;
+}
+
+.launcher-search::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.launcher-search:focus-visible {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 70%, var(--julos-color-border));
+  outline: 2px solid color-mix(in srgb, var(--julos-color-accent) 30%, transparent);
+  outline-offset: 1px;
+}
+
 .launcher-entry {
   min-height: 48px;
   border: 1px solid transparent;
