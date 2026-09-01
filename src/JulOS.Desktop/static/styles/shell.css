@@ -387,6 +387,7 @@ svg {
 
 .user-button {
   max-width: 180px;
+  gap: 6px;
   color: var(--julos-color-text-secondary);
 }
 
@@ -591,9 +592,7 @@ svg {
     padding: 0;
   }
 
-  .search-button span,
-  .agent-button,
-  .user-button {
+  .search-button span {
     display: none;
   }
 
@@ -608,7 +607,6 @@ svg {
 }
 
 @media (max-width: 420px) {
-  .status-button:first-child,
   .clock {
     display: none;
   }

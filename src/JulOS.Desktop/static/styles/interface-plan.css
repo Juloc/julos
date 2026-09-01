@@ -375,46 +375,83 @@
 }
 
 :host([data-interface-viewport="mobile"]) {
-  --julos-control-height: 48px;
-  --julos-taskbar-height: 70px;
+  --julos-control-height: 40px;
+  --julos-taskbar-height: 56px;
 }
 
 :host([data-interface-viewport="mobile"]) .desktop-content {
   padding: 0;
 }
 
+/*
+ * iPad-OS-style dock. Instead of a full-width bar, the mobile taskbar becomes a
+ * centred, content-width floating pill that hugs its icons. Its two groups
+ * (primary + status) sit together in the middle rather than pinned to the edges.
+ */
 :host([data-interface-viewport="mobile"]) .taskbar {
-  right: max(8px, env(safe-area-inset-right));
+  right: auto;
+  left: 50%;
   bottom: max(8px, env(safe-area-inset-bottom));
-  left: max(8px, env(safe-area-inset-left));
-  min-height: 58px;
-  padding: 5px;
-  border-radius: 19px;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  min-height: 0;
+  gap: 8px;
+  padding: 5px 7px;
+  justify-content: center;
+  /* Full border on every side: the legacy width-based mobile block drops the
+     right/bottom/left borders for the old edge-to-edge bar, which would leave
+     the floating pill with only a top edge. */
+  border: 1px solid var(--julos-glass-border);
+  border-radius: 22px;
+  transform: translateX(-50%);
 }
 
+:host([data-interface-viewport="mobile"]) .taskbar-primary,
+:host([data-interface-viewport="mobile"]) .status-area {
+  gap: 6px;
+}
+
+/* Icon-only dock: drop the search field, version label and text captions. */
 :host([data-interface-viewport="mobile"]) .search-button,
 :host([data-interface-viewport="mobile"]) .desktop-version,
-:host([data-interface-viewport="mobile"]) .user-button span {
+:host([data-interface-viewport="mobile"]) .clock,
+:host([data-interface-viewport="mobile"]) .user-button span,
+:host([data-interface-viewport="mobile"]) .agent-button span {
   display: none;
 }
 
+:host([data-interface-viewport="mobile"]) .taskbar-button,
+:host([data-interface-viewport="mobile"]) .user-button,
+:host([data-interface-viewport="mobile"]) .running-application {
+  min-width: var(--julos-control-height);
+  padding: 0 6px;
+  border-radius: 12px;
+}
+
+/* A hairline divider before the status cluster, iPad-style. */
+:host([data-interface-viewport="mobile"]) .status-area:not(:first-child) {
+  padding-left: 8px;
+  border-left: 1px solid color-mix(in srgb, var(--julos-color-border-strong) 55%, transparent);
+}
+
 :host([data-interface-viewport="mobile"]) .launcher-panel {
-  right: max(8px, env(safe-area-inset-right));
-  bottom: calc(var(--julos-taskbar-height) + max(12px, env(safe-area-inset-bottom)));
-  left: max(8px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  bottom: calc(var(--julos-taskbar-height) + max(14px, env(safe-area-inset-bottom)));
+  left: max(10px, env(safe-area-inset-left));
   width: auto;
-  max-height: min(68vh, 620px);
-  border-radius: 24px;
+  max-height: min(66vh, 600px);
+  border-radius: 22px;
 }
 
 :host([data-interface-viewport="mobile"]) .application-launcher-entries {
-  max-height: calc(68vh - 72px);
+  max-height: calc(66vh - 72px);
 }
 
 :host([data-interface-viewport="mobile"]) .launcher-entry {
-  min-height: 54px;
+  min-height: 50px;
 }
 
+/* Full-bleed app windows with a slim titlebar; the dock floats over content. */
 :host([data-interface-viewport="mobile"]) .desktop-window,
 :host([data-interface-viewport="mobile"]) .desktop-window[data-active="true"] {
   border: 0;
@@ -424,13 +461,13 @@
 }
 
 :host([data-interface-viewport="mobile"]) .window-titlebar {
-  height: 48px;
-  flex-basis: 48px;
-  padding-left: max(14px, env(safe-area-inset-left));
+  height: 40px;
+  flex-basis: 40px;
+  padding-left: max(12px, env(safe-area-inset-left));
 }
 
 :host([data-interface-viewport="mobile"]) .window-controls button {
-  width: 50px;
+  width: 42px;
 }
 
 :host([data-interface-viewport="mobile"]) .desktop-edit-toolbar {

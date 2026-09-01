@@ -690,6 +690,40 @@
   .core-app {
     padding: 14px;
   }
+
+  /* Slim the local web-app header so the embedded page keeps the screen. */
+  .webapp-toolbar {
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .webapp-nav {
+    width: 34px;
+    height: 34px;
+  }
+
+  .webapp-address {
+    height: 34px;
+    padding: 0 8px;
+    /* 16px keeps mobile Safari from auto-zooming the viewport on focus, which
+       otherwise leaves the embedded iframe mis-scaled. */
+    font-size: 16px;
+  }
+
+  .webapp-open {
+    height: 34px;
+    padding: 0 12px;
+  }
+
+  /* Guarantee the iframe fills below the header: a flex-child iframe collapses
+     to content height on some mobile engines without an explicit min-height. */
+  .webapp-browser {
+    min-height: 0;
+  }
+
+  .webapp-browser > iframe.window-webapp {
+    min-height: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

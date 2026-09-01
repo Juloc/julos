@@ -703,7 +703,7 @@ export class JulOsShell extends HTMLElement {
             <button type="button" class="taskbar-button status-button" data-label="notifications">${icons.notification}</button>
             <button type="button" class="taskbar-button status-button" data-label="problems">${icons.problem}</button>
             <button type="button" class="taskbar-button status-button agent-button" data-label="agentStatus">${icons.agent}<span class="status-dot"></span></button>
-            <button type="button" class="user-button" data-label="settings"><span id="current-user" data-message="loading"></span></button>
+            <button type="button" class="user-button" data-label="settings">${icons.settings}<span id="current-user" data-message="loading"></span></button>
             <time id="clock" class="clock"></time>
           </div>
         </nav>
