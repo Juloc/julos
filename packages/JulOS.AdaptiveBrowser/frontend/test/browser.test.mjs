@@ -27,15 +27,18 @@ test('automatic mode uses server for arbitrary external sites', () => {
 });
 
 test('session response accepts only bounded known lifecycle data', () => {
+  // JulOS issues UUIDv7 session identifiers (version nibble 7), so the response
+  // validator must accept them, not only UUIDv1-5.
   const valid = {
-    sessionId: '11111111-2222-4333-8444-555555555555',
+    sessionId: '11111111-2222-7333-8444-555555555555',
     state: 'connected',
     revision: 3,
-    display: { endpoint: '/api/v1/remote/display/11111111-2222-4333-8444-555555555555' },
+    display: { endpoint: '/api/v1/remote/display/11111111-2222-7333-8444-555555555555' },
   };
   assert.equal(validateSessionResponse(valid), valid);
   assert.throws(() => validateSessionResponse({ ...valid, state: 'owned' }));
   assert.throws(() => validateSessionResponse({ ...valid, sessionId: '../bad' }));
+  assert.throws(() => validateSessionResponse({ ...valid, sessionId: '11111111-2222-8333-8444-555555555555' }));
   assert.throws(() => validateSessionResponse({ ...valid, revision: 0 }));
 });
 

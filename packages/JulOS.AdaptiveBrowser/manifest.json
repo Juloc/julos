@@ -1,7 +1,7 @@
 ﻿{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.adaptive-browser",
-  "Version": "0.1.0",
+  "Version": "0.1.1",
   "PublisherId": "juloc-official",
   "DisplayNameKey": "package.adaptive-browser.name",
   "DescriptionKey": "package.adaptive-browser.description",
@@ -46,7 +46,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/browser.js",
-    "Sha256": "0ac1f94d4aed138c5febcc54e4241e8ccfe02d7291e2ceb9f4edd1fbebd5d340",
+    "Sha256": "b67b4d215b29489e8e4ba0ef662908f30537840caa06081986bd5335c8cc5efd",
     "ExportedElements": [
       "julos-adaptive-browser-app"
     ]

@@ -534,7 +534,7 @@ export function resolveExecutionMode(preference, url) {
 
 export function validateSessionResponse(value) {
   if (!value || typeof value !== 'object'
-      || typeof value.sessionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.sessionId)
+      || typeof value.sessionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.sessionId)
       || !['requested', 'provisioning', 'connecting', 'connected', 'disconnecting', 'disconnected', 'cancelled', 'expired', 'failed'].includes(value.state)
       || !Number.isSafeInteger(value.revision) || value.revision < 1
       || (value.display !== null && value.display !== undefined && typeof value.display !== 'object')) {
