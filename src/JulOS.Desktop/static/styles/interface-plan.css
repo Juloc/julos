@@ -381,6 +381,14 @@
 
 :host([data-interface-viewport="mobile"]) .desktop-content {
   padding: 0;
+  /*
+   * Reserve the floating dock's real footprint so app windows, widgets and
+   * core views end just above it instead of being covered. 52px dock pill +
+   * 6px gap + its bottom offset (max(8px, safe-area)). Tracks the safe-area so
+   * it stays correct on phones with a home indicator. .window-layer fills this,
+   * so usableArea() (its client height) shrinks too — no layout-engine change.
+   */
+  bottom: calc(58px + max(8px, env(safe-area-inset-bottom)));
 }
 
 /*

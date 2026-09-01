@@ -123,7 +123,14 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
   open.type = 'submit';
   open.className = 'webapp-open';
   open.textContent = 'Open';
-  toolbar.append(back, forward, reload, address, open);
+  const external = document.createElement('button');
+  external.type = 'button';
+  external.className = 'webapp-external';
+  external.textContent = '↗';
+  external.title = 'Open in a new tab';
+  external.setAttribute('aria-label', 'Open in a new tab');
+  external.disabled = true;
+  toolbar.append(back, forward, reload, address, open, external);
 
   const status = document.createElement('div');
   status.className = 'webapp-status';
@@ -145,6 +152,7 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     back.disabled = nav.index <= 0;
     forward.disabled = nav.index < 0 || nav.index >= nav.entries.length - 1;
     reload.disabled = nav.index < 0;
+    external.disabled = zone === null || nav.index < 0;
   };
 
   const loadCurrent = (): void => {
@@ -200,6 +208,18 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
   back.addEventListener('click', () => dispatch({ type: 'back' }));
   forward.addEventListener('click', () => dispatch({ type: 'forward' }));
   reload.addEventListener('click', () => loadCurrent());
+  external.addEventListener('click', () => {
+    if (zone === null || nav.index < 0) {
+      return;
+    }
+    try {
+      const parsed = parseAddressInput(nav.entries[nav.index]!);
+      const proxied = buildIframeSrc(encodeProxyHost(parsed.origin, zone), parsed.pathQuery);
+      window.open(proxied, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : String(error);
+    }
+  });
 
   toolbar.hidden = true;
   status.textContent = 'Loading Local Web configuration…';

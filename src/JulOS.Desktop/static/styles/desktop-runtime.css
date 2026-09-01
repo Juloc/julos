@@ -203,6 +203,22 @@
   cursor: pointer;
 }
 
+.webapp-external {
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--julos-color-border, rgba(255, 255, 255, 0.16));
+  border-radius: 8px;
+  background: var(--julos-color-surface);
+  color: inherit;
+  cursor: pointer;
+}
+
+.webapp-external:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .webapp-status {
   padding: 4px 10px;
   font-size: 0.85rem;
@@ -713,6 +729,11 @@
   .webapp-open {
     height: 34px;
     padding: 0 12px;
+  }
+
+  .webapp-external {
+    height: 34px;
+    min-width: 40px;
   }
 
   /* Guarantee the iframe fills below the header: a flex-child iframe collapses
