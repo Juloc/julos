@@ -1,6 +1,7 @@
 ﻿import { JulOsApiError } from './api-client.js';
 import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
 import { desktopNotificationCenter } from './desktop-observability.js';
+import { classifyHomeIndicatorGesture } from './home-gesture.js';
 import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
   DesktopLayoutPersistence,
@@ -95,6 +96,9 @@ export class DesktopRuntime {
   #unsubscribeSnap: (() => void) | null = null;
   #unsubscribeObservability: (() => void) | null = null;
   #unbindCoreShellActions: (() => void) | null = null;
+  #unbindHomeIndicator: (() => void) | null = null;
+  #dockRevealTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  #homeGestureStart: { readonly x: number; readonly y: number } | null = null;
 
   public constructor(options: DesktopRuntimeOptions) {
     this.#api = options.api;
@@ -189,6 +193,7 @@ export class DesktopRuntime {
     globalThis.addEventListener('keydown', this.#keyDownHandler, true);
     globalThis.addEventListener('keyup', this.#keyUpHandler, true);
     globalThis.addEventListener('resize', this.#resizeHandler);
+    this.#bindHomeIndicator();
 
     await Promise.all([this.#loadRestoredFrontends(), this.#renderWidgets()]);
   }
@@ -205,6 +210,9 @@ export class DesktopRuntime {
     globalThis.removeEventListener('keydown', this.#keyDownHandler, true);
     globalThis.removeEventListener('keyup', this.#keyUpHandler, true);
     globalThis.removeEventListener('resize', this.#resizeHandler);
+    this.#unbindHomeIndicator?.();
+    this.#unbindHomeIndicator = null;
+    this.#hideDock();
     this.#windowSwitcher.cancel();
     this.#hideWindowSwitcher();
 
@@ -616,6 +624,7 @@ export class DesktopRuntime {
     }
 
     this.#renderTaskbar();
+    this.#updateDockMode(visibleWindowIds.size > 0);
     this.#elements.emptyState.hidden = this.#applications.size > 0;
   }
 
@@ -900,7 +909,17 @@ export class DesktopRuntime {
     }
     button.setAttribute('aria-expanded', 'true');
     panel.hidden = false;
-    panel.focus({ preventScroll: true });
+    // Open as a command palette: reset the query and focus the search field so
+    // the user can type immediately (Ctrl/Cmd+K, Cmd+L). Falls back to the panel
+    // if the field is not present.
+    const searchInput = root?.getElementById('launcher-search');
+    if (searchInput instanceof HTMLInputElement) {
+      searchInput.value = '';
+      this.search('');
+      searchInput.focus({ preventScroll: true });
+    } else {
+      panel.focus({ preventScroll: true });
+    }
   }
 
   #closeLauncher(): boolean {
@@ -931,6 +950,131 @@ export class DesktopRuntime {
       return;
     }
     this.#windowElements.get(active.id)?.focus({ preventScroll: true });
+  }
+
+  // iPad-style mobile navigation: when an app fills the screen the dock hides
+  // and a home indicator becomes the gesture surface — swipe up (or tap) to
+  // reveal the dock, swipe left/right to switch apps.
+  #bindHomeIndicator(): void {
+    const indicator = this.#shellRoot()?.getElementById('home-indicator');
+    if (!(indicator instanceof HTMLElement)) {
+      return;
+    }
+    const onDown = (event: PointerEvent): void => {
+      this.#homeGestureStart = { x: event.clientX, y: event.clientY };
+      try {
+        indicator.setPointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture is best-effort; the gesture still resolves on pointerup.
+      }
+    };
+    const onUp = (event: PointerEvent): void => {
+      const start = this.#homeGestureStart;
+      this.#homeGestureStart = null;
+      if (start === null) {
+        return;
+      }
+      switch (classifyHomeIndicatorGesture(event.clientX - start.x, event.clientY - start.y)) {
+        case 'tap':
+          this.#toggleDock();
+          break;
+        case 'switch-next':
+          this.#switchWindow(1);
+          break;
+        case 'switch-previous':
+          this.#switchWindow(-1);
+          break;
+        case 'reveal':
+          this.#revealDock();
+          break;
+        case 'hide':
+          this.#hideDock();
+          break;
+      }
+    };
+    const onCancel = (): void => {
+      this.#homeGestureStart = null;
+    };
+    indicator.addEventListener('pointerdown', onDown);
+    indicator.addEventListener('pointerup', onUp);
+    indicator.addEventListener('pointercancel', onCancel);
+    this.#unbindHomeIndicator = (): void => {
+      indicator.removeEventListener('pointerdown', onDown);
+      indicator.removeEventListener('pointerup', onUp);
+      indicator.removeEventListener('pointercancel', onCancel);
+    };
+  }
+
+  #updateDockMode(hasVisibleWindow: boolean): void {
+    const root = this.#shellRoot();
+    const host = root?.host;
+    const indicator = root?.getElementById('home-indicator');
+    // Match the CSS, which keys the mobile dock off the host's
+    // data-interface-viewport attribute (kept in sync on resize by the
+    // interface-plan layer), rather than the runtime's start-time viewport.
+    const isMobile = host instanceof HTMLElement && host.dataset['interfaceViewport'] === 'mobile';
+    const immersive = isMobile && hasVisibleWindow;
+    if (host instanceof HTMLElement) {
+      if (immersive) {
+        host.setAttribute('data-immersive', 'true');
+      } else {
+        host.removeAttribute('data-immersive');
+        this.#hideDock();
+      }
+    }
+    if (indicator instanceof HTMLElement) {
+      indicator.hidden = !immersive;
+    }
+  }
+
+  #toggleDock(): void {
+    const host = this.#shellRoot()?.host;
+    if (host instanceof HTMLElement && host.hasAttribute('data-dock-revealed')) {
+      this.#hideDock();
+    } else {
+      this.#revealDock();
+    }
+  }
+
+  #revealDock(): void {
+    const host = this.#shellRoot()?.host;
+    if (!(host instanceof HTMLElement)) {
+      return;
+    }
+    host.setAttribute('data-dock-revealed', 'true');
+    if (this.#dockRevealTimer !== null) {
+      globalThis.clearTimeout(this.#dockRevealTimer);
+    }
+    this.#dockRevealTimer = globalThis.setTimeout(() => this.#hideDock(), 3500);
+  }
+
+  #hideDock(): void {
+    if (this.#dockRevealTimer !== null) {
+      globalThis.clearTimeout(this.#dockRevealTimer);
+      this.#dockRevealTimer = null;
+    }
+    const host = this.#shellRoot()?.host;
+    if (host instanceof HTMLElement) {
+      host.removeAttribute('data-dock-revealed');
+    }
+  }
+
+  #switchWindow(direction: 1 | -1): void {
+    const open = this.#store.windows.filter((window) => window.state !== 'minimized');
+    if (open.length < 2) {
+      return;
+    }
+    const ordered = [...open].sort((first, second) => first.zIndex - second.zIndex);
+    const frontId = this.#store.frontWindow?.id ?? null;
+    const index = ordered.findIndex((window) => window.id === frontId);
+    const base = index < 0 ? 0 : index;
+    const next = ordered[(base + direction + ordered.length) % ordered.length];
+    if (next !== undefined) {
+      this.#taskbar.activateWindow(next.id, this.#usableArea());
+      this.#focusActiveWindow();
+      this.#scheduleLayout();
+      this.#hideDock();
+    }
   }
 
   #renderWindowSwitcher(snapshot: WindowSwitcherSnapshot | null): void {

@@ -415,6 +415,61 @@
 }
 
 /*
+ * Immersive mode (an app fills the mobile screen): the dock auto-hides so the
+ * app gets the whole screen, and a home indicator becomes the reveal/gesture
+ * surface. Content goes edge-to-edge; the dock overlays when revealed, iPadOS
+ * style.
+ */
+:host([data-interface-viewport="mobile"][data-immersive]) .desktop-content {
+  bottom: 0;
+}
+
+:host([data-interface-viewport="mobile"][data-immersive]) .taskbar {
+  transform: translate(-50%, calc(100% + max(10px, env(safe-area-inset-bottom)) + 12px));
+}
+
+:host([data-interface-viewport="mobile"][data-immersive][data-dock-revealed]) .taskbar {
+  transform: translateX(-50%);
+}
+
+.home-indicator {
+  position: absolute;
+  z-index: 21;
+  bottom: max(6px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 160px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translateX(-50%);
+  cursor: pointer;
+  touch-action: none;
+  transition: opacity var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.home-indicator[hidden] {
+  display: none;
+}
+
+.home-indicator::before {
+  width: 132px;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--julos-color-text) 40%, transparent);
+  content: '';
+}
+
+/* While the dock is revealed, fade the indicator out (the dock is the surface). */
+:host([data-interface-viewport="mobile"][data-immersive][data-dock-revealed]) .home-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
  * iPad-OS-style dock. Instead of a full-width bar, the mobile taskbar becomes a
  * centred, content-width floating pill that hugs its icons. Its two groups
  * (primary + status) sit together in the middle rather than pinned to the edges.
@@ -435,6 +490,7 @@
   border: 1px solid var(--julos-glass-border);
   border-radius: 22px;
   transform: translateX(-50%);
+  transition: transform var(--julos-duration-normal) var(--julos-easing-standard);
 }
 
 :host([data-interface-viewport="mobile"]) .taskbar-primary,

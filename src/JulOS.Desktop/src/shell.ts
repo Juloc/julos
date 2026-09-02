@@ -733,6 +733,8 @@ export class JulOsShell extends HTMLElement {
             <time id="clock" class="clock"></time>
           </div>
         </nav>
+
+        <button type="button" id="home-indicator" class="home-indicator" aria-label="Show dock" hidden></button>
       </main>
 
       <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-title">
