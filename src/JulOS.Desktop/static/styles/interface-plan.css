@@ -169,9 +169,14 @@
 }
 
 .launcher-entry:hover,
-.launcher-entry:focus-visible {
+.launcher-entry:focus-visible,
+.launcher-entry[data-selected] {
   border-color: color-mix(in srgb, var(--julos-color-border) 70%, transparent);
   background: color-mix(in srgb, var(--julos-color-surface-hover) 74%, transparent);
+}
+
+.launcher-entry[data-selected] {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 55%, var(--julos-color-border));
 }
 
 .launcher-entry:active {

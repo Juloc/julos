@@ -3,6 +3,7 @@ import { applyAppearance, isMotionMode, isThemeMode } from './appearance.js';
 import { mapClientFailure, type ClientFailureState } from './client-failure.js';
 import { DesktopClientServices } from './client-services.js';
 import { DesktopRuntime, type DesktopRuntimeOptions } from './desktop-runtime.js';
+import { nextSelectionIndex } from './launcher-selection.js';
 import {
   normalizeLanguage,
   translate,
@@ -591,11 +592,24 @@ export class JulOsShell extends HTMLElement {
     const aboutClose = this.#requiredElement<HTMLButtonElement>('about-close');
     const authenticationForm = this.#requiredElement<HTMLFormElement>('authentication-form');
 
+    let selectedEntry = 0;
+    const launcherEntries = (): readonly HTMLButtonElement[] =>
+      [...(this.shadowRoot?.querySelectorAll<HTMLButtonElement>('#application-launcher-entries .launcher-entry') ?? [])];
+    const highlightSelection = (): void => {
+      const entries = launcherEntries();
+      entries.forEach((entry, index) => {
+        entry.toggleAttribute('data-selected', index === selectedEntry);
+      });
+      entries[selectedEntry]?.scrollIntoView({ block: 'nearest' });
+    };
+
     const setLauncherOpen = (open: boolean): void => {
       launcher.setAttribute('aria-expanded', String(open));
       launcherPanel.hidden = !open;
       searchInput.value = '';
       this.#desktopRuntime?.search('');
+      selectedEntry = 0;
+      highlightSelection();
       if (open) {
         launcherPanel.focus();
       }
@@ -607,14 +621,23 @@ export class JulOsShell extends HTMLElement {
 
     searchInput.addEventListener('input', () => {
       this.#desktopRuntime?.search(searchInput.value);
+      selectedEntry = 0;
+      highlightSelection();
     });
 
     searchInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
+      const entries = launcherEntries();
+      if (event.key === 'ArrowDown') {
         event.preventDefault();
-        this.shadowRoot
-          ?.querySelector<HTMLButtonElement>('#application-launcher-entries .launcher-entry')
-          ?.click();
+        selectedEntry = nextSelectionIndex(selectedEntry, entries.length, 1);
+        highlightSelection();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        selectedEntry = nextSelectionIndex(selectedEntry, entries.length, -1);
+        highlightSelection();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        entries[selectedEntry]?.click();
       }
     });
 
