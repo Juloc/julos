@@ -960,17 +960,14 @@ export class DesktopRuntime {
     if (!(indicator instanceof HTMLElement)) {
       return;
     }
-    const onDown = (event: PointerEvent): void => {
-      this.#homeGestureStart = { x: event.clientX, y: event.clientY };
-      try {
-        indicator.setPointerCapture(event.pointerId);
-      } catch {
-        // Pointer capture is best-effort; the gesture still resolves on pointerup.
-      }
-    };
-    const onUp = (event: PointerEvent): void => {
+    // Track the whole gesture at the window level: a swipe lifts the finger up
+    // in the app content, away from the small indicator, so pointerup must be
+    // heard globally or the gesture is lost.
+    const finish = (event: PointerEvent): void => {
       const start = this.#homeGestureStart;
       this.#homeGestureStart = null;
+      globalThis.removeEventListener('pointerup', finish, true);
+      globalThis.removeEventListener('pointercancel', cancel, true);
       if (start === null) {
         return;
       }
@@ -992,16 +989,22 @@ export class DesktopRuntime {
           break;
       }
     };
-    const onCancel = (): void => {
+    const cancel = (): void => {
       this.#homeGestureStart = null;
+      globalThis.removeEventListener('pointerup', finish, true);
+      globalThis.removeEventListener('pointercancel', cancel, true);
+    };
+    const onDown = (event: PointerEvent): void => {
+      event.preventDefault();
+      this.#homeGestureStart = { x: event.clientX, y: event.clientY };
+      globalThis.addEventListener('pointerup', finish, true);
+      globalThis.addEventListener('pointercancel', cancel, true);
     };
     indicator.addEventListener('pointerdown', onDown);
-    indicator.addEventListener('pointerup', onUp);
-    indicator.addEventListener('pointercancel', onCancel);
     this.#unbindHomeIndicator = (): void => {
       indicator.removeEventListener('pointerdown', onDown);
-      indicator.removeEventListener('pointerup', onUp);
-      indicator.removeEventListener('pointercancel', onCancel);
+      globalThis.removeEventListener('pointerup', finish, true);
+      globalThis.removeEventListener('pointercancel', cancel, true);
     };
   }
 

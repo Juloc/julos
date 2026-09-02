@@ -507,6 +507,9 @@
   height: 100%;
   padding: 20px;
   overflow: auto;
+  /* Momentum scrolling for touch — without this nested overflow:auto panes
+     feel stuck on iOS. */
+  -webkit-overflow-scrolling: touch;
   color: var(--julos-color-text);
   background: var(--julos-color-background);
 }

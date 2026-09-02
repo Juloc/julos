@@ -440,13 +440,13 @@
 .home-indicator {
   position: absolute;
   z-index: 21;
-  bottom: max(6px, env(safe-area-inset-bottom));
+  bottom: max(4px, env(safe-area-inset-bottom));
   left: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 160px;
-  height: 26px;
+  width: 180px;
+  height: 34px;
   padding: 0;
   border: 0;
   background: transparent;
