@@ -1,11 +1,11 @@
 ﻿import type { ShellApiClient } from './shell-api.js';
 
-/** Package identity for the dynamic "type a URL" local-rendering browser window. */
+/** Stable Core identity for the unified proxy-first JulOS Browser window. */
 export const WebAppBrowserApplicationId = 'core.webapp-browser';
 
 const Base32Alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
 const MaximumLabelLength = 63;
-const LocalWebReadyMessage = 'Local Web is for compatible internal web apps. Use the Browser package for general websites or apps that stay blank.';
+const BrowserReadyMessage = 'Browser traffic is routed through JulOS and rendered locally on this device.';
 
 export interface ParsedAddress {
   readonly origin: string;
@@ -50,7 +50,7 @@ export function encodeProxyHost(origin: string, zone: string): string {
   const payload = new Uint8Array([schemeByte, ...new TextEncoder().encode(authority)]);
   const label = `wa${base32Encode(payload)}`;
   if (label.length > MaximumLabelLength) {
-    throw new Error('This address is too long for Local Web; use the Browser package instead.');
+    throw new Error('This address is too long for the JulOS browser proxy.');
   }
 
   return `${label}.${zone}`;
@@ -94,19 +94,19 @@ export interface CoreSurfaceHandle {
 }
 
 /**
- * Builds Local Web: an address bar plus a sandboxed iframe that renders a proxied internal target
- * in the user's browser. This is deliberately separate from the installable Browser package,
- * which uses an isolated Chromium runtime and the interactive display transport.
+ * Builds the unified JulOS Browser in proxy mode: JulOS fetches and proxies the target while the
+ * user's own browser renders it locally. A full remote Chromium mode may be added later as an
+ * explicit compatibility mode; it is not a separate user-facing browser application.
  */
 export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHandle {
   const root = document.createElement('section');
   root.className = 'core-app webapp-browser';
 
   const heading = document.createElement('h2');
-  heading.textContent = 'Local Web';
+  heading.textContent = 'Browser';
   const explanation = document.createElement('p');
   explanation.className = 'webapp-description';
-  explanation.textContent = LocalWebReadyMessage;
+  explanation.textContent = BrowserReadyMessage;
 
   const toolbar = document.createElement('form');
   toolbar.className = 'webapp-toolbar';
@@ -138,7 +138,7 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
 
   const frame = document.createElement('iframe');
   frame.className = 'window-webapp';
-  frame.title = 'Local Web application';
+  frame.title = 'JulOS Browser';
   frame.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-downloads');
   frame.referrerPolicy = 'no-referrer';
 
@@ -164,7 +164,7 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     try {
       const parsed = parseAddressInput(url);
       loadingTarget = true;
-      status.textContent = 'Opening through the Local Web proxy…';
+      status.textContent = 'Opening through JulOS…';
       frame.src = buildIframeSrc(encodeProxyHost(parsed.origin, zone), parsed.pathQuery);
     } catch (error) {
       loadingTarget = false;
@@ -183,14 +183,14 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
       return;
     }
     loadingTarget = false;
-    status.textContent = 'Loaded through Local Web. If the app is blank or broken, open it with the Browser package.';
+    status.textContent = 'Loaded through the JulOS proxy.';
   });
   frame.addEventListener('error', () => {
     if (!loadingTarget) {
       return;
     }
     loadingTarget = false;
-    status.textContent = 'Local Web could not render this target. Use the Browser package for the streamed Chromium session.';
+    status.textContent = 'This page could not be rendered in proxy mode.';
   });
 
   toolbar.addEventListener('submit', (event) => {
@@ -222,21 +222,21 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
   });
 
   toolbar.hidden = true;
-  status.textContent = 'Loading Local Web configuration…';
+  status.textContent = 'Loading Browser proxy configuration…';
   void api.readWebProxyConfig().then(
     (config) => {
       if (!config.enabled || config.proxyZone.length === 0) {
-        status.textContent = 'Local Web is not enabled on this deployment. The Browser package is separate and does not require Local Web mode.';
+        status.textContent = 'The JulOS Browser proxy is not enabled on this deployment.';
         return;
       }
       zone = config.proxyZone;
       toolbar.hidden = false;
-      status.textContent = 'Enter a compatible internal address.';
+      status.textContent = 'Enter a web address.';
       applyButtons();
       address.focus();
     },
     () => {
-      status.textContent = 'Could not load the Local Web proxy configuration.';
+      status.textContent = 'Could not load the JulOS Browser proxy configuration.';
     },
   );
 

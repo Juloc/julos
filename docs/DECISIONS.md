@@ -394,3 +394,33 @@ Reason: forwarding Back directly to the outer browser loses JulOS work, while tr
 A container terminal starts only for one explicitly selected running container resolved from a stable Docker installation/service identity. It requires `docker.container.terminal`, an expiry, target-side ownership validation and audit of session lifecycle. Remote owns presentation; Host Connector owns only the typed Docker exec adapter. Keystrokes and output are not audited.
 
 Reason: users need ordinary container CLI access, including for workloads such as Hermes, but a generic Host Connector or Server shell would grant materially broader authority and defeat typed capability boundaries.
+
+
+## D042 — One Browser product, proxy first, with server-owned workspace continuity
+
+**Status:** Accepted
+
+JulOS exposes exactly one user-facing application named **Browser**. Its normal execution path is
+the transparent JulOS proxy from D035: HTTP, HTTPS and WebSockets route through JulOS while the
+client device renders the page locally. The historical Local Web surface, isolated Browser package
+and Adaptive Browser package are implementation history, not separate products, and must not appear
+as three launcher applications.
+
+Browser workspace state is owned by JulOS per authenticated user. Tabs, tab order, active tab,
+navigation metadata and resumable browser workspace state are persisted server-side so another
+device can open Browser and continue the same workspace. Proxy-owned site-session state should also
+remain server-owned where technically possible.
+
+A later isolated Chromium **Remote mode** may be exposed inside the same Browser for sites that
+cannot be made compatible with transparent proxying or that require isolation. It is an explicit
+mode, never another Browser application.
+
+Transparent proxying cannot guarantee migration of arbitrary third-party IndexedDB, service-worker
+state or in-page JavaScript memory between client devices. JulOS must state that boundary rather
+than claiming exact page-process continuation; exact Chromium profile/process continuity belongs to
+Remote mode.
+
+Reason: three browser icons expose transport implementation details as product concepts, duplicate
+tab/session state and make device handoff incoherent. One server-owned Browser workspace gives JulOS
+the continuity model the product needs while keeping the lightweight local-rendering proxy as the
+default path.

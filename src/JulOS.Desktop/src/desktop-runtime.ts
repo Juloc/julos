@@ -23,6 +23,11 @@ import { isDynamicWebAppBrowserAvailable } from './webapp-availability.js';
 import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
+
+const HiddenLegacyBrowserPackageIds = new Set([
+  'de.juloc.julos.browser',
+  'de.juloc.julos.adaptive-browser',
+]);
 import {
   AltTabWindowSwitcher,
   TaskbarWindowModel,
@@ -291,10 +296,13 @@ export class DesktopRuntime {
     const coreApplications = this.#coreApplications.applications()
       .filter((application) => this.#webAppBrowserAvailable
         || application.applicationDefinitionId !== CoreApplicationIds.webappBrowser);
+    const visiblePackageApplications = packageApplications.filter(
+      (application) => !HiddenLegacyBrowserPackageIds.has(application.packageId),
+    );
     const applications = [
       ...coreApplications,
       ...this.#webApps.applications(),
-      ...packageApplications,
+      ...visiblePackageApplications,
     ];
     this.#applications.clear();
     this.#widgets.clear();
