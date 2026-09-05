@@ -27,7 +27,8 @@ Its normal mode is **Proxy**:
 - local GPU, video decoding, canvas and WebGL remain local to the device.
 
 The old Browser and Adaptive Browser packages/runtimes were removed. The Core proxy surface is the
-only Browser implementation.
+only Browser implementation. Configured/static web targets are destinations handled by this Browser;
+they are not synthesized into separate Desktop launcher applications.
 
 ### 2.1 Browser workspace continuity
 
@@ -118,7 +119,7 @@ is a new feature and is not backed by retained legacy Browser runtime code.
 - Because the proxy can reach internal infrastructure, authentication alone is not enough: the proxy and the `/api/v1/webapps` discovery endpoints require the `core.webapp.use` permission, which the administrator role holds by default. An authenticated account without it receives `403` (`webapp.not_authorized`), so least-privileged users cannot reach allowlisted internal targets unless an administrator grants the permission.
 - Dynamic DNS names require an allowed suffix plus an allowed resolved CIDR, and the actual HTTP/WebSocket connection is pinned to the validated address set.
 - Target credentials live only in the encrypted secret store and are leased for the proxied connection; they never reach the client.
-- JulOS authentication/antiforgery cookies and inbound authorization/forwarding headers are stripped before a request is forwarded upstream.
+- JulOS authentication/antiforgery cookies and inbound authorization/forwarding headers are stripped before a request is forwarded upstream. Dynamic/public Browser targets receive their real target `Host` but no JulOS `X-Forwarded-Host` or `X-Forwarded-Proto` metadata, so external canonical-host logic cannot redirect against the encoded JulOS proxy host.
 - Every proxied session and every credential lease creates an audit event.
 - A per-target request-rate budget limits abuse of an exposed proxy host.
 - The proxy never publishes the internal target. Reaching JulOS itself from outside the home network is the responsibility of an authenticated reverse proxy or an overlay network and is out of scope for this component; it is covered by the remote-access guidance in [`SECURITY_AND_OPERATIONS.md`](SECURITY_AND_OPERATIONS.md).
@@ -137,7 +138,7 @@ The JulOS session cookie must also be scoped to the deployment's parent domain (
 ## 8. Milestones
 
 - **M0 — Done:** accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
-- **M1 — In progress:** transparent proxy, WebSocket transport, framing/cookie/redirect policy, dynamic encoded-origin backend and Browser address bar are implemented. Real target/browser acceptance and remaining compatibility work are still required.
+- **M1 — In progress:** transparent proxy, WebSocket transport, framing/cookie/redirect policy, dynamic encoded-origin backend and Browser address bar are implemented. Cross-origin redirects stay in the proxy, public HTTPS behind Caddy is preserved, dynamic targets do not receive JulOS forwarding metadata, and the old synthetic WebApp launcher/iframe path has been removed. Real target/browser acceptance and remaining compatibility work are still required.
 - **M2 — Open, depends on `HCON-005`:** reach targets through a target-bound Host Connector stream and inject target credentials through an operation-bound secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
 - **M3 — Partially complete:** resolved-IP SSRF validation and connection pinning are implemented. Server-owned Browser workspace persistence remains.
 - **M4 — Open:** remaining cookie/redirect edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.

@@ -263,7 +263,7 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
-    public async Task DynamicHostUsesForwardedHttpsForRedirectsCookiesAndUpstreamMetadata()
+    public async Task DynamicHostUsesForwardedHttpsForProxyResponseWithoutForwardingProxyHeadersUpstream()
     {
         var databasePath = CreateDatabasePath();
         await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
@@ -284,7 +284,8 @@ public sealed class WebAppProxyEndpointTests
                 using var response = await client.SendAsync(forward).ConfigureAwait(false);
 
                 Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-                Assert.AreEqual("https", Single(response, "X-Echo-Forwarded-Proto"));
+                Assert.AreEqual(string.Empty, Single(response, "X-Echo-Forwarded-Host"));
+                Assert.AreEqual(string.Empty, Single(response, "X-Echo-Forwarded-Proto"));
             }
 
             using (var redirect = DynamicRequest(encodedHost, "/redirect", cookie))

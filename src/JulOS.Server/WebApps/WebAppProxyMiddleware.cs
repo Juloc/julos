@@ -192,8 +192,11 @@ internal sealed class WebAppProxyMiddleware
         }
 
         upstreamRequest.Headers.Host = target.Upstream.Authority;
-        upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
-        upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Proto", publicRequestScheme);
+        if (!target.RequiresAddressPinning)
+        {
+            upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
+            upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Proto", publicRequestScheme);
+        }
 
         var client = this.httpClientFactory.CreateClient(
             target.RequiresAddressPinning ? DynamicHttpClientName : HttpClientName);

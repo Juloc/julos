@@ -407,7 +407,9 @@ JulOS exposes exactly one user-facing application named **Browser**. Its normal 
 the transparent JulOS proxy from D035: HTTP, HTTPS and WebSockets route through JulOS while the
 client device renders the page locally. The historical Local Web surface, isolated Browser package
 and Adaptive Browser package are implementation history, not separate products, and must not appear
-as three launcher applications.
+as launcher applications. Static/configured web targets are Browser destinations rather than
+synthetic Desktop applications, so there is no second iframe/launcher execution path beside the
+Core Browser.
 
 Browser workspace state is owned by JulOS per authenticated user. Tabs, tab order, active tab,
 navigation metadata and resumable browser workspace state are persisted server-side so another

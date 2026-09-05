@@ -18,7 +18,6 @@ import type { SupportedLanguage } from './localization.js';
 import { classifyViewport, deriveResponsiveDesktop } from './responsive-desktop.js';
 import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
-import { WebAppCatalog, WebAppPackageId } from './web-app-catalog.js';
 import { isDynamicWebAppBrowserAvailable } from './webapp-availability.js';
 import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
@@ -78,7 +77,6 @@ export class DesktopRuntime {
   readonly #widgetHost = new WidgetHostStore();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
-  readonly #webApps: WebAppCatalog;
   readonly #keyboard: ShellKeyboardController;
   readonly #applications = new Map<string, DesktopApplication>();
   readonly #widgets = new Map<string, DesktopWidget>();
@@ -123,10 +121,6 @@ export class DesktopRuntime {
       onFailure: options.onFailure,
       onProfileChanged: options.onProfileChanged ?? (() => undefined),
       onPackagesChanged: () => this.#refreshPackageCatalog(),
-    });
-    this.#webApps = new WebAppCatalog({
-      api: options.api,
-      onFailure: options.onFailure,
     });
     this.#keyboard = new ShellKeyboardController({
       openLauncher: () => this.#openLauncher(),
@@ -302,7 +296,6 @@ export class DesktopRuntime {
     );
     const applications = [
       ...coreApplications,
-      ...this.#webApps.applications(),
       ...visiblePackageApplications,
     ];
     this.#applications.clear();
@@ -341,9 +334,8 @@ export class DesktopRuntime {
   }
 
   async #refreshPackageCatalog(): Promise<void> {
-    const [webAppBrowserAvailable, , [packageApplications, widgets]] = await Promise.all([
+    const [webAppBrowserAvailable, [packageApplications, widgets]] = await Promise.all([
       this.#readWebAppBrowserAvailability(),
-      this.#webApps.refresh(),
       this.#readPackageCatalog(),
     ]);
     this.#webAppBrowserAvailable = webAppBrowserAvailable;
@@ -413,10 +405,7 @@ export class DesktopRuntime {
       if (application === undefined) {
         throw new Error(`Application '${launch.window.applicationId}' is not available.`);
       }
-      if (
-        !this.#coreApplications.isCoreApplication(application.applicationDefinitionId)
-        && !this.#webApps.isWebApp(application.applicationDefinitionId)
-      ) {
+      if (!this.#coreApplications.isCoreApplication(application.applicationDefinitionId)) {
         await this.#loadFrontend(application);
       }
       this.#closeLauncher();
@@ -481,10 +470,7 @@ export class DesktopRuntime {
   async #loadRestoredFrontends(): Promise<void> {
     const applicationIds = new Set(this.#store.windows.map((window) => window.applicationId));
     for (const applicationId of applicationIds) {
-      if (
-        this.#coreApplications.isCoreApplication(applicationId)
-        || this.#webApps.isWebApp(applicationId)
-      ) {
+      if (this.#coreApplications.isCoreApplication(applicationId)) {
         continue;
       }
       const application = this.#applications.get(applicationId);
@@ -821,21 +807,6 @@ export class DesktopRuntime {
       body.replaceChildren(handle.element);
       this.#windowSurfaces.set(window.id, handle.element);
       this.#coreSurfaceDisposers.set(window.id, handle.dispose);
-      return;
-    }
-
-    const webAppHost = this.#webApps.hostFor(application.applicationDefinitionId);
-    if (webAppHost !== null) {
-      const frame = document.createElement('iframe');
-      frame.className = 'window-webapp';
-      frame.src = `${location.protocol}//${webAppHost}/`;
-      frame.setAttribute(
-        'sandbox',
-        'allow-forms allow-scripts allow-same-origin allow-popups allow-downloads',
-      );
-      frame.referrerPolicy = 'no-referrer';
-      body.replaceChildren(frame);
-      this.#windowSurfaces.set(window.id, frame);
       return;
     }
 
@@ -1287,7 +1258,7 @@ function applicationTitle(application: DesktopApplication | undefined): string {
   if (application === undefined) {
     return 'Application';
   }
-  if (application.packageId === 'julos.core' || application.packageId === WebAppPackageId) {
+  if (application.packageId === 'julos.core') {
     return application.displayNameKey;
   }
   return application.stableKey

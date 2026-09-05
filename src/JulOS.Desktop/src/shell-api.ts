@@ -98,10 +98,6 @@ export interface DesktopWidget {
   readonly frontend: DesktopApplicationFrontend;
 }
 
-export interface WebAppSummary {
-  readonly host: string;
-}
-
 export interface WebProxyConfig {
   readonly enabled: boolean;
   readonly proxyZone: string;
@@ -193,10 +189,6 @@ export class ShellApiClient {
 
   public readWidgets(): Promise<readonly DesktopWidget[]> {
     return this.#api.get<readonly DesktopWidget[]>('/api/v1/widgets');
-  }
-
-  public readWebApps(): Promise<readonly WebAppSummary[]> {
-    return this.#api.get<readonly WebAppSummary[]>('/api/v1/webapps');
   }
 
   public readWebProxyConfig(): Promise<WebProxyConfig> {
