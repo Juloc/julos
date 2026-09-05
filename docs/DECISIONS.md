@@ -36,15 +36,15 @@ Packages communicate through versioned capabilities brokered by Core. Direct pac
 
 Reason: providers can be replaced and packages can be enabled independently without a dependency graph hidden in implementation code.
 
-## D005 — Real browser runtime, not iframe integration
+## D005 — Real browser runtime
 
-**Status:** Accepted
+**Status:** Superseded by D035 and D042
 
-Internal websites open in a real isolated Chromium runtime connected to a JulOS window through remote-session transport.
+The isolated Chromium Browser runtime was removed. Browser traffic uses the JulOS transparent proxy
+and renders on the client device. RDP, VNC and SSH remain separate Remote-package concerns.
 
-Reason: this supports local addresses, multiple tabs, downloads, certificates, logins, browser tools and sites that prohibit framing. It also avoids exposing internal management services publicly.
-
-Qualified by `D035`: for internal **web applications**, local transparent-proxy rendering in an iframe is the default and this streamed real-browser runtime is the fallback (isolation, targets that cannot be proxied, and RDP/VNC/SSH). D005 remains authoritative for the streamed runtime itself.
+Reason: the remote-browser implementation duplicated the Browser product and was not the desired
+architecture.
 
 ## D006 — Julgate extraction instead of duplication
 
@@ -333,15 +333,18 @@ Upgrade trigger: move a specific package worker behind a network boundary (its o
 
 Reason: the prior HTTP/gRPC descriptions asserted an isolation boundary that is not built, which misleads security reasoning exactly where it will matter most. Recording the real transport and its explicit upgrade trigger keeps the documentation honest without paying for network isolation before a worker needs it.
 
-## D035 — Hybrid web-application rendering: local transparent proxy by default, streamed browser as fallback
+## D035 — Transparent proxy web rendering
 
 **Status:** Accepted
 
-An internal web application opens by default in local mode: JulOS reverse-proxies the target transparently and the user's own browser renders it in a desktop-window iframe, so video and interactive content decode and run locally with hardware acceleration. The isolated streamed browser runtime (`D005`) is retained as the fallback for targets that cannot be proxied transparently, for isolation, and for RDP, VNC and SSH.
+A web application opens through the JulOS transparent proxy and the user's own browser renders it in
+a desktop-window iframe, so video and interactive content decode and run locally with hardware
+acceleration. No separate remote Browser runtime is retained.
 
 Local mode serves each target at its own `<slug>.<julos-domain>` host (wildcard DNS and TLS through the Caddy integration) and does not rewrite application URLs, because single-page applications with absolute root paths and root WebSocket endpoints break under a shared path prefix. The proxy only strips framing headers, keeps the application's cookies first-party inside the iframe, passes WebSockets through, reaches targets through the Host Connector tunnel, and injects target credentials on the server side through a secret lease so nothing secret reaches the client.
 
-This qualifies `D005`: an iframe is used, but only for a JulOS-controlled host whose framing headers JulOS itself sets and which is never publicly exposed, so `D005`'s reasons — foreign origins forbidding framing, and exposing internal services — do not apply. Framing a foreign origin directly remains forbidden.
+The iframe loads only a JulOS-controlled proxy host whose framing headers JulOS owns. Framing a
+foreign origin directly remains forbidden.
 
 Reason: pixel-streaming a remote browser is the wrong transport for media and interactive local content and has a heavy per-window footprint, so it should be the exception, not the default. Transparent per-host proxying renders locally with hardware acceleration and, unlike path-based proxying, serves real single-page control panels without fragile URL rewriting. The full plan is `docs/WEB-APP-RENDERING.md`.
 
@@ -411,14 +414,12 @@ navigation metadata and resumable browser workspace state are persisted server-s
 device can open Browser and continue the same workspace. Proxy-owned site-session state should also
 remain server-owned where technically possible.
 
-A later isolated Chromium **Remote mode** may be exposed inside the same Browser for sites that
-cannot be made compatible with transparent proxying or that require isolation. It is an explicit
-mode, never another Browser application.
+No remote-browser implementation is retained. If a full remote mode is designed in the future, it
+requires a new explicit decision and must remain a mode of the same Browser.
 
 Transparent proxying cannot guarantee migration of arbitrary third-party IndexedDB, service-worker
 state or in-page JavaScript memory between client devices. JulOS must state that boundary rather
-than claiming exact page-process continuation; exact Chromium profile/process continuity belongs to
-Remote mode.
+than claiming exact page-process continuation; exact process-memory continuation is not promised.
 
 Reason: three browser icons expose transport implementation details as product concepts, duplicate
 tab/session state and make device handoff incoherent. One server-owned Browser workspace gives JulOS

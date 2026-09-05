@@ -145,7 +145,7 @@ This phase is complete under the former Agent terminology. `HCON-002` performs t
 
 ## Phase 6 — Remote and Browser
 
-Work items: `REM-001` through `REM-008` and `BRW-001` through `BRW-005`.
+Work items: `REM-001` through `REM-008`, `WEB-001`, `BRW-001` through `BRW-003`.
 
 Deliver:
 
@@ -154,8 +154,8 @@ Deliver:
 - shared transport extraction
 - Remote worker and display client
 - RDP, VNC and SSH adapters
-- isolated Chromium runtime
-- persistent, temporary and fixed-application browser modes
+- transparent proxy Browser
+- server-owned Browser workspace continuity
 
 Gate:
 
