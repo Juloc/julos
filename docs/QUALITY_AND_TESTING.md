@@ -165,7 +165,7 @@ Playwright tests cover critical journeys:
 - verify a durable Operation survives surface suspension and PWA restart
 - verify service-worker update with clean, dirty, conflict, offline, discarded and multiple-client pages
 
-Full protocol tests for RDP, VNC, SSH and Browser runtime use dedicated integration environments and do not run in every small unit-test job.
+Full protocol tests for RDP, VNC and SSH use dedicated integration environments and do not run in every small unit-test job.
 
 ## 3. Package tests
 
@@ -343,7 +343,6 @@ Regressions against documented budgets require investigation before merge.
 - Host Connector disconnect during operation or bounded stream
 - PWA/browser process suspension during a durable Operation
 - external API timeout
-- Browser runtime exits unexpectedly
 - duplicate event delivery
 - Server restart during active session
 - stale layout revision

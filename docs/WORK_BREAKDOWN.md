@@ -1023,60 +1023,39 @@ Acceptance:
 - no graphical Remote/Guacamole payload is required for a terminal-only provider
 - automated contract, authorization, reconnect, timeout and mobile-keyboard tests pass
 
-### BRW-001 — Build Browser runtime image
+### BRW-001 — Complete proxy Browser
 
-Depends on: PKG-003, REM-004.
+Depends on: WEB-001.
 
-Deliver pinned Chromium image, unprivileged user, display endpoint and resource limits.
+Deliver:
 
-Acceptance:
-
-- image contains no default credentials
-- health and cleanup work
-
-### BRW-002 — Implement Browser profiles and network profiles
-
-Depends on: BRW-001, API-008.
-
-Deliver persistent, temporary and application modes plus allowed network configuration.
+- one Core Browser surface only
+- HTTP/HTTPS and WebSocket routing through JulOS
+- framing/CSP, cookie, redirect and origin compatibility
+- public Internet routing with pinned-DNS SSRF protection
+- private-network access only through explicit policy
 
 Acceptance:
 
-- users cannot share profiles
-- temporary data is removed
+- no Browser package/runtime/provider exists
+- no second Browser entry can appear in the launcher
+- representative public and internal applications render through the proxy
 
-### BRW-003 — Implement Browser package worker
+### BRW-002 — Persist Browser workspace
 
-Depends on: BRW-002, PKG-009.
+Depends on: BRW-001, DB-001.
 
-Deliver runtime creation, session reference, policy and cleanup.
+Deliver:
 
-Acceptance:
-
-- internal DNS and local address access works through configured network
-- private URL is not exposed directly when policy forbids it
-
-### BRW-004 — Implement full Browser application
-
-Depends on: BRW-003, REM-005.
-
-Deliver tabs, address field, navigation, downloads and session status. Downloads depend on `FILE-007` (Phase 8); until it lands, Browser download support is deferred and BRW-004 is accepted without it (see the BRW-004 note in `BACKLOG.md`).
+- server-owned tabs, order, active tab and navigation metadata
+- cross-device workspace resume
+- revision/conflict handling for concurrent clients
+- proxy-owned session metadata where technically possible
 
 Acceptance:
 
-- multiple isolated windows work
-- startup stages and failures are clear
-
-### BRW-005 — Implement fixed web-application mode
-
-Depends on: BRW-004, CORE-003.
-
-Deliver app-branded launch target with optional minimal chrome.
-
-Acceptance:
-
-- app mode remains a full browser session, not iframe
-- policy can allow opening in full browser mode
+- another device resumes the same Browser workspace
+- arbitrary third-party IndexedDB/service-worker/JS memory is not falsely claimed as synchronized
 
 ## Phase 6A — Product realignment foundations
 
@@ -1398,7 +1377,7 @@ Acceptance:
 
 ### MOB-007 — Migrate Browser and Remote surfaces
 
-Depends on: MOB-006, REM-004, REM-005, BRW-003, BRW-004.
+Depends on: MOB-006, REM-004, REM-005, BRW-001.
 
 Deliver:
 
@@ -1980,9 +1959,9 @@ Acceptance:
 - capability differences are represented explicitly
 - unsupported atomic operations do not pretend success
 
-### FILE-007 — Integrate Remote and Browser transfers
+### FILE-007 — Integrate Remote transfers
 
-Depends on: FILE-002, REM-004, BRW-003.
+Depends on: FILE-002, REM-004.
 
 Acceptance:
 
@@ -2089,7 +2068,7 @@ Acceptance:
 
 ### OPS-004 — Implement retention and cleanup
 
-Depends on: API-001, REM-004, BRW-002.
+Depends on: API-001, REM-004.
 
 Acceptance:
 

@@ -376,25 +376,14 @@ Phone presentation additionally validates at most two foreground slots. Tablet u
 
 Drag and resize update local presentation at animation-frame speed. Persistence is debounced and sent after interaction ends. Server remains authoritative for stored layout revision but is not involved in every pointer movement.
 
-## 10. Browser runtime
+## 10. Browser proxy
 
-A browser runtime contains:
+The JulOS Browser is a Core transparent-proxy surface. HTTP/HTTPS and WebSockets route through
+JulOS, while the user's own browser performs HTML/JavaScript/media rendering.
 
-- Chromium
-- isolated Linux user
-- virtual display or headless display surface compatible with Remote transport
-- configured network profile
-- profile volume where persistence is enabled
-- download staging directory
-- CPU, memory, process and inactivity limits
-
-Modes:
-
-- `Persistent`: named profile retained for one user
-- `Temporary`: unique profile removed after termination
-- `Application`: fixed start URL and optional restricted browser chrome
-
-Browser package never returns a raw internal service URL to the external client when that URL should remain private. The client receives a session reference.
+The proxy owns framing/CSP compatibility, redirect/cookie normalization, DNS pinning and SSRF policy.
+Browser tabs and resumable workspace metadata are server-owned. No isolated Chromium Browser runtime
+or Browser package exists.
 
 ## 11. Remote runtime
 

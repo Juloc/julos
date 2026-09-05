@@ -210,7 +210,6 @@ Runtime Manager is a small privileged sidecar that owns direct access to the loc
 It manages only JulOS control-plane resources:
 
 - package workers when containerized
-- Browser runtimes
 - Remote runtimes
 - package-declared helper runtimes
 
@@ -435,7 +434,6 @@ Optional:
 
 - package workers
 - Remote runtime or guacd
-- Browser runtime pool
 - Host Connectors on Proxmox nodes, Docker hosts and selected VMs
 
 The architecture must not require all packages or runtimes to be installed.
