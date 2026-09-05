@@ -619,6 +619,8 @@ export class DesktopRuntime {
       element.dataset['state'] = window.state;
       element.dataset['active'] = String(this.#store.frontWindow?.id === window.id);
       element.dataset['presentation'] = responsive.presentation;
+      element.querySelector<HTMLButtonElement>('[data-action="maximize"]')
+        ?.setAttribute('aria-label', window.state === 'maximized' ? 'Restore' : 'Maximize');
       applyBounds(element, responsive.presentation === 'windowed' ? window.bounds : area);
       this.#mountWindowSurface(window);
     }
@@ -637,10 +639,9 @@ export class DesktopRuntime {
       <header class="window-titlebar">
         <span class="window-title"></span>
         <div class="window-controls">
-          <button type="button" data-action="minimize" aria-label="Minimize">−</button>
-          <button type="button" data-action="maximize" aria-label="Maximize">□</button>
-          <button type="button" data-action="fullscreen" aria-label="Full screen">◇</button>
-          <button type="button" data-action="close" aria-label="Close">×</button>
+          <button type="button" data-action="minimize" aria-label="Minimize"><span class="window-control-fallback" aria-hidden="true">−</span></button>
+          <button type="button" data-action="maximize" aria-label="Maximize"><span class="window-control-fallback" aria-hidden="true">□</span></button>
+          <button type="button" data-action="close" aria-label="Close"><span class="window-control-fallback" aria-hidden="true">×</span></button>
         </div>
       </header>
       <div class="window-body"><div class="window-loading">Loading…</div></div>
@@ -729,19 +730,6 @@ export class DesktopRuntime {
             this.#store.restore(windowId, this.#usableArea());
           }
           this.#store.maximize(windowId, this.#usableArea());
-        }
-        this.#scheduleLayout();
-      });
-    element.querySelector<HTMLButtonElement>('[data-action="fullscreen"]')!
-      .addEventListener('click', () => {
-        const current = this.#requireWindow(windowId);
-        if (current.state === 'full-screen') {
-          this.#store.restore(windowId, this.#usableArea());
-        } else {
-          if (current.state !== 'normal') {
-            this.#store.restore(windowId, this.#usableArea());
-          }
-          this.#store.applyFixedState(windowId, 'full-screen', this.#usableArea());
         }
         this.#scheduleLayout();
       });
@@ -897,6 +885,11 @@ export class DesktopRuntime {
       event.preventDefault();
       return;
     }
+    if (event.key === 'F11' && !event.defaultPrevented) {
+      event.preventDefault();
+      this.#toggleActiveWindowFullScreen();
+      return;
+    }
     this.#keyboard.handleKeyDown(event);
   }
 
@@ -941,6 +934,23 @@ export class DesktopRuntime {
       return;
     }
     this.#store.close(active.id);
+    this.#scheduleLayout();
+  }
+
+  #toggleActiveWindowFullScreen(): void {
+    const active = this.#store.frontWindow;
+    if (active === null) {
+      return;
+    }
+
+    if (active.state === 'full-screen') {
+      this.#store.restore(active.id, this.#usableArea());
+    } else {
+      if (active.state !== 'normal') {
+        this.#store.restore(active.id, this.#usableArea());
+      }
+      this.#store.applyFixedState(active.id, 'full-screen', this.#usableArea());
+    }
     this.#scheduleLayout();
   }
 

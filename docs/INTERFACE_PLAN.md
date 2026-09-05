@@ -22,7 +22,7 @@ Glass is reserved for shell chrome such as the taskbar, launcher, window title b
 
 ### Taskbar
 
-The taskbar is a floating glass surface at the bottom edge with safe-area support. Launcher, running applications and status controls keep stable identities and familiar desktop behavior. Active, minimized and attention state must remain visible without decorative badges.
+The taskbar is a floating glass surface at the bottom edge with safe-area support. Launcher, running applications and status controls keep stable identities and familiar desktop behavior. Active, minimized and attention state must remain visible without decorative badges. The normal application work area ends above the taskbar's complete rendered footprint, bottom offset and safe area, so maximized/snapped windows never sit underneath it.
 
 ### Launcher
 
@@ -34,9 +34,11 @@ Window behavior continues to be owned by the existing `WindowStore`, `WindowInte
 
 - clear active/inactive depth;
 - translucent title-bar chrome with readable opaque application bodies;
+- a standard three-control title bar: Windows-style minimize/maximize/close on Windows/Linux and macOS traffic-light placement on macOS, selected as presentation only without a second window model;
+- full-screen remains a distinct window state and is available through `F11` instead of a non-standard fourth title-bar glyph;
 - consistent control sizing;
 - visible snap previews;
-- maximized/full-screen edge-to-edge presentation;
+- maximized/full-screen presentation within the usable Shell work area;
 - no duplicate window layout implementation.
 
 ## Desktop edit mode

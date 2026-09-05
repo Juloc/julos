@@ -2,6 +2,12 @@
 
 export type InterfaceViewport = 'desktop' | 'tablet' | 'mobile';
 
+export type WindowChromeStyle = 'windows' | 'macos';
+
+export function classifyWindowChrome(platform: string | null | undefined): WindowChromeStyle {
+  return platform?.toLowerCase().includes('mac') === true ? 'macos' : 'windows';
+}
+
 export const interfacePlanStyleHref = './styles/interface-plan.css';
 export const desktopEditLongPressMs = 520;
 export const desktopEditMovementTolerance = 12;
@@ -79,6 +85,7 @@ export class InterfacePlanController {
     this.#connected = true;
     this.#ensureStyleSheet();
     this.#ensureEditToolbar();
+    this.#host.dataset['windowChrome'] = classifyWindowChrome(this.#window.navigator.platform);
     this.#syncViewport();
     this.#root.addEventListener('pointerdown', this.#pointerDownHandler, true);
     this.#root.addEventListener('pointermove', this.#pointerMoveHandler, true);

@@ -69,7 +69,7 @@ Every standard window contains:
 - maximize or restore
 - close
 
-Window chrome must not imitate browser tabs unless the application itself is Browser.
+Desktop title bars present these as one standard three-control group. Windows/Linux use right-side window controls; macOS uses left-side traffic-light placement. Full-screen remains a distinct state but is not a fourth title-bar button; `F11` toggles it. Window chrome must not imitate browser tabs unless the application itself is Browser.
 
 ### 5.1 Window states
 
@@ -112,7 +112,7 @@ Supported snap targets:
 - four quarters
 - maximize by top edge or title-bar action
 
-Snap preview appears before release. The taskbar area is excluded from usable bounds.
+Snap preview appears before release. The complete floating taskbar footprint, including its bottom offset and safe-area inset, is excluded from usable bounds.
 
 A snapped window can be restored by dragging its title bar. Restore size and pointer-relative position must feel predictable.
 

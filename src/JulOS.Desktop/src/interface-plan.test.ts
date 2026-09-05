@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import {
   canStartDesktopEditMode,
   classifyInterfaceViewport,
+  classifyWindowChrome,
   desktopEditLongPressMs,
   desktopEditMovementTolerance,
   InterfacePlanController,
@@ -16,6 +17,13 @@ test('interface viewport keeps one shell model across desktop, tablet and mobile
   assert.equal(classifyInterfaceViewport(720), 'tablet');
   assert.equal(classifyInterfaceViewport(390), 'mobile');
   assert.equal(classifyInterfaceViewport(Number.NaN), 'desktop');
+});
+
+test('window chrome follows the desktop platform without changing the shell model', () => {
+  assert.equal(classifyWindowChrome('Win32'), 'windows');
+  assert.equal(classifyWindowChrome('Linux x86_64'), 'windows');
+  assert.equal(classifyWindowChrome('MacIntel'), 'macos');
+  assert.equal(classifyWindowChrome(undefined), 'windows');
 });
 
 test('desktop edit long press uses deliberate touch-friendly thresholds', () => {

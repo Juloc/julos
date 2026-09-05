@@ -16,10 +16,15 @@
     0 2px 10px color-mix(in srgb, var(--julos-color-shadow) 54%, transparent);
   --julos-flyout-shadow: 0 20px 54px color-mix(in srgb, var(--julos-color-shadow) 74%, transparent),
     0 2px 8px color-mix(in srgb, var(--julos-color-shadow) 44%, transparent);
+  --julos-taskbar-work-area: calc(62px + max(10px, env(safe-area-inset-bottom)));
 }
 
 .desktop {
   isolation: isolate;
+}
+
+.desktop-content {
+  bottom: var(--julos-taskbar-work-area);
 }
 
 .desktop::before,
@@ -75,7 +80,8 @@
   right: max(10px, env(safe-area-inset-right));
   bottom: max(10px, env(safe-area-inset-bottom));
   left: max(10px, env(safe-area-inset-left));
-  min-height: 52px;
+  box-sizing: border-box;
+  min-height: 54px;
   padding: 6px 7px;
   border-radius: 18px;
   box-shadow:
@@ -217,6 +223,7 @@
 }
 
 .window-titlebar {
+  position: relative;
   height: 42px;
   flex-basis: 42px;
   padding-left: 14px;
@@ -232,11 +239,72 @@
   letter-spacing: -0.008em;
 }
 
+.window-controls {
+  height: 100%;
+}
+
+.window-control-fallback {
+  display: none;
+}
+
 .window-controls button {
+  position: relative;
   width: 46px;
   transition:
     background var(--julos-duration-fast) var(--julos-easing-standard),
     color var(--julos-duration-fast) var(--julos-easing-standard);
+}
+
+.window-controls button::before,
+.window-controls button::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  content: '';
+  pointer-events: none;
+}
+
+.window-controls button[data-action="minimize"]::before {
+  width: 10px;
+  height: 1px;
+  background: currentColor;
+  transform: translate(-50%, 4px);
+}
+
+.window-controls button[data-action="maximize"]::before {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.desktop-window[data-state="maximized"] .window-controls button[data-action="maximize"]::before {
+  width: 8px;
+  height: 8px;
+  transform: translate(-35%, -62%);
+}
+
+.desktop-window[data-state="maximized"] .window-controls button[data-action="maximize"]::after {
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+  transform: translate(-68%, -30%);
+}
+
+.window-controls button[data-action="close"]::before,
+.window-controls button[data-action="close"]::after {
+  width: 12px;
+  height: 1px;
+  background: currentColor;
+}
+
+.window-controls button[data-action="close"]::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.window-controls button[data-action="close"]::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .window-controls button:first-child {
@@ -251,6 +319,74 @@
 .desktop-window[data-state="full-screen"] .window-controls button:last-child,
 .desktop-window:not([data-presentation="windowed"]) .window-controls button:last-child {
   border-top-right-radius: 0;
+}
+
+:host([data-window-chrome="macos"]) .window-titlebar {
+  justify-content: center;
+  padding-right: 88px;
+  padding-left: 88px;
+}
+
+:host([data-window-chrome="macos"]) .window-title {
+  width: 100%;
+  text-align: center;
+}
+
+:host([data-window-chrome="macos"]) .window-controls {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button {
+  width: 20px;
+  height: 100%;
+  border-radius: 0;
+  background: transparent;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button:hover {
+  background: transparent;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button::before {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(0 0 0 / 14%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+:host([data-window-chrome="macos"]) .window-controls button::after {
+  display: none;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="close"] {
+  order: 1;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="minimize"] {
+  order: 2;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="maximize"] {
+  order: 3;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="close"]::before {
+  background: #ff5f57;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="minimize"]::before {
+  background: #febc2e;
+}
+
+:host([data-window-chrome="macos"]) .window-controls button[data-action="maximize"]::before {
+  background: #28c840;
 }
 
 .snap-preview {
@@ -387,6 +523,7 @@
 
 :host([data-interface-viewport="tablet"]) {
   --julos-control-height: 44px;
+  --julos-taskbar-work-area: calc(66px + max(10px, env(safe-area-inset-bottom)));
 }
 
 :host([data-interface-viewport="tablet"]) .taskbar {

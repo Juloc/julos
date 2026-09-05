@@ -10,7 +10,7 @@ Scope clarification: this document records completion of the existing responsive
 
 - **DESK-013 — implemented:** fresh deployments provide browser-native administrator setup and normal local sign-in.
 - **DESK-014 — implemented:** the production shell composes the existing launcher, window store, taskbar, package frontend host, layout persistence, Package Manager, Settings, legacy Agent status, notifications/problems and persisted package widgets. The atomic `HCON-002` cutover removes that status application and moves Host access into Settings. Package lifecycle changes refresh the desktop catalog without a page reload.
-- **DESK-015 — implemented, deployed acceptance pending:** the production runtime uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, shell keyboard controller, existing Alt-Tab switcher and same-browser multi-display coordination. Multiple authenticated JulOS browser windows form one ordered workspace: an existing durable window has one active display owner, a window dragged to an adjacent display edge is handed off after the target prepares the application, and windows owned by a disappearing display are recovered by the remaining workspace. Repository validation and deployed Windows/macOS/touch/multi-display acceptance remain required.
+- **DESK-015 — implemented, deployed acceptance pending:** the production runtime uses the shared responsive viewport rules, Pointer Events, full-screen state, minimized taskbar state, platform-adaptive three-button window chrome, a taskbar-excluded usable work area, shell keyboard controller, existing Alt-Tab switcher and same-browser multi-display coordination. Multiple authenticated JulOS browser windows form one ordered workspace: an existing durable window has one active display owner, a window dragged to an adjacent display edge is handed off after the target prepares the application, and windows owned by a disappearing display are recovered by the remaining workspace. Repository validation and deployed Windows/macOS/touch/multi-display acceptance remain required.
 - **DESK-016 — implemented:** system/light/dark theme, reduced motion and the Fluent-derived token and accent system are active, and server-confirmed theme and motion changes apply without reload. Deferred beyond this iteration: a user-selectable accent, the Full/Balanced/Simple presets and the wallpaper/density controls described in `UI_DESIGN_SYSTEM.md`; the shipped Settings surface exposes language, theme, motion and time zone only.
 
 The implementation status above does not replace the deployed acceptance gate at the end of this document.
@@ -59,7 +59,9 @@ The interaction model must be neutral enough for Windows and macOS users while r
 ### Windows and application behavior
 
 - drag and resize with predictable hit targets;
-- minimize, maximize/restore, close and full-screen behavior;
+- minimize, maximize/restore and close use the familiar three-control title-bar layout for the detected desktop platform; macOS uses left traffic-light placement while Windows/Linux use right-side window controls;
+- full-screen remains separate from maximize and is available through `F11`, avoiding a non-standard fourth title-bar control;
+- maximized and snapped windows use bounds that end above the complete taskbar footprint;
 - double-clicking a title bar toggles maximize/restore;
 - dragging a maximized window restores it into a movable window;
 - active and inactive windows have clear but restrained focus treatment;
