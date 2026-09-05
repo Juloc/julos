@@ -46,6 +46,12 @@ internal sealed class WebAppProxyMiddleware
             new EventId(1502, nameof(LogUpstreamResolutionFailed)),
             "Web application upstream DNS resolution failed for {Upstream}.");
 
+    private static readonly Action<ILogger, int, string, string, Exception?> LogUpstreamRedirect =
+        LoggerMessage.Define<int, string, string>(
+            LogLevel.Information,
+            new EventId(1503, nameof(LogUpstreamRedirect)),
+            "Web application upstream redirect {StatusCode} from {Source} to {Target}.");
+
     private readonly RequestDelegate next;
     private readonly WebAppTargetRegistry registry;
     private readonly WebAppProxyOptions options;
@@ -150,6 +156,7 @@ internal sealed class WebAppProxyMiddleware
     {
         var request = context.Request;
         var publicRequestScheme = GetPublicRequestScheme(request);
+        var browserDocumentNavigation = IsBrowserDocumentNavigation(request);
         using var upstreamRequest = new HttpRequestMessage(
             new HttpMethod(request.Method),
             BuildUpstreamUri(target.Upstream, request, publicRequestScheme));
@@ -192,6 +199,14 @@ internal sealed class WebAppProxyMiddleware
         }
 
         upstreamRequest.Headers.Host = target.Upstream.Authority;
+        if (browserDocumentNavigation)
+        {
+            upstreamRequest.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "document");
+            upstreamRequest.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            upstreamRequest.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "none");
+            upstreamRequest.Headers.TryAddWithoutValidation("Sec-Fetch-User", "?1");
+        }
+
         if (!target.RequiresAddressPinning)
         {
             upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
@@ -222,11 +237,23 @@ internal sealed class WebAppProxyMiddleware
         using (upstreamResponse)
         {
             context.Response.StatusCode = (int)upstreamResponse.StatusCode;
+            if ((int)upstreamResponse.StatusCode is >= 300 and < 400
+                && upstreamResponse.Headers.Location is { } redirectLocation)
+            {
+                LogUpstreamRedirect(
+                    this.logger,
+                    (int)upstreamResponse.StatusCode,
+                    SanitizeUriForLog(upstreamRequest.RequestUri!),
+                    SanitizeRedirectForLog(upstreamRequest.RequestUri!, redirectLocation),
+                    null);
+            }
+
             CopyResponseHeaders(
                 upstreamResponse,
                 context.Response,
                 new WebAppResponseContext(
                     target.Upstream,
+                    upstreamRequest.RequestUri!,
                     publicRequestScheme,
                     context.Request.Host.Value ?? string.Empty,
                     string.Equals(publicRequestScheme, "https", StringComparison.Ordinal),
@@ -446,6 +473,7 @@ internal sealed class WebAppProxyMiddleware
                 .Select(value => WebAppResponsePolicy.RewriteRedirect(
                     value,
                     context.Upstream,
+                    context.UpstreamRequestUri,
                     context.RequestScheme,
                     context.RequestHost,
                     context.DynamicProxyZone))
@@ -458,6 +486,7 @@ internal sealed class WebAppProxyMiddleware
 
     private readonly record struct WebAppResponseContext(
         Uri Upstream,
+        Uri UpstreamRequestUri,
         string RequestScheme,
         string RequestHost,
         bool RequestIsHttps,
@@ -542,12 +571,28 @@ internal sealed class WebAppProxyMiddleware
             : "http";
     }
 
+    private static bool IsBrowserDocumentNavigation(HttpRequest request) =>
+        string.Equals(request.Headers["Sec-Fetch-Dest"].ToString(), "iframe", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(request.Headers["Sec-Fetch-Mode"].ToString(), "navigate", StringComparison.OrdinalIgnoreCase);
+
+    private static string SanitizeUriForLog(Uri uri) =>
+        uri.GetLeftPart(UriPartial.Path);
+
+    private static string SanitizeRedirectForLog(Uri source, Uri redirect)
+    {
+        var resolved = redirect.IsAbsoluteUri ? redirect : new Uri(source, redirect);
+        return resolved.Scheme is "http" or "https"
+            ? resolved.GetLeftPart(UriPartial.Path)
+            : redirect.GetLeftPart(UriPartial.Path);
+    }
+
     private static bool IsSuppressedRequestHeader(string name) =>
         WebAppResponsePolicy.IsSuppressedResponseHeader(name)
         || string.Equals(name, "Host", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "Authorization", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "Forwarded", StringComparison.OrdinalIgnoreCase)
-        || name.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase);
+        || name.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Sec-Fetch-", StringComparison.OrdinalIgnoreCase);
 
     private static async Task WriteFailureAsync(HttpContext context, int status, string code, string detail)
     {

@@ -155,17 +155,32 @@ public static class WebAppResponsePolicy
     public static string RewriteRedirect(
         string value,
         Uri upstream,
+        Uri upstreamRequestUri,
         string requestScheme,
         string requestHost,
         string? dynamicProxyZone = null)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(upstream);
+        ArgumentNullException.ThrowIfNull(upstreamRequestUri);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestScheme);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestHost);
 
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var target)
-            || target.Scheme is not ("http" or "https"))
+        Uri? target;
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+        {
+            target = absolute;
+        }
+        else if (Uri.TryCreate(upstreamRequestUri, value, out var resolved))
+        {
+            target = resolved;
+        }
+        else
+        {
+            return value;
+        }
+
+        if (target.Scheme is not ("http" or "https"))
         {
             return value;
         }

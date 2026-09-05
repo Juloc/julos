@@ -281,11 +281,18 @@ public sealed class WebAppProxyEndpointTests
             using (var forward = DynamicRequest(encodedHost, "/panel", cookie))
             {
                 forward.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
+                forward.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "iframe");
+                forward.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+                forward.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-site");
                 using var response = await client.SendAsync(forward).ConfigureAwait(false);
 
                 Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
                 Assert.AreEqual(string.Empty, Single(response, "X-Echo-Forwarded-Host"));
                 Assert.AreEqual(string.Empty, Single(response, "X-Echo-Forwarded-Proto"));
+                Assert.AreEqual("document", Single(response, "X-Echo-Sec-Fetch-Dest"));
+                Assert.AreEqual("navigate", Single(response, "X-Echo-Sec-Fetch-Mode"));
+                Assert.AreEqual("none", Single(response, "X-Echo-Sec-Fetch-Site"));
+                Assert.AreEqual("?1", Single(response, "X-Echo-Sec-Fetch-User"));
             }
 
             using (var redirect = DynamicRequest(encodedHost, "/redirect", cookie))
@@ -531,6 +538,10 @@ public sealed class WebAppProxyEndpointTests
             context.Response.Headers["X-Echo-Host"] = context.Request.Host.Value;
             context.Response.Headers["X-Echo-Forwarded-Host"] = context.Request.Headers["X-Forwarded-Host"].ToString();
             context.Response.Headers["X-Echo-Forwarded-Proto"] = context.Request.Headers["X-Forwarded-Proto"].ToString();
+            context.Response.Headers["X-Echo-Sec-Fetch-Dest"] = context.Request.Headers["Sec-Fetch-Dest"].ToString();
+            context.Response.Headers["X-Echo-Sec-Fetch-Mode"] = context.Request.Headers["Sec-Fetch-Mode"].ToString();
+            context.Response.Headers["X-Echo-Sec-Fetch-Site"] = context.Request.Headers["Sec-Fetch-Site"].ToString();
+            context.Response.Headers["X-Echo-Sec-Fetch-User"] = context.Request.Headers["Sec-Fetch-User"].ToString();
             context.Response.Headers["X-Echo-Cookie"] = context.Request.Headers.Cookie.ToString();
             await context.Response.WriteAsync($"UPSTREAM-OK:{context.Request.Path}").ConfigureAwait(false);
         });

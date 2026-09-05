@@ -150,12 +150,32 @@ public sealed class WebAppResponsePolicyTests
     }
 
     [TestMethod]
-    public void RewriteRedirectLeavesRelativeTargetsUnchanged()
+    public void RewriteRedirectResolvesRelativeTargetsAgainstTheUpstreamRequest()
     {
         Assert.AreEqual(
-            "/dashboard?tab=1",
+            "https://wa123.p.localtest.me/dashboard?tab=1",
             WebAppResponsePolicy.RewriteRedirect(
-                "/dashboard?tab=1", new Uri("https://10.0.0.5:8443"), "https", "wa123.p.localtest.me"));
+                "/dashboard?tab=1",
+                new Uri("https://10.0.0.5:8443"),
+                new Uri("https://10.0.0.5:8443/current"),
+                "https",
+                "wa123.p.localtest.me"));
+    }
+
+    [TestMethod]
+    public void RewriteRedirectResolvesSchemeRelativeTargets()
+    {
+        var expectedHost = WebAppOriginCodec.EncodeHost(new Uri("https://www.test.de/"), "os.juloc.de");
+
+        Assert.AreEqual(
+            $"https://{expectedHost}/",
+            WebAppResponsePolicy.RewriteRedirect(
+                "//www.test.de/",
+                new Uri("https://test.de/"),
+                new Uri("https://test.de/index.html"),
+                "https",
+                "waold.os.juloc.de",
+                "os.juloc.de"));
     }
 
     [TestMethod]
@@ -166,6 +186,7 @@ public sealed class WebAppResponsePolicyTests
             WebAppResponsePolicy.RewriteRedirect(
                 "https://10.0.0.5:8443/dashboard?tab=1",
                 new Uri("https://10.0.0.5:8443"),
+                new Uri("https://10.0.0.5:8443/current"),
                 "https",
                 "wa123.p.localtest.me"));
     }
@@ -178,6 +199,7 @@ public sealed class WebAppResponsePolicyTests
             WebAppResponsePolicy.RewriteRedirect(
                 "https://accounts.google.com/o/oauth2",
                 new Uri("https://10.0.0.5:8443"),
+                new Uri("https://10.0.0.5:8443/current"),
                 "https",
                 "wa123.p.localtest.me"));
     }
@@ -196,6 +218,7 @@ public sealed class WebAppResponsePolicyTests
             WebAppResponsePolicy.RewriteRedirect(
                 target.AbsoluteUri,
                 new Uri("https://test.de/"),
+                new Uri("https://test.de/index.html"),
                 "https",
                 "waold.os.juloc.de",
                 "os.juloc.de"));

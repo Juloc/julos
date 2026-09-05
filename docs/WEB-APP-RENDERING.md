@@ -61,7 +61,7 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
   - remove `X-Frame-Options`;
   - narrow `Content-Security-Policy` `frame-ancestors` to the JulOS shell origin and drop directives that would block embedding;
   - adjust `Set-Cookie` `Domain` and `SameSite` so the application's own session cookies stay first-party inside the window iframe;
-  - rewrite proxy-owned redirect/location headers when they point back at the same upstream origin;
+  - resolve relative, scheme-relative and absolute redirect/location headers against the actual upstream request and rewrite HTTP(S) navigation back into the JulOS proxy host;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;
   - apply request and idle timeouts and a per-target request-rate budget.
 - **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through a target-bound `host.stream/1` grant on the outbound Host Connector tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.
@@ -120,6 +120,7 @@ is a new feature and is not backed by retained legacy Browser runtime code.
 - Dynamic DNS names require an allowed suffix plus an allowed resolved CIDR, and the actual HTTP/WebSocket connection is pinned to the validated address set.
 - Target credentials live only in the encrypted secret store and are leased for the proxied connection; they never reach the client.
 - JulOS authentication/antiforgery cookies and inbound authorization/forwarding headers are stripped before a request is forwarded upstream. Dynamic/public Browser targets receive their real target `Host` but no JulOS `X-Forwarded-Host` or `X-Forwarded-Proto` metadata, so external canonical-host logic cannot redirect against the encoded JulOS proxy host.
+- The initial iframe navigation is virtualized as an ordinary top-level document navigation for the upstream: iframe-specific `Sec-Fetch-*` metadata is not leaked to the target. Nested resource requests keep their own browser metadata semantics.
 - Every proxied session and every credential lease creates an audit event.
 - A per-target request-rate budget limits abuse of an exposed proxy host.
 - The proxy never publishes the internal target. Reaching JulOS itself from outside the home network is the responsibility of an authenticated reverse proxy or an overlay network and is out of scope for this component; it is covered by the remote-access guidance in [`SECURITY_AND_OPERATIONS.md`](SECURITY_AND_OPERATIONS.md).
@@ -138,7 +139,7 @@ The JulOS session cookie must also be scoped to the deployment's parent domain (
 ## 8. Milestones
 
 - **M0 — Done:** accept the design (`D035`) and record this plan. Define the target rendering-policy field and the per-target hostname scheme.
-- **M1 — In progress:** transparent proxy, WebSocket transport, framing/cookie/redirect policy, dynamic encoded-origin backend and Browser address bar are implemented. Cross-origin redirects stay in the proxy, public HTTPS behind Caddy is preserved, dynamic targets do not receive JulOS forwarding metadata, and the old synthetic WebApp launcher/iframe path has been removed. Real target/browser acceptance and remaining compatibility work are still required.
+- **M1 — In progress:** transparent proxy, WebSocket transport, framing/cookie/redirect policy, dynamic encoded-origin backend and Browser address bar are implemented. Cross-origin/relative redirects stay in the proxy, public HTTPS behind Caddy is preserved, dynamic targets do not receive JulOS forwarding metadata, iframe navigation fetch metadata is normalized to document navigation, and the old synthetic WebApp launcher/iframe path has been removed. Real target/browser acceptance and remaining compatibility work are still required.
 - **M2 — Open, depends on `HCON-005`:** reach targets through a target-bound Host Connector stream and inject target credentials through an operation-bound secret lease, with nothing secret reaching the client. Dynamic origin/reference compatibility work belongs here where required.
 - **M3 — Partially complete:** resolved-IP SSRF validation and connection pinning are implemented. Server-owned Browser workspace persistence remains.
 - **M4 — Open:** remaining cookie/redirect edge cases; wildcard-TLS automation through the Caddy integration; per-target rate budget and audit; verified local media playback and multiple simultaneous windows.
