@@ -46,7 +46,7 @@ public static class WebAppResponsePolicy
     /// (equivalently, an upstream may send the header more than once). A top-level comma cannot
     /// appear inside a directive value, so each comma-separated policy is rewritten independently.
     /// </remarks>
-    public static string? RewriteContentSecurityPolicy(string? value)
+    public static string? RewriteContentSecurityPolicy(string? value, string? injectedScriptHash = null)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -65,6 +65,11 @@ public static class WebAppResponsePolicy
                 }
 
                 kept.Add(directive);
+            }
+
+            if (!string.IsNullOrWhiteSpace(injectedScriptHash))
+            {
+                AddInjectedScriptHash(kept, injectedScriptHash);
             }
 
             if (kept.Count > 0)
@@ -217,6 +222,50 @@ public static class WebAppResponsePolicy
             ? value
             : string.Concat(requestScheme, "://", encodedHost, target.PathAndQuery, target.Fragment);
     }
+
+    private static void AddInjectedScriptHash(List<string> directives, string scriptHash)
+    {
+        var token = $"'{scriptHash}'";
+        var scriptSourceIndex = FindDirective(directives, "script-src");
+        var scriptElementIndex = FindDirective(directives, "script-src-elem");
+
+        if (scriptSourceIndex >= 0)
+        {
+            directives[scriptSourceIndex] = AppendSource(directives[scriptSourceIndex], token);
+        }
+
+        if (scriptElementIndex >= 0)
+        {
+            directives[scriptElementIndex] = AppendSource(directives[scriptElementIndex], token);
+        }
+
+        if (scriptSourceIndex < 0 && scriptElementIndex < 0)
+        {
+            var defaultSourceIndex = FindDirective(directives, "default-src");
+            if (defaultSourceIndex >= 0)
+            {
+                directives[defaultSourceIndex] = AppendSource(directives[defaultSourceIndex], token);
+            }
+        }
+    }
+
+    private static int FindDirective(List<string> directives, string name)
+    {
+        for (var index = 0; index < directives.Count; index++)
+        {
+            if (AttributeName(directives[index]).Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string AppendSource(string directive, string token) =>
+        directive.Contains(token, StringComparison.Ordinal)
+            ? directive
+            : string.Concat(directive, " ", token);
 
     private static string AttributeName(string attribute)
     {

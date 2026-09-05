@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Text;
 
 using JulOS.Infrastructure.WebApps;
 using JulOS.Server.Authorization;
@@ -174,6 +175,8 @@ internal sealed class WebAppProxyMiddleware
         var upstreamRequest = new HttpRequestMessage(
             new HttpMethod(request.Method),
             BuildUpstreamUri(target.Upstream, request, publicRequestScheme));
+        var browserRequestOrigin = request.Headers.Origin.ToString();
+        string? upstreamRequestOrigin = null;
 
         if (target.RequiresAddressPinning)
         {
@@ -201,6 +204,29 @@ internal sealed class WebAppProxyMiddleware
                 continue;
             }
 
+            if (target.RequiresAddressPinning
+                && string.Equals(header.Key, "Accept-Encoding", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (target.RequiresAddressPinning
+                && string.Equals(header.Key, "Origin", StringComparison.OrdinalIgnoreCase)
+                && TryVirtualizeProxyRequestUrl(header.Value.ToString(), this.registry.DynamicProxyZone, true, out var virtualizedOrigin))
+            {
+                upstreamRequestOrigin = virtualizedOrigin;
+                upstreamRequest.Headers.TryAddWithoutValidation(header.Key, virtualizedOrigin);
+                continue;
+            }
+
+            if (target.RequiresAddressPinning
+                && string.Equals(header.Key, "Referer", StringComparison.OrdinalIgnoreCase)
+                && TryVirtualizeProxyRequestUrl(header.Value.ToString(), this.registry.DynamicProxyZone, false, out var virtualizedReferer))
+            {
+                upstreamRequest.Headers.TryAddWithoutValidation(header.Key, virtualizedReferer);
+                continue;
+            }
+
             if (IsSuppressedRequestHeader(header.Key))
             {
                 continue;
@@ -213,6 +239,11 @@ internal sealed class WebAppProxyMiddleware
         }
 
         upstreamRequest.Headers.Host = target.Upstream.Authority;
+        if (target.RequiresAddressPinning)
+        {
+            upstreamRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "identity");
+        }
+
         if (browserDocumentNavigation)
         {
             upstreamRequest.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "document");
@@ -283,6 +314,14 @@ internal sealed class WebAppProxyMiddleware
                     null);
             }
 
+            var rewrittenContent = await TryRewriteBrowserContentAsync(
+                upstreamResponse,
+                finalUpstreamRequest.RequestUri!,
+                publicRequestScheme,
+                target.RequiresAddressPinning,
+                this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null,
+                context.RequestAborted).ConfigureAwait(false);
+
             CopyResponseHeaders(
                 upstreamResponse,
                 context.Response,
@@ -292,7 +331,10 @@ internal sealed class WebAppProxyMiddleware
                     publicRequestScheme,
                     context.Request.Host.Value ?? string.Empty,
                     string.Equals(publicRequestScheme, "https", StringComparison.Ordinal),
-                    this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null));
+                    this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null,
+                    browserRequestOrigin,
+                    upstreamRequestOrigin,
+                    rewrittenContent?.InjectedScriptHash));
 
             if (redirectLocation is not null)
             {
@@ -321,9 +363,21 @@ internal sealed class WebAppProxyMiddleware
                 }
             }
 
-            await upstreamResponse.Content
-                .CopyToAsync(context.Response.Body, context.RequestAborted)
-                .ConfigureAwait(false);
+            if (rewrittenContent is not null)
+            {
+                context.Response.Headers.Remove("Content-Length");
+                context.Response.Headers.Remove("Content-Encoding");
+                context.Response.Headers.Remove("ETag");
+                context.Response.ContentType = rewrittenContent.ContentType;
+                context.Response.ContentLength = rewrittenContent.Body.Length;
+                await context.Response.Body.WriteAsync(rewrittenContent.Body, context.RequestAborted).ConfigureAwait(false);
+            }
+            else
+            {
+                await upstreamResponse.Content
+                    .CopyToAsync(context.Response.Body, context.RequestAborted)
+                    .ConfigureAwait(false);
+            }
         }
     }
 
@@ -368,11 +422,22 @@ internal sealed class WebAppProxyMiddleware
                 return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: false);
             }
 
-            if (followedRedirects >= MaximumInternalNavigationRedirects
-                || !visited.Add(redirectTarget.AbsoluteUri))
+            if (visited.Contains(redirectTarget.AbsoluteUri))
             {
                 return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: true);
             }
+
+            if (!IsDirectoryIndexCanonicalization(currentRequest.RequestUri!, redirectTarget))
+            {
+                return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: false);
+            }
+
+            if (followedRedirects >= MaximumInternalNavigationRedirects)
+            {
+                return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: true);
+            }
+
+            visited.Add(redirectTarget.AbsoluteUri);
 
             LogInternalNavigationRedirect(
                 this.logger,
@@ -432,6 +497,28 @@ internal sealed class WebAppProxyMiddleware
 
         redirectTarget = resolved;
         return true;
+    }
+
+    private static bool IsDirectoryIndexCanonicalization(Uri source, Uri target)
+    {
+        var sourcePath = source.AbsolutePath;
+        var slash = sourcePath.LastIndexOf('/');
+        if (slash < 0)
+        {
+            return false;
+        }
+
+        var fileName = sourcePath[(slash + 1)..];
+        if (!fileName.Equals("index.html", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.htm", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.php", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.asp", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.aspx", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return string.Equals(target.AbsolutePath, sourcePath[..(slash + 1)], StringComparison.Ordinal);
     }
 
     private static HttpRequestMessage CloneRedirectRequest(
@@ -645,12 +732,25 @@ internal sealed class WebAppProxyMiddleware
         if (string.Equals(name, "Content-Security-Policy", StringComparison.OrdinalIgnoreCase)
             || string.Equals(name, "Content-Security-Policy-Report-Only", StringComparison.OrdinalIgnoreCase))
         {
-            var rewritten = WebAppResponsePolicy.RewriteContentSecurityPolicy(string.Join(", ", values));
+            var rewritten = WebAppResponsePolicy.RewriteContentSecurityPolicy(
+                string.Join(", ", values),
+                context.InjectedScriptHash);
             if (!string.IsNullOrEmpty(rewritten))
             {
                 response.Headers[name] = rewritten;
             }
 
+            return;
+        }
+
+        if (string.Equals(name, "Access-Control-Allow-Origin", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(context.BrowserRequestOrigin)
+            && !string.IsNullOrWhiteSpace(context.UpstreamRequestOrigin))
+        {
+            response.Headers[name] = values.Select(value =>
+                string.Equals(value, context.UpstreamRequestOrigin, StringComparison.OrdinalIgnoreCase)
+                    ? context.BrowserRequestOrigin
+                    : value).ToArray();
             return;
         }
 
@@ -686,7 +786,80 @@ internal sealed class WebAppProxyMiddleware
         string RequestScheme,
         string RequestHost,
         bool RequestIsHttps,
-        string? DynamicProxyZone);
+        string? DynamicProxyZone,
+        string? BrowserRequestOrigin,
+        string? UpstreamRequestOrigin,
+        string? InjectedScriptHash);
+
+    private static async Task<RewrittenBrowserContent?> TryRewriteBrowserContentAsync(
+        HttpResponseMessage upstreamResponse,
+        Uri upstreamRequestUri,
+        string requestScheme,
+        bool dynamicTarget,
+        string? proxyZone,
+        CancellationToken cancellationToken)
+    {
+        if (!dynamicTarget
+            || string.IsNullOrWhiteSpace(proxyZone)
+            || upstreamResponse.Content.Headers.ContentEncoding.Count > 0)
+        {
+            return null;
+        }
+
+        var mediaType = upstreamResponse.Content.Headers.ContentType?.MediaType;
+        if (!string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(mediaType, "text/css", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (upstreamResponse.Content.Headers.ContentLength is > 8 * 1024 * 1024)
+        {
+            return null;
+        }
+
+        var source = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase))
+        {
+            var html = WebAppContentRewriter.RewriteHtml(source, upstreamRequestUri, requestScheme, proxyZone);
+            return new RewrittenBrowserContent(
+                Encoding.UTF8.GetBytes(html.Content),
+                "text/html; charset=utf-8",
+                html.ScriptHash);
+        }
+
+        var css = WebAppContentRewriter.RewriteCss(source, upstreamRequestUri, requestScheme, proxyZone);
+        return new RewrittenBrowserContent(
+            Encoding.UTF8.GetBytes(css),
+            "text/css; charset=utf-8",
+            null);
+    }
+
+    private static bool TryVirtualizeProxyRequestUrl(
+        string value,
+        string proxyZone,
+        bool originOnly,
+        out string virtualized)
+    {
+        virtualized = string.Empty;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var proxyUri)
+            || proxyUri.Scheme is not ("http" or "https")
+            || !WebAppOriginCodec.TryDecodeHost(proxyUri.Host, proxyZone, out var upstreamOrigin))
+        {
+            return false;
+        }
+
+        if (originOnly)
+        {
+            virtualized = upstreamOrigin.GetLeftPart(UriPartial.Authority);
+            return true;
+        }
+
+        virtualized = new Uri(upstreamOrigin, proxyUri.PathAndQuery).AbsoluteUri;
+        return true;
+    }
+
+    private sealed record RewrittenBrowserContent(byte[] Body, string ContentType, string? InjectedScriptHash);
 
     private static async Task PumpWebSocketAsync(
         WebSocket browser,

@@ -67,6 +67,21 @@ public sealed class WebAppResponsePolicyTests
     }
 
     [TestMethod]
+    public void AddsInjectedBrowserBridgeHashWithoutRelaxingOtherScriptSources()
+    {
+        Assert.AreEqual(
+            "default-src 'self'; script-src 'self' 'sha256-abc'",
+            WebAppResponsePolicy.RewriteContentSecurityPolicy(
+                "default-src 'self'; script-src 'self'; frame-ancestors 'none'",
+                "sha256-abc"));
+        Assert.AreEqual(
+            "default-src 'self' 'sha256-abc'",
+            WebAppResponsePolicy.RewriteContentSecurityPolicy(
+                "default-src 'self'; frame-ancestors 'none'",
+                "sha256-abc"));
+    }
+
+    [TestMethod]
     public void ReturnsNullOrEmptyInputUnchanged()
     {
         Assert.IsNull(WebAppResponsePolicy.RewriteContentSecurityPolicy(null));
