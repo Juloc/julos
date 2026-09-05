@@ -62,7 +62,7 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
   - narrow `Content-Security-Policy` `frame-ancestors` to the JulOS shell origin and drop directives that would block embedding;
   - adjust `Set-Cookie` `Domain` and `SameSite` so the application's own session cookies stay first-party inside the window iframe;
   - resolve relative, scheme-relative and absolute redirect/location headers against the actual upstream request and rewrite HTTP(S) navigation back into the JulOS proxy host;
-  - downgrade upstream 301/308 redirects to temporary 302/307 responses at the proxy boundary and mark redirected responses `no-store`, preventing permanent browser cache entries for encoded proxy hosts;
+  - downgrade upstream 301/308 redirects to temporary 302/307 responses at the proxy boundary, mark redirected responses `no-store`, and send `Clear-Site-Data: "cache"` for permanent upstream redirects so stale encoded-origin redirect caches self-heal;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;
   - apply request and idle timeouts and a per-target request-rate budget.
 - **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through a target-bound `host.stream/1` grant on the outbound Host Connector tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.

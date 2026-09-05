@@ -52,6 +52,12 @@ internal sealed class WebAppProxyMiddleware
             new EventId(1503, nameof(LogUpstreamRedirect)),
             "Web application upstream redirect {StatusCode} from {Source} to {Target}.");
 
+    private static readonly Action<ILogger, int, string, Exception?> LogProxyRedirect =
+        LoggerMessage.Define<int, string>(
+            LogLevel.Information,
+            new EventId(1504, nameof(LogProxyRedirect)),
+            "Web application proxy returns redirect {StatusCode} to {Target}.");
+
     private readonly RequestDelegate next;
     private readonly WebAppTargetRegistry registry;
     private readonly WebAppProxyOptions options;
@@ -268,6 +274,27 @@ internal sealed class WebAppProxyMiddleware
             {
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers.Pragma = "no-cache";
+
+                // A permanent redirect cached by the browser for an encoded proxy origin can
+                // survive a JulOS upgrade and bypass the corrected proxy logic entirely. Clear
+                // only the HTTP cache (not cookies/storage) before following downgraded 301/308
+                // redirects so existing proxy-host redirect loops self-heal.
+                if (upstreamStatusCode is StatusCodes.Status301MovedPermanently
+                    or StatusCodes.Status308PermanentRedirect)
+                {
+                    context.Response.Headers["Clear-Site-Data"] = "\"cache\"";
+                }
+
+                if (context.Response.Headers.Location.Count > 0)
+                {
+                    LogProxyRedirect(
+                        this.logger,
+                        context.Response.StatusCode,
+                        SanitizeRedirectForLog(
+                            upstreamRequest.RequestUri!,
+                            new Uri(context.Response.Headers.Location.ToString(), UriKind.RelativeOrAbsolute)),
+                        null);
+                }
             }
 
             await upstreamResponse.Content
