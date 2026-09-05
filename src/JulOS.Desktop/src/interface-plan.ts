@@ -2,9 +2,15 @@
 
 export type InterfaceViewport = 'desktop' | 'tablet' | 'mobile';
 
-export type WindowChromeStyle = 'windows' | 'macos';
+export type WindowChromeStyle = 'windows' | 'macos' | 'mobile';
 
-export function classifyWindowChrome(platform: string | null | undefined): WindowChromeStyle {
+export function classifyWindowChrome(
+  platform: string | null | undefined,
+  viewport: InterfaceViewport = 'desktop',
+): WindowChromeStyle {
+  if (viewport === 'mobile') {
+    return 'mobile';
+  }
   return platform?.toLowerCase().includes('mac') === true ? 'macos' : 'windows';
 }
 
@@ -85,7 +91,6 @@ export class InterfacePlanController {
     this.#connected = true;
     this.#ensureStyleSheet();
     this.#ensureEditToolbar();
-    this.#host.dataset['windowChrome'] = classifyWindowChrome(this.#window.navigator.platform);
     this.#syncViewport();
     this.#root.addEventListener('pointerdown', this.#pointerDownHandler, true);
     this.#root.addEventListener('pointermove', this.#pointerMoveHandler, true);
@@ -204,7 +209,9 @@ export class InterfacePlanController {
 
   #syncViewport(): void {
     const width = Math.max(this.#host.getBoundingClientRect().width, this.#window.innerWidth, 320);
-    this.#host.dataset['interfaceViewport'] = classifyInterfaceViewport(width);
+    const viewport = classifyInterfaceViewport(width);
+    this.#host.dataset['interfaceViewport'] = viewport;
+    this.#host.dataset['windowChrome'] = classifyWindowChrome(this.#window.navigator.platform, viewport);
   }
 
   #onPointerDown(event: PointerEvent): void {

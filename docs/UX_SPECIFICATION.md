@@ -69,7 +69,7 @@ Every standard window contains:
 - maximize or restore
 - close
 
-Desktop title bars present these as one standard three-control group. Windows/Linux use right-side window controls; macOS uses left-side traffic-light placement. Full-screen remains a distinct state but is not a fourth title-bar button; `F11` toggles it. Window chrome must not imitate browser tabs unless the application itself is Browser.
+Desktop title bars present these as one standard three-control group. Windows/Linux use right-side window controls; macOS uses left-side traffic-light placement. Phone/mobile uses a compact JulOS-specific control group regardless of the device OS, so iPhone/iPad-style platform strings cannot cause macOS desktop traffic lights in the mobile layout. Full-screen remains a distinct state but is not a fourth title-bar button; `F11` toggles it. Window chrome must not imitate browser tabs unless the application itself is Browser.
 
 ### 5.1 Window states
 

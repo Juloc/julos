@@ -34,7 +34,7 @@ Window behavior continues to be owned by the existing `WindowStore`, `WindowInte
 
 - clear active/inactive depth;
 - translucent title-bar chrome with readable opaque application bodies;
-- a standard three-control title bar: Windows-style minimize/maximize/close on Windows/Linux and macOS traffic-light placement on macOS, selected as presentation only without a second window model;
+- a standard three-control title bar: Windows-style minimize/maximize/close on Windows/Linux and macOS traffic-light placement on macOS; Phone/mobile presentation always switches to the compact JulOS control set and never inherits desktop traffic lights;
 - full-screen remains a distinct window state and is available through `F11` instead of a non-standard fourth title-bar glyph;
 - consistent control sizing;
 - visible snap previews;
@@ -76,6 +76,7 @@ JulOS keeps one shell and one application model.
 ### Mobile (`< 720 px`)
 
 - one full-screen application is the default;
+- title-bar controls use the compact JulOS mobile presentation independently of the device operating system;
 - an explicit Split action presents at most two applications, top/bottom in Portrait and left/right in Landscape;
 - taskbar and launcher respect safe areas and use larger targets;
 - nonessential labels collapse before core actions;

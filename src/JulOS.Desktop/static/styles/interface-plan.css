@@ -389,6 +389,41 @@
   background: #28c840;
 }
 
+/* Mobile keeps one compact JulOS control set regardless of the host OS. */
+:host([data-window-chrome="mobile"]) .window-titlebar {
+  justify-content: space-between;
+  padding-right: max(4px, env(safe-area-inset-right));
+}
+
+:host([data-window-chrome="mobile"]) .window-title {
+  width: auto;
+  text-align: left;
+}
+
+:host([data-window-chrome="mobile"]) .window-controls {
+  position: static;
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+  gap: 0;
+}
+
+:host([data-window-chrome="mobile"]) .window-controls button {
+  width: 40px;
+  height: 100%;
+  border-radius: 10px;
+  background: transparent;
+}
+
+:host([data-window-chrome="mobile"]) .window-controls button:hover {
+  background: color-mix(in srgb, var(--julos-color-surface-hover) 72%, transparent);
+}
+
+:host([data-window-chrome="mobile"]) .window-controls button[data-action="close"]:hover {
+  background: color-mix(in srgb, #c42b1c 82%, transparent);
+  color: #fff;
+}
+
 .snap-preview {
   border-width: 1px;
   border-color: color-mix(in srgb, var(--julos-color-accent) 74%, white 12%);
@@ -696,7 +731,7 @@
 }
 
 :host([data-interface-viewport="mobile"]) .window-controls button {
-  width: 42px;
+  width: 40px;
 }
 
 :host([data-interface-viewport="mobile"]) .desktop-edit-toolbar {

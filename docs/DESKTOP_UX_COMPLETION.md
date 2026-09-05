@@ -59,7 +59,7 @@ The interaction model must be neutral enough for Windows and macOS users while r
 ### Windows and application behavior
 
 - drag and resize with predictable hit targets;
-- minimize, maximize/restore and close use the familiar three-control title-bar layout for the detected desktop platform; macOS uses left traffic-light placement while Windows/Linux use right-side window controls;
+- minimize, maximize/restore and close use the familiar three-control title-bar layout for the detected desktop platform; macOS uses left traffic-light placement while Windows/Linux use right-side window controls, while Phone/mobile uses one compact JulOS control set independent of host-platform detection;
 - full-screen remains separate from maximize and is available through `F11`, avoiding a non-standard fourth title-bar control;
 - maximized and snapped windows use bounds that end above the complete taskbar footprint;
 - double-clicking a title bar toggles maximize/restore;
