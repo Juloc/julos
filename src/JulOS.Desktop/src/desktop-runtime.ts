@@ -24,10 +24,6 @@ import { WidgetHostStore } from './widget-host.js';
 import { WindowInteractionController, type ResizeEdge } from './window-interactions.js';
 import { WindowSnapController } from './window-snapping.js';
 
-const HiddenLegacyBrowserPackageIds = new Set([
-  'de.juloc.julos.browser',
-  'de.juloc.julos.adaptive-browser',
-]);
 import {
   AltTabWindowSwitcher,
   TaskbarWindowModel,
@@ -41,6 +37,9 @@ import {
   type UsableArea,
   type WindowBounds,
 } from './window-store.js';
+
+const AdaptiveBrowserPackageId = 'de.juloc.julos.adaptive-browser';
+const LegacyRemoteBrowserPackageId = 'de.juloc.julos.browser';
 
 export interface DesktopRuntimeElements {
   readonly windowLayer: HTMLElement;
@@ -296,9 +295,9 @@ export class DesktopRuntime {
     const coreApplications = this.#coreApplications.applications()
       .filter((application) => this.#webAppBrowserAvailable
         || application.applicationDefinitionId !== CoreApplicationIds.webappBrowser);
-    const visiblePackageApplications = packageApplications.filter(
-      (application) => !HiddenLegacyBrowserPackageIds.has(application.packageId),
-    );
+    const visiblePackageApplications = packageApplications.filter((application) =>
+      application.packageId !== AdaptiveBrowserPackageId
+      && (!this.#webAppBrowserAvailable || application.packageId !== LegacyRemoteBrowserPackageId));
     const applications = [
       ...coreApplications,
       ...this.#webApps.applications(),

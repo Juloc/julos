@@ -213,19 +213,26 @@ public sealed class WebAppTargetRegistry
 
 /// <summary>
 /// Resolves a dynamically-encoded proxy host (<c>wa&lt;base32&gt;.&lt;zone&gt;</c>) to its target
-/// origin when dynamic mode is enabled, gated by a default-deny SSRF allowlist of CIDR ranges and
-/// DNS suffixes (see <c>docs/WEB-APP-RENDERING.md</c>).
+/// origin when dynamic mode is enabled. Public Internet destinations are permitted through pinned
+/// DNS resolution, while non-public address space remains default-deny unless explicitly allowlisted
+/// by CIDR/DNS policy (see <c>docs/WEB-APP-RENDERING.md</c>).
 /// </summary>
 internal sealed class WebAppDynamicProxyPolicy
 {
     private readonly bool enabled;
     private readonly string zone;
+    private readonly bool allowPublicInternet;
     private readonly IReadOnlyList<AllowEntry> allowlist;
 
-    private WebAppDynamicProxyPolicy(bool enabled, string zone, IReadOnlyList<AllowEntry> allowlist)
+    private WebAppDynamicProxyPolicy(
+        bool enabled,
+        string zone,
+        bool allowPublicInternet,
+        IReadOnlyList<AllowEntry> allowlist)
     {
         this.enabled = enabled;
         this.zone = zone;
+        this.allowPublicInternet = allowPublicInternet;
         this.allowlist = allowlist;
     }
 
@@ -238,7 +245,7 @@ internal sealed class WebAppDynamicProxyPolicy
         ArgumentNullException.ThrowIfNull(configuration);
         if (!configuration.GetValue("WebApps:Dynamic:Enabled", false))
         {
-            return new WebAppDynamicProxyPolicy(false, string.Empty, []);
+            return new WebAppDynamicProxyPolicy(false, string.Empty, false, []);
         }
 
         var zone = configuration["WebApps:Dynamic:ProxyZone"]?.Trim().Trim('.').ToLowerInvariant();
@@ -259,12 +266,13 @@ internal sealed class WebAppDynamicProxyPolicy
                 "WebApps:Dynamic:ProxyZone must be within Authentication:CookieDomain so the JulOS session reaches encoded proxy hosts.");
         }
 
+        var allowPublicInternet = configuration.GetValue("WebApps:Dynamic:AllowPublicInternet", true);
         var allowlist = (configuration.GetSection("WebApps:Dynamic:AllowedHosts").Get<string[]>() ?? [])
             .Select(AllowEntry.TryParse)
             .OfType<AllowEntry>()
             .ToArray();
 
-        return new WebAppDynamicProxyPolicy(true, zone, allowlist);
+        return new WebAppDynamicProxyPolicy(true, zone, allowPublicInternet, allowlist);
     }
 
     /// <summary>Decodes and authorizes a dynamic proxy host, or returns <see langword="false"/>.</summary>
@@ -283,8 +291,9 @@ internal sealed class WebAppDynamicProxyPolicy
     }
 
     /// <summary>
-    /// Resolves the target once and retains only addresses covered by an explicit CIDR allowlist.
-    /// A DNS suffix authorizes the name; a CIDR authorizes the address reached after resolution.
+    /// Resolves the target once and retains only addresses allowed by policy. Public Internet
+    /// addresses are allowed when enabled; non-public addresses require an explicit CIDR allowlist.
+    /// DNS is resolved once and the selected connection is pinned to that validated address set.
     /// </summary>
     public async Task<IPAddress[]> ResolveAllowedAddressesAsync(Uri origin, CancellationToken cancellationToken)
     {
@@ -311,11 +320,64 @@ internal sealed class WebAppDynamicProxyPolicy
         }
 
         var dnsName = origin.IdnHost.ToLowerInvariant();
-        return this.allowlist.Any(entry => entry.MatchesDnsName(dnsName));
+        return this.allowPublicInternet || this.allowlist.Any(entry => entry.MatchesDnsName(dnsName));
     }
 
     private bool AddressIsAllowed(IPAddress address) =>
-        this.allowlist.Any(entry => entry.MatchesAddress(address));
+        this.allowlist.Any(entry => entry.MatchesAddress(address))
+        || (this.allowPublicInternet && IsPublicInternetAddress(address));
+
+    private static bool IsPublicInternetAddress(IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            var bytes = address.GetAddressBytes();
+            var first = bytes[0];
+            var second = bytes[1];
+            var third = bytes[2];
+
+            return first != 0
+                && first != 10
+                && first != 127
+                && !(first == 100 && second >= 64 && second <= 127)
+                && !(first == 169 && second == 254)
+                && !(first == 172 && second >= 16 && second <= 31)
+                && !(first == 192 && second == 0 && third == 0)
+                && !(first == 192 && second == 0 && third == 2)
+                && !(first == 192 && second == 168)
+                && !(first == 198 && (second == 18 || second == 19))
+                && !(first == 198 && second == 51 && third == 100)
+                && !(first == 203 && second == 0 && third == 113)
+                && first < 224;
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetworkV6
+            || IPAddress.IsLoopback(address)
+            || address.Equals(IPAddress.IPv6Any)
+            || address.Equals(IPAddress.IPv6None)
+            || address.IsIPv6LinkLocal
+            || address.IsIPv6Multicast
+            || address.IsIPv6SiteLocal)
+        {
+            return false;
+        }
+
+        var ipv6 = address.GetAddressBytes();
+        if ((ipv6[0] & 0xfe) == 0xfc)
+        {
+            return false;
+        }
+
+        // 2001:db8::/32 is documentation-only and must not be treated as a public destination.
+        return !(ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0x0d && ipv6[3] == 0xb8);
+    }
 
     private static string NormalizeAddressLiteral(string host) =>
         host.StartsWith('[') && host.EndsWith(']') ? host[1..^1] : host;

@@ -623,7 +623,7 @@ type TextKey = keyof typeof messages.en;
 
 const messages = {
   en: {
-    settings: 'Settings', packages: 'Package Manager', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Notifications', problems: 'Problems', webappBrowser: 'Web Browser',
+    settings: 'Settings', packages: 'Package Manager', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Notifications', problems: 'Problems', webappBrowser: 'Browser',
     language: 'Language', theme: 'Theme', motion: 'Motion', timeZone: 'Time zone', system: 'System', light: 'Light', dark: 'Dark',
     motionEnabled: 'Enabled', motionReduced: 'Reduced', save: 'Save', saving: 'Saving…', saved: 'Saved', loading: 'Loading…',
     requestFailed: 'Request failed.', refresh: 'Refresh', storeDescription: 'Official JulOS packages. Signatures, configuration and activation are handled automatically.',
@@ -636,7 +636,7 @@ const messages = {
     configuration: 'Configuration JSON', configure: 'Configure',
   },
   de: {
-    settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme', webappBrowser: 'Web-Browser',
+    settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme', webappBrowser: 'Browser',
     language: 'Sprache', theme: 'Design', motion: 'Animationen', timeZone: 'Zeitzone', system: 'System', light: 'Hell', dark: 'Dunkel',
     motionEnabled: 'Aktiviert', motionReduced: 'Reduziert', save: 'Speichern', saving: 'Speichern…', saved: 'Gespeichert', loading: 'Laden…',
     requestFailed: 'Anfrage fehlgeschlagen.', refresh: 'Aktualisieren', storeDescription: 'Offizielle JulOS-Pakete. Signatur, Konfiguration und Aktivierung erledigt JulOS automatisch.',

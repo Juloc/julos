@@ -359,6 +359,7 @@ public sealed class WebAppProxyEndpointTests
                 ["Authentication:CookieDomain"] = ".localtest.me",
                 ["WebApps:Dynamic:Enabled"] = "true",
                 ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+                ["WebApps:Dynamic:AllowPublicInternet"] = "false",
                 ["WebApps:Dynamic:AllowedHosts:0"] = "127.0.0.0/8",
                 ["WebApps:AllowInvalidUpstreamCertificates"] = "true",
             });
@@ -372,6 +373,7 @@ public sealed class WebAppProxyEndpointTests
                 ["Authentication:CookieDomain"] = ".localtest.me",
                 ["WebApps:Dynamic:Enabled"] = "true",
                 ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+                ["WebApps:Dynamic:AllowPublicInternet"] = "false",
                 ["WebApps:Dynamic:AllowedHosts:0"] = "localhost",
                 ["WebApps:Dynamic:AllowedHosts:1"] = allowedCidr,
                 ["WebApps:AllowInvalidUpstreamCertificates"] = "true",

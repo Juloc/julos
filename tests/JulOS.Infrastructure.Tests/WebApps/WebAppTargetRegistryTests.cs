@@ -135,6 +135,7 @@ public sealed class WebAppTargetRegistryTests
             ["Authentication:CookieDomain"] = ".localtest.me",
             ["WebApps:Dynamic:Enabled"] = "true",
             ["WebApps:Dynamic:ProxyZone"] = "p.localtest.me",
+            ["WebApps:Dynamic:AllowPublicInternet"] = "false",
         };
         for (var index = 0; index < allowedHosts.Length; index++)
         {
@@ -218,6 +219,37 @@ public sealed class WebAppTargetRegistryTests
         var host = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10:8443"), "p.localtest.me")!;
 
         Assert.IsFalse(registry.TryResolve(host, out _));
+    }
+
+    [TestMethod]
+    public async Task PublicInternetModeAllowsPublicLiteralButNotPrivateLiteral()
+    {
+        var values = DynamicConfig();
+        values["WebApps:Dynamic:AllowPublicInternet"] = "true";
+        var registry = WebAppTargetRegistry.Read(Configuration(values));
+
+        var publicHost = WebAppOriginCodec.EncodeHost(new Uri("https://8.8.8.8"), "p.localtest.me")!;
+        Assert.IsTrue(registry.TryResolve(publicHost, out var publicTarget));
+        var publicAddresses = await registry
+            .ResolveAllowedAddressesAsync(publicTarget, CancellationToken.None)
+            .ConfigureAwait(false);
+        CollectionAssert.AreEqual(new[] { IPAddress.Parse("8.8.8.8") }, publicAddresses);
+
+        var privateHost = WebAppOriginCodec.EncodeHost(new Uri("https://192.168.1.10"), "p.localtest.me")!;
+        Assert.IsFalse(registry.TryResolve(privateHost, out _));
+    }
+
+    [TestMethod]
+    public void PublicInternetModeAcceptsDnsNamesBeforePinnedAddressValidation()
+    {
+        var values = DynamicConfig();
+        values["WebApps:Dynamic:AllowPublicInternet"] = "true";
+        var registry = WebAppTargetRegistry.Read(Configuration(values));
+        var host = WebAppOriginCodec.EncodeHost(new Uri("https://example.com"), "p.localtest.me")!;
+
+        Assert.IsTrue(registry.TryResolve(host, out var target));
+        Assert.AreEqual(new Uri("https://example.com/"), target.Upstream);
+        Assert.IsTrue(target.RequiresAddressPinning);
     }
 
     [TestMethod]

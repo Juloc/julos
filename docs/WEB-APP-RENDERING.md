@@ -4,7 +4,7 @@ Status: In progress. D035 defines transparent proxy rendering and D042 defines t
 
 ## 1. Goal
 
-An internal web application must render in the user's own browser, inside a movable JulOS desktop window, so that video, canvas, WebGL and other interactive content decode and run locally with hardware acceleration.
+A web target must render in the user's own browser, inside a movable JulOS desktop window, so that video, canvas, WebGL and other interactive content decode and run locally with hardware acceleration.
 
 Pixel-streaming a remote browser is heavy, discards local hardware decoding and is the wrong transport for media and interactive local content. It remains available where isolation or full browser compatibility is required.
 
@@ -84,14 +84,20 @@ https://grafana.lan:3000
 wa<base32-origin>.p.os.juloc.de
 ```
 
-The encoded host is reversible and carries no credential. Dynamic mode remains default-deny through `WebApps:Dynamic:AllowedHosts`.
+The encoded host is reversible and carries no credential. Browser proxy mode supports ordinary
+public Internet destinations by default while keeping private/non-public address space protected
+against SSRF. DNS is resolved by JulOS and the connection is pinned to the validated address set.
 
-The allowlist has two independent meanings:
+`WebApps:Dynamic:AllowedHosts` remains the explicit policy for internal/private targets. The
+allowlist has two independent meanings:
 
 - a DNS suffix entry such as `.lan` authorizes a DNS **name**;
 - a CIDR entry such as `192.168.0.0/16` authorizes a resolved **network address**.
 
-A literal IP target must be covered by a CIDR entry. A DNS-name target must match an allowed DNS suffix and, after resolution, at least one resolved address must be covered by an explicit CIDR entry. A suffix alone never grants network reachability.
+A private literal IP target must be covered by a CIDR entry. A private DNS-name target must match an
+allowed DNS suffix and, after resolution, at least one resolved address must be covered by an
+explicit CIDR entry. Public DNS names may be browsed without an allowlist entry, but any resolved
+private/loopback/link-local address is discarded unless explicitly allowlisted.
 
 For every dynamic request JulOS resolves the target before opening a connection, discards addresses outside the configured CIDRs and passes only the validated addresses to the transport. HTTP and WebSocket connections are opened directly to one of those validated addresses while the original target host remains the HTTP/TLS authority. The transport therefore cannot perform a second uncontrolled DNS lookup between authorization and connect. If DNS fails the request reports the upstream unavailable; if the name resolves only outside the configured networks the request is denied.
 
@@ -169,11 +175,12 @@ WebApps:AllowInvalidUpstreamCertificates  false   # opt-in for self-signed inter
 Authentication:CookieDomain      .os.juloc.de     # parent-domain scope so the session reaches target subdomains
 ```
 
-Dynamic Browser address-bar mode is explicit and default-deny:
+Dynamic Browser address-bar mode is explicit. Public Internet access defaults on; private targets remain default-deny:
 
 ```text
 WebApps:Dynamic:Enabled          true
 WebApps:Dynamic:ProxyZone        p.os.juloc.de
+WebApps:Dynamic:AllowPublicInternet true
 WebApps:Dynamic:AllowedHosts:0   .lan
 WebApps:Dynamic:AllowedHosts:1   192.168.0.0/16
 WebApps:Dynamic:AllowedHosts:2   10.0.0.0/8
