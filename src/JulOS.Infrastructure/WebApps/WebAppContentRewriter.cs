@@ -14,8 +14,24 @@ public static partial class WebAppContentRewriter
 {
     private const int MaximumProxyLabelLength = 63;
 
-    public readonly record struct RewrittenHtml(string Content, string ScriptHash);
+    /// <summary>Rewritten HTML content plus the CSP source hash for the injected Browser bridge.</summary>
+    public sealed class RewrittenHtml
+    {
+        /// <summary>Creates a rewritten HTML result.</summary>
+        public RewrittenHtml(string content, string scriptHash)
+        {
+            this.Content = content;
+            this.ScriptHash = scriptHash;
+        }
 
+        /// <summary>Gets the rewritten HTML document.</summary>
+        public string Content { get; }
+
+        /// <summary>Gets the SHA-256 CSP source expression without surrounding quotes.</summary>
+        public string ScriptHash { get; }
+    }
+
+    /// <summary>Rewrites absolute HTML/CSS references and injects the Browser bridge.</summary>
     public static RewrittenHtml RewriteHtml(
         string html,
         Uri upstreamRequestUri,
@@ -42,6 +58,7 @@ public static partial class WebAppContentRewriter
         return new RewrittenHtml(rewritten, $"sha256-{hash}");
     }
 
+    /// <summary>Rewrites absolute HTTP(S) URLs in CSS into JulOS proxy URLs.</summary>
     public static string RewriteCss(
         string css,
         Uri upstreamRequestUri,
@@ -63,6 +80,7 @@ public static partial class WebAppContentRewriter
                 match.Groups["suffix"].Value));
     }
 
+    /// <summary>Maps one absolute or scheme-relative HTTP(S) URL into the encoded proxy zone.</summary>
     public static string RewriteUrl(
         string value,
         Uri upstreamRequestUri,
