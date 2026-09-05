@@ -1,5 +1,5 @@
-# Publication trigger: v0.4.0-beta.23
-name: Beta4 publish dispatcher
+# Publication trigger: v0.4.0-beta.32
+name: JulOS prerelease publish dispatcher
 
 on:
   push:
@@ -16,11 +16,10 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Beta4 publications
+      - name: Dispatch JulOS prerelease publication
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=session-runtimes
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=prerelease
-          echo "Beta4 publication workflows dispatched."
+          echo "JulOS prerelease publication workflow dispatched."
