@@ -5,7 +5,7 @@
 #   docker compose up --build
 #
 # This file is for development. Package workers and package-owned session
-# runtimes (Browser, Remote provider) join the stack with the work items
+# runtimes (for example Remote provider) join the stack with the work items
 # that implement them; only Runtime Manager and its own container network
 # are wired here.
 #
@@ -93,7 +93,7 @@ services:
     restart: unless-stopped
 
   # Runtime Manager needs the host's Docker socket to create the narrow,
-  # labeled containers it owns (Browser sessions, Remote provider runtimes).
+  # labeled containers it owns (Remote provider runtimes).
   # It is optional: the stack runs without it, and Remote sessions simply
   # fail closed until Remote__RuntimeManager__Endpoint is configured above.
   runtime-manager:

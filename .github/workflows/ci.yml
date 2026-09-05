@@ -63,9 +63,6 @@ jobs:
       - name: Validate
         run: sh tools/validate.sh
 
-      - name: Adaptive Browser container smoke
-        run: node tools/smoke-adaptive-browser.mjs
-
       - name: Verify clean tree
         run: |
           git status --short

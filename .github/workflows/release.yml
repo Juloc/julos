@@ -12,7 +12,6 @@ on:
         type: choice
         options:
           - prerelease
-          - browser-runtime
           - session-runtimes
           - remote-transport
 
@@ -25,7 +24,6 @@ concurrency:
 
 env:
   DOCKER_BUILD_RECORD_UPLOAD: "false"
-  JULOS_BROWSER_RUNTIME_IMAGE: ghcr.io/juloc/julos-browser-runtime@sha256:14ecfacb71a0e461351e2e87c19b80413d0f704ca2270f060c64404a6903743d
   JULOS_PACKAGE_KEY_ID: official-alpha-2026
 
 jobs:
@@ -137,7 +135,7 @@ jobs:
           node-version-file: src/JulOS.Desktop/.nvmrc
 
       - name: Validate package frontends
-        run: sh tools/validate.sh --stage remote-frontend-install --stage remote-frontend-build --stage remote-frontend-test --stage browser-frontend-test --stage adaptive-browser-frontend-test
+        run: sh tools/validate.sh --stage remote-frontend-install --stage remote-frontend-build --stage remote-frontend-test
 
   validate-meta:
     name: Validate metadata
@@ -205,7 +203,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash tools/stage-official-package-catalog.sh deploy/official-packages "$JULOS_BROWSER_RUNTIME_IMAGE"
+          bash tools/stage-official-package-catalog.sh deploy/official-packages
           test -s deploy/official-packages/catalog.json
           test -s deploy/official-packages/juloc-package-signing-public.pem
           node <<'NODE'
@@ -329,75 +327,9 @@ jobs:
             echo "### JulOS ${{ needs.validate-dotnet.outputs.version }}"
             echo
             echo "- Server: ghcr.io/juloc/julos-server@${{ steps.server.outputs.digest }}"
-            echo "- Browser runtime pinned in package catalog: $JULOS_BROWSER_RUNTIME_IMAGE"
             echo "- GitHub prerelease: v${{ needs.validate-dotnet.outputs.version }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  browser-runtime:
-    name: Publish Browser Runtime
-    if: inputs.target == 'browser-runtime'
-    needs: [validate-dotnet, validate-desktop, validate-frontends, validate-meta, validate-container]
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Refuse existing image
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="ghcr.io/juloc/julos-browser-runtime:${{ needs.validate-dotnet.outputs.version }}"
-          if docker manifest inspect "$image" >/dev/null 2>&1; then
-            echo "Browser runtime version already exists: $image" >&2
-            exit 1
-          fi
-
-      - name: Publish Browser Runtime
-        id: image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: packages/JulOS.Browser/runtime/Dockerfile
-          platforms: linux/amd64
-          push: true
-          cache-from: type=gha,scope=julos-browser-runtime
-          cache-to: type=gha,mode=max,scope=julos-browser-runtime
-          tags: ghcr.io/juloc/julos-browser-runtime:${{ needs.validate-dotnet.outputs.version }}
-          build-args: |
-            JULOS_VERSION=${{ needs.validate-dotnet.outputs.version }}
-          provenance: false
-          sbom: false
-
-      - name: Attest Browser Runtime
-        uses: actions/attest@v4
-        with:
-          subject-name: ghcr.io/juloc/julos-browser-runtime
-          subject-digest: ${{ steps.image.outputs.digest }}
-          push-to-registry: true
-
-      - name: Runtime summary
-        shell: bash
-        run: |
-          echo "- Browser Runtime: ghcr.io/juloc/julos-browser-runtime@${{ steps.image.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
   session-runtimes:
     name: Publish session runtimes
