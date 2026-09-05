@@ -33,14 +33,6 @@ public sealed class ProjectReferenceTests
             "packages/JulOS.Remote/shared/JulOS.Remote.Transport/JulOS.Remote.Transport.csproj",
             "packages/JulOS.Remote/worker/JulOS.Remote.Worker.csproj",
         ],
-        ["tests/JulOS.Browser.Worker.Tests/JulOS.Browser.Worker.Tests.csproj"] = [
-            "packages/JulOS.Browser/worker/JulOS.Browser.Worker.csproj",
-            PlatformProjects.PackageSdk,
-        ],
-        ["tests/JulOS.AdaptiveBrowser.Worker.Tests/JulOS.AdaptiveBrowser.Worker.Tests.csproj"] = [
-            "packages/JulOS.AdaptiveBrowser/worker/JulOS.AdaptiveBrowser.Worker.csproj",
-            PlatformProjects.PackageSdk,
-        ],
     };
 
     [TestMethod]
