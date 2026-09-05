@@ -38,8 +38,10 @@ import {
   type WindowBounds,
 } from './window-store.js';
 
-const AdaptiveBrowserPackageId = 'de.juloc.julos.adaptive-browser';
-const LegacyRemoteBrowserPackageId = 'de.juloc.julos.browser';
+const RemovedBrowserPackageIds = new Set([
+  'de.juloc.julos.browser',
+  'de.juloc.julos.adaptive-browser',
+]);
 
 export interface DesktopRuntimeElements {
   readonly windowLayer: HTMLElement;
@@ -295,9 +297,9 @@ export class DesktopRuntime {
     const coreApplications = this.#coreApplications.applications()
       .filter((application) => this.#webAppBrowserAvailable
         || application.applicationDefinitionId !== CoreApplicationIds.webappBrowser);
-    const visiblePackageApplications = packageApplications.filter((application) =>
-      application.packageId !== AdaptiveBrowserPackageId
-      && (!this.#webAppBrowserAvailable || application.packageId !== LegacyRemoteBrowserPackageId));
+    const visiblePackageApplications = packageApplications.filter(
+      (application) => !RemovedBrowserPackageIds.has(application.packageId),
+    );
     const applications = [
       ...coreApplications,
       ...this.#webApps.applications(),

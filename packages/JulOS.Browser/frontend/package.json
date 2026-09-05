@@ -1,8 +1,0 @@
-{
-  "name": "@julos/browser-frontend",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test --test-timeout=30000 test/*.test.mjs"
-  }
-}

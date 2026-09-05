@@ -14,21 +14,12 @@ public sealed class WebAppTargetRegistryTests
 
     private static Dictionary<string, string?> OneTarget(
         string host = "unifi.os.juloc.de",
-        string upstream = "https://10.0.0.5:8443",
-        string? mode = null)
-    {
-        var values = new Dictionary<string, string?>
+        string upstream = "https://10.0.0.5:8443") =>
+        new()
         {
             ["WebApps:Targets:0:Host"] = host,
             ["WebApps:Targets:0:Upstream"] = upstream,
         };
-        if (mode is not null)
-        {
-            values["WebApps:Targets:0:RenderingMode"] = mode;
-        }
-
-        return values;
-    }
 
     [TestMethod]
     public void EmptyConfigurationYieldsAnEmptyRegistry()
@@ -48,35 +39,7 @@ public sealed class WebAppTargetRegistryTests
         Assert.IsTrue(registry.TryResolve("UNIFI.os.juloc.de:443", out var target));
         Assert.AreEqual("unifi.os.juloc.de", target.Host);
         Assert.AreEqual(new Uri("https://10.0.0.5:8443"), target.Upstream);
-        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
         Assert.IsFalse(target.RequiresAddressPinning);
-    }
-
-    [TestMethod]
-    public void DefaultsToLocalRenderingWhenModeIsOmitted()
-    {
-        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget()));
-
-        Assert.IsTrue(registry.TryResolve("unifi.os.juloc.de", out var target));
-        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
-    }
-
-    [TestMethod]
-    public void ResolvesAnAutoTarget()
-    {
-        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget(mode: "auto")));
-
-        Assert.IsTrue(registry.TryResolve("unifi.os.juloc.de", out var target));
-        Assert.AreEqual(WebAppRenderingMode.Auto, target.RenderingMode);
-    }
-
-    [TestMethod]
-    public void DoesNotResolveAStreamedTarget()
-    {
-        var registry = WebAppTargetRegistry.Read(Configuration(OneTarget(mode: "streamed")));
-
-        Assert.AreEqual(1, registry.Count);
-        Assert.IsFalse(registry.TryResolve("unifi.os.juloc.de", out _));
     }
 
     [TestMethod]
@@ -104,14 +67,6 @@ public sealed class WebAppTargetRegistryTests
             () => WebAppTargetRegistry.Read(Configuration(OneTarget(host: "https://unifi.os.juloc.de"))));
         Assert.ThrowsExactly<InvalidOperationException>(
             () => WebAppTargetRegistry.Read(Configuration(OneTarget(host: "unifi.os.juloc.de:443"))));
-    }
-
-    [TestMethod]
-    public void ThrowsOnAnUnknownRenderingMode()
-    {
-        var configuration = Configuration(OneTarget(mode: "embedded"));
-
-        Assert.ThrowsExactly<InvalidOperationException>(() => WebAppTargetRegistry.Read(configuration));
     }
 
     [TestMethod]
@@ -153,7 +108,6 @@ public sealed class WebAppTargetRegistryTests
 
         Assert.IsTrue(registry.TryResolve(host, out var target));
         Assert.AreEqual(new Uri("https://192.168.1.10:8443/"), target.Upstream);
-        Assert.AreEqual(WebAppRenderingMode.Local, target.RenderingMode);
         Assert.IsTrue(target.RequiresAddressPinning);
 
         var addresses = await registry.ResolveAllowedAddressesAsync(target, CancellationToken.None).ConfigureAwait(false);
