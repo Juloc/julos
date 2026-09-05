@@ -263,6 +263,37 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
+    public async Task PermanentUpstreamRedirectIsTemporaryAndNotCacheableAtTheProxyHost()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var redirect = DynamicRequest(encodedHost, "/permanent-redirect", cookie);
+            using var response = await client.SendAsync(redirect).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.AreEqual($"http://{encodedHost}/dashboard", Single(response, "Location"));
+            Assert.AreEqual("no-store", Single(response, "Cache-Control"));
+            Assert.AreEqual("no-cache", Single(response, "Pragma"));
+            Assert.AreEqual("0", Single(response, "Expires"));
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task DynamicHostUsesForwardedHttpsForProxyResponseWithoutForwardingProxyHeadersUpstream()
     {
         var databasePath = CreateDatabasePath();
@@ -529,6 +560,15 @@ public sealed class WebAppProxyEndpointTests
                 context.Response.Headers.Location =
                     $"{context.Request.Scheme}://{context.Request.Host}/dashboard";
                 context.Response.Headers.SetCookie = "app=1; Domain=127.0.0.1; Path=/; SameSite=Lax";
+                return;
+            }
+
+            if (context.Request.Path == "/permanent-redirect")
+            {
+                context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                context.Response.Headers.Location =
+                    $"{context.Request.Scheme}://{context.Request.Host}/dashboard";
+                context.Response.Headers.CacheControl = "public, max-age=86400";
                 return;
             }
 

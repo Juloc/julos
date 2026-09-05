@@ -122,6 +122,24 @@ public sealed class WebAppResponsePolicyTests
     }
 
     [TestMethod]
+    [DataRow(301, 302)]
+    [DataRow(308, 307)]
+    [DataRow(302, 302)]
+    [DataRow(303, 303)]
+    [DataRow(307, 307)]
+    public void NormalizeRedirectStatusCodeAvoidsPermanentProxyRedirects(int upstreamStatus, int expected)
+    {
+        Assert.AreEqual(expected, WebAppResponsePolicy.NormalizeRedirectStatusCode(upstreamStatus, hasLocation: true));
+    }
+
+    [TestMethod]
+    public void NormalizeRedirectStatusCodeLeavesNonRedirectResponsesAndLocationlessStatusesUntouched()
+    {
+        Assert.AreEqual(301, WebAppResponsePolicy.NormalizeRedirectStatusCode(301, hasLocation: false));
+        Assert.AreEqual(200, WebAppResponsePolicy.NormalizeRedirectStatusCode(200, hasLocation: false));
+    }
+
+    [TestMethod]
     public void RewriteSetCookieDropsDomainAndSecureOverHttp()
     {
         Assert.AreEqual(

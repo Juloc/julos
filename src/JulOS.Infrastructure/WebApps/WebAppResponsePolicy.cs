@@ -106,6 +106,21 @@ public static class WebAppResponsePolicy
     }
 
     /// <summary>
+    /// Prevents permanent upstream redirects from becoming permanent cache entries for an encoded
+    /// JulOS proxy host. A cached proxy-host redirect can outlive the upstream mapping and create
+    /// redirect loops that never reach JulOS again.
+    /// </summary>
+    public static int NormalizeRedirectStatusCode(int statusCode, bool hasLocation) =>
+        hasLocation
+            ? statusCode switch
+            {
+                301 => 302,
+                308 => 307,
+                _ => statusCode,
+            }
+            : statusCode;
+
+    /// <summary>
     /// Rewrites an upstream <c>Set-Cookie</c> so the target application's cookie is accepted on the
     /// encoded proxy host: the <c>Domain</c> attribute is dropped (host-only), <c>Secure</c> is
     /// present only over HTTPS (so a plain-HTTP development deployment still receives the cookie),

@@ -236,13 +236,18 @@ internal sealed class WebAppProxyMiddleware
 
         using (upstreamResponse)
         {
-            context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-            if ((int)upstreamResponse.StatusCode is >= 300 and < 400
-                && upstreamResponse.Headers.Location is { } redirectLocation)
+            var upstreamStatusCode = (int)upstreamResponse.StatusCode;
+            var redirectLocation = upstreamResponse.Headers.Location;
+            context.Response.StatusCode = WebAppResponsePolicy.NormalizeRedirectStatusCode(
+                upstreamStatusCode,
+                redirectLocation is not null);
+
+            if (upstreamStatusCode is >= 300 and < 400
+                && redirectLocation is not null)
             {
                 LogUpstreamRedirect(
                     this.logger,
-                    (int)upstreamResponse.StatusCode,
+                    upstreamStatusCode,
                     SanitizeUriForLog(upstreamRequest.RequestUri!),
                     SanitizeRedirectForLog(upstreamRequest.RequestUri!, redirectLocation),
                     null);
@@ -258,6 +263,14 @@ internal sealed class WebAppProxyMiddleware
                     context.Request.Host.Value ?? string.Empty,
                     string.Equals(publicRequestScheme, "https", StringComparison.Ordinal),
                     this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null));
+
+            if (redirectLocation is not null)
+            {
+                context.Response.Headers.CacheControl = "no-store";
+                context.Response.Headers.Pragma = "no-cache";
+                context.Response.Headers.Expires = "0";
+            }
+
             await upstreamResponse.Content
                 .CopyToAsync(context.Response.Body, context.RequestAborted)
                 .ConfigureAwait(false);
