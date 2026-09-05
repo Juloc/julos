@@ -24,6 +24,7 @@ internal sealed class WebAppProxyMiddleware
     internal const string DynamicHttpClientName = "julos-webapp-dynamic-proxy";
 
     private const int WebSocketBufferSize = 16 * 1024;
+    private const int MaximumInternalNavigationRedirects = 5;
 
     private static readonly HttpRequestOptionsKey<IPAddress[]> PinnedAddressesOption =
         new("JulOS.WebApps.PinnedAddresses");
@@ -57,6 +58,12 @@ internal sealed class WebAppProxyMiddleware
             LogLevel.Information,
             new EventId(1504, nameof(LogProxyRedirect)),
             "Web application proxy returns redirect {StatusCode} to {Target}.");
+
+    private static readonly Action<ILogger, string, string, Exception?> LogInternalNavigationRedirect =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Information,
+            new EventId(1505, nameof(LogInternalNavigationRedirect)),
+            "Web application proxy follows same-origin navigation redirect from {Source} to {Target}.");
 
     private readonly RequestDelegate next;
     private readonly WebAppTargetRegistry registry;
@@ -163,7 +170,8 @@ internal sealed class WebAppProxyMiddleware
         var request = context.Request;
         var publicRequestScheme = GetPublicRequestScheme(request);
         var browserDocumentNavigation = IsBrowserDocumentNavigation(request);
-        using var upstreamRequest = new HttpRequestMessage(
+        var browserNavigation = IsBrowserNavigation(request);
+        var upstreamRequest = new HttpRequestMessage(
             new HttpMethod(request.Method),
             BuildUpstreamUri(target.Upstream, request, publicRequestScheme));
 
@@ -221,12 +229,15 @@ internal sealed class WebAppProxyMiddleware
 
         var client = this.httpClientFactory.CreateClient(
             target.RequiresAddressPinning ? DynamicHttpClientName : HttpClientName);
-        HttpResponseMessage upstreamResponse;
+        UpstreamHttpResult upstreamResult;
         try
         {
-            upstreamResponse = await client.SendAsync(
+            upstreamResult = await this.SendUpstreamAsync(
+                client,
                 upstreamRequest,
-                HttpCompletionOption.ResponseHeadersRead,
+                target,
+                pinnedAddresses,
+                browserNavigation,
                 context.RequestAborted).ConfigureAwait(false);
         }
         catch (HttpRequestException exception)
@@ -240,8 +251,21 @@ internal sealed class WebAppProxyMiddleware
             return;
         }
 
-        using (upstreamResponse)
+        using (upstreamResult.Request)
+        using (upstreamResult.Response)
         {
+            if (upstreamResult.RedirectLoopDetected)
+            {
+                await WriteFailureAsync(
+                    context,
+                    StatusCodes.Status508LoopDetected,
+                    "webapp.redirect_loop",
+                    "The web application returned a same-origin redirect loop.").ConfigureAwait(false);
+                return;
+            }
+
+            var upstreamResponse = upstreamResult.Response;
+            var finalUpstreamRequest = upstreamResult.Request;
             var upstreamStatusCode = (int)upstreamResponse.StatusCode;
             var redirectLocation = upstreamResponse.Headers.Location;
             context.Response.StatusCode = WebAppResponsePolicy.NormalizeRedirectStatusCode(
@@ -254,8 +278,8 @@ internal sealed class WebAppProxyMiddleware
                 LogUpstreamRedirect(
                     this.logger,
                     upstreamStatusCode,
-                    SanitizeUriForLog(upstreamRequest.RequestUri!),
-                    SanitizeRedirectForLog(upstreamRequest.RequestUri!, redirectLocation),
+                    SanitizeUriForLog(finalUpstreamRequest.RequestUri!),
+                    SanitizeRedirectForLog(finalUpstreamRequest.RequestUri!, redirectLocation),
                     null);
             }
 
@@ -264,7 +288,7 @@ internal sealed class WebAppProxyMiddleware
                 context.Response,
                 new WebAppResponseContext(
                     target.Upstream,
-                    upstreamRequest.RequestUri!,
+                    finalUpstreamRequest.RequestUri!,
                     publicRequestScheme,
                     context.Request.Host.Value ?? string.Empty,
                     string.Equals(publicRequestScheme, "https", StringComparison.Ordinal),
@@ -291,7 +315,7 @@ internal sealed class WebAppProxyMiddleware
                         this.logger,
                         context.Response.StatusCode,
                         SanitizeRedirectForLog(
-                            upstreamRequest.RequestUri!,
+                            finalUpstreamRequest.RequestUri!,
                             new Uri(context.Response.Headers.Location.ToString(), UriKind.RelativeOrAbsolute)),
                         null);
                 }
@@ -302,6 +326,139 @@ internal sealed class WebAppProxyMiddleware
                 .ConfigureAwait(false);
         }
     }
+
+    private async Task<UpstreamHttpResult> SendUpstreamAsync(
+        HttpClient client,
+        HttpRequestMessage initialRequest,
+        WebAppTarget target,
+        IPAddress[] pinnedAddresses,
+        bool followSameOriginNavigationRedirects,
+        CancellationToken cancellationToken)
+    {
+        var currentRequest = initialRequest;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            currentRequest.RequestUri!.AbsoluteUri,
+        };
+        var followedRedirects = 0;
+
+        while (true)
+        {
+            HttpResponseMessage response;
+            try
+            {
+                response = await client.SendAsync(
+                    currentRequest,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                currentRequest.Dispose();
+                throw;
+            }
+
+            if (!followSameOriginNavigationRedirects
+                || !TryResolveSameOriginNavigationRedirect(
+                    currentRequest,
+                    response,
+                    target.Upstream,
+                    out var redirectTarget))
+            {
+                return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: false);
+            }
+
+            if (followedRedirects >= MaximumInternalNavigationRedirects
+                || !visited.Add(redirectTarget.AbsoluteUri))
+            {
+                return new UpstreamHttpResult(currentRequest, response, RedirectLoopDetected: true);
+            }
+
+            LogInternalNavigationRedirect(
+                this.logger,
+                SanitizeUriForLog(currentRequest.RequestUri!),
+                SanitizeUriForLog(redirectTarget),
+                null);
+
+            response.Dispose();
+            var nextRequest = CloneRedirectRequest(
+                currentRequest,
+                redirectTarget,
+                target,
+                pinnedAddresses);
+            currentRequest.Dispose();
+            currentRequest = nextRequest;
+            followedRedirects++;
+        }
+    }
+
+    private static bool TryResolveSameOriginNavigationRedirect(
+        HttpRequestMessage request,
+        HttpResponseMessage response,
+        Uri upstream,
+        out Uri redirectTarget)
+    {
+        redirectTarget = null!;
+        if (request.Method != HttpMethod.Get && request.Method != HttpMethod.Head)
+        {
+            return false;
+        }
+
+        if ((int)response.StatusCode is not (
+            StatusCodes.Status301MovedPermanently
+            or StatusCodes.Status302Found
+            or StatusCodes.Status303SeeOther
+            or StatusCodes.Status307TemporaryRedirect
+            or StatusCodes.Status308PermanentRedirect))
+        {
+            return false;
+        }
+
+        var location = response.Headers.Location;
+        if (location is null || response.Headers.Contains("Set-Cookie"))
+        {
+            return false;
+        }
+
+        var resolved = location.IsAbsoluteUri ? location : new Uri(request.RequestUri!, location);
+        if (resolved.Scheme is not ("http" or "https")
+            || !string.Equals(
+                resolved.GetLeftPart(UriPartial.Authority),
+                upstream.GetLeftPart(UriPartial.Authority),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        redirectTarget = resolved;
+        return true;
+    }
+
+    private static HttpRequestMessage CloneRedirectRequest(
+        HttpRequestMessage source,
+        Uri redirectTarget,
+        WebAppTarget target,
+        IPAddress[] pinnedAddresses)
+    {
+        var clone = new HttpRequestMessage(source.Method, redirectTarget);
+        foreach (var header in source.Headers)
+        {
+            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        clone.Headers.Host = target.Upstream.Authority;
+        if (target.RequiresAddressPinning)
+        {
+            clone.Options.Set(PinnedAddressesOption, pinnedAddresses);
+        }
+
+        return clone;
+    }
+
+    private sealed record UpstreamHttpResult(
+        HttpRequestMessage Request,
+        HttpResponseMessage Response,
+        bool RedirectLoopDetected);
 
     private async Task ProxyWebSocketAsync(
         HttpContext context,
@@ -612,7 +769,10 @@ internal sealed class WebAppProxyMiddleware
 
     private static bool IsBrowserDocumentNavigation(HttpRequest request) =>
         string.Equals(request.Headers["Sec-Fetch-Dest"].ToString(), "iframe", StringComparison.OrdinalIgnoreCase)
-        && string.Equals(request.Headers["Sec-Fetch-Mode"].ToString(), "navigate", StringComparison.OrdinalIgnoreCase);
+        && IsBrowserNavigation(request);
+
+    private static bool IsBrowserNavigation(HttpRequest request) =>
+        string.Equals(request.Headers["Sec-Fetch-Mode"].ToString(), "navigate", StringComparison.OrdinalIgnoreCase);
 
     private static string SanitizeUriForLog(Uri uri) =>
         uri.GetLeftPart(UriPartial.Path);

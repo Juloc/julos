@@ -294,6 +294,102 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
+    public async Task SameOriginDocumentRedirectIsFollowedInsideTheProxy()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(encodedHost, "/canonical-index", cookie);
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "iframe");
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            Assert.IsFalse(response.Headers.Contains("Location"));
+            Assert.AreEqual(
+                "UPSTREAM-OK:/canonical-final",
+                await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task SameOriginDocumentRedirectLoopFailsExplicitly()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(encodedHost, "/canonical-loop-a", cookie);
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "iframe");
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual((HttpStatusCode)508, response.StatusCode);
+            StringAssert.Contains(
+                await response.Content.ReadAsStringAsync().ConfigureAwait(false),
+                "webapp.redirect_loop");
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task SameOriginRedirectWithCookieRemainsClientVisible()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(encodedHost, "/redirect", cookie);
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "iframe");
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.AreEqual($"http://{encodedHost}/dashboard", Single(response, "Location"));
+            StringAssert.Contains(Single(response, "Set-Cookie"), "app=1");
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task DynamicHostUsesForwardedHttpsForProxyResponseWithoutForwardingProxyHeadersUpstream()
     {
         var databasePath = CreateDatabasePath();
@@ -569,6 +665,27 @@ public sealed class WebAppProxyEndpointTests
                 context.Response.Headers.Location =
                     $"{context.Request.Scheme}://{context.Request.Host}/dashboard";
                 context.Response.Headers.CacheControl = "public, max-age=86400";
+                return;
+            }
+
+            if (context.Request.Path == "/canonical-index")
+            {
+                context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                context.Response.Headers.Location = "/canonical-final";
+                return;
+            }
+
+            if (context.Request.Path == "/canonical-loop-a")
+            {
+                context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                context.Response.Headers.Location = "/canonical-loop-b";
+                return;
+            }
+
+            if (context.Request.Path == "/canonical-loop-b")
+            {
+                context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                context.Response.Headers.Location = "/canonical-loop-a";
                 return;
             }
 
