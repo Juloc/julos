@@ -514,7 +514,7 @@ public sealed class WebAppProxyEndpointTests
             using (var response = await client.SendAsync(request).ConfigureAwait(false))
             {
                 var html = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                StringAssert.Contains(html, $"https://{externalHost}/new");
+                StringAssert.Contains(html, $"http://{externalHost}/new");
                 StringAssert.Contains(html, "data-julos-browser-bridge");
             }
 
@@ -522,7 +522,7 @@ public sealed class WebAppProxyEndpointTests
             using (var response = await client.SendAsync(request).ConfigureAwait(false))
             {
                 var css = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                StringAssert.Contains(css, $"https://{externalHost}/font.woff2");
+                StringAssert.Contains(css, $"http://{externalHost}/font.woff2");
             }
         }
         finally
