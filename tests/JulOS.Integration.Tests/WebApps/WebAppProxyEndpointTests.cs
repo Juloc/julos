@@ -285,7 +285,6 @@ public sealed class WebAppProxyEndpointTests
             Assert.AreEqual($"http://{encodedHost}/dashboard", Single(response, "Location"));
             Assert.AreEqual("no-store", Single(response, "Cache-Control"));
             Assert.AreEqual("no-cache", Single(response, "Pragma"));
-            Assert.AreEqual("0", Single(response, "Expires"));
         }
         finally
         {

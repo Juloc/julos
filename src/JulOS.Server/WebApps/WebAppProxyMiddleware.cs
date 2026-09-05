@@ -268,7 +268,6 @@ internal sealed class WebAppProxyMiddleware
             {
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers.Pragma = "no-cache";
-                context.Response.Headers.Expires = "0";
             }
 
             await upstreamResponse.Content
