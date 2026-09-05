@@ -166,21 +166,19 @@ public static class WebAppResponsePolicy
         ArgumentException.ThrowIfNullOrWhiteSpace(requestScheme);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestHost);
 
-        Uri? target;
-        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
+        Uri? target = null;
+        if (Uri.TryCreate(value, UriKind.Absolute, out var absolute)
+            && absolute.Scheme is "http" or "https")
         {
             target = absolute;
         }
-        else if (Uri.TryCreate(upstreamRequestUri, value, out var resolved))
+        else if (Uri.TryCreate(upstreamRequestUri, value, out var resolved)
+            && resolved.Scheme is "http" or "https")
         {
             target = resolved;
         }
-        else
-        {
-            return value;
-        }
 
-        if (target.Scheme is not ("http" or "https"))
+        if (target is null)
         {
             return value;
         }
