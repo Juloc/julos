@@ -11,7 +11,7 @@ internal sealed class WebAppProxyAccessTokenService
     private const int LifetimeSeconds = 600;
     private readonly IDataProtector protector;
 
-    internal WebAppProxyAccessTokenService(IDataProtectionProvider provider)
+    public WebAppProxyAccessTokenService(IDataProtectionProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
         this.protector = provider.CreateProtector("JulOS.WebAppProxy.Subresource.v1");
