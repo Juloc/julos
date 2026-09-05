@@ -253,7 +253,10 @@ public static class WebAppResponsePolicy
     {
         for (var index = 0; index < directives.Count; index++)
         {
-            if (AttributeName(directives[index]).Equals(name, StringComparison.OrdinalIgnoreCase))
+            var directive = directives[index].AsSpan().Trim();
+            var separator = directive.IndexOf(' ');
+            var directiveName = separator >= 0 ? directive[..separator] : directive;
+            if (directiveName.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return index;
             }
