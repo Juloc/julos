@@ -62,8 +62,11 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
   - narrow `Content-Security-Policy` `frame-ancestors` to the JulOS shell origin and drop directives that would block embedding;
   - adjust `Set-Cookie` `Domain` and `SameSite` so the application's own session cookies stay first-party inside the window iframe;
   - resolve relative, scheme-relative and absolute redirect/location headers against the actual upstream request and rewrite HTTP(S) navigation back into the JulOS proxy host;
-  - follow cookie-free same-origin GET/HEAD document redirects inside JulOS, bounded to five hops with explicit loop detection, so canonical path redirects cannot bounce between an external reverse-proxy rewrite and the Browser iframe;
+  - follow only cookie-free directory-index canonicalizations such as `/index.html -> /` inside JulOS, bounded with explicit loop detection; other same-origin redirects stay client-visible so paths such as `/ -> /Default.asp` remain the document's real URL;
   - keep cross-origin redirects and redirects that set cookies client-visible, then downgrade upstream 301/308 redirects to temporary 302/307 responses at the proxy boundary, mark redirected responses `no-store`, and send `Clear-Site-Data: "cache"` for permanent upstream redirects so stale encoded-origin redirect caches self-heal;
+  - rewrite absolute HTTP(S) navigation/resource URLs in HTML and CSS into encoded JulOS proxy hosts;
+  - virtualize encoded `Origin`/`Referer` request headers back to their real upstream origins and map matching `Access-Control-Allow-Origin` responses back to the Browser origin;
+  - inject a CSP-hash-authorized Browser bridge into proxied HTML so final URLs/history synchronize with the JulOS address bar and `target=_blank` / `window.open` URLs stay proxied;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;
   - apply request and idle timeouts and a per-target request-rate budget.
 - **Reachability:** when the target is not directly reachable from Server, the proxy reaches it through a target-bound `host.stream/1` grant on the outbound Host Connector tunnel, so the target is never exposed publicly. When the target shares Server's network, the proxy connects directly.

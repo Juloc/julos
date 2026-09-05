@@ -151,8 +151,10 @@
 
 .webapp-browser {
   display: flex;
+  min-height: 0;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
 .webapp-toolbar {
@@ -230,8 +232,11 @@
 }
 
 .webapp-browser > iframe.window-webapp {
-  flex: 1;
+  display: block;
   width: 100%;
+  min-height: 0;
+  height: 0;
+  flex: 1 1 0;
   border: 0;
 }
 

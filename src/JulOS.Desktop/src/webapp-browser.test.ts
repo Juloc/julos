@@ -62,4 +62,7 @@ test('navigate models forward-truncating history', () => {
   state = navigate(state, { type: 'forward' });
   assert.equal(state.index, 1);
   assert.deepEqual(navigate(state, { type: 'reload' }), state);
+
+  state = navigate(state, { type: 'sync', url: 'https://www.example.test/final' });
+  assert.deepEqual(state, { entries: ['a', 'https://www.example.test/final'], index: 1 });
 });

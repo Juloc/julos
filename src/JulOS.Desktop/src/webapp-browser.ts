@@ -70,7 +70,8 @@ export type NavigationAction =
   | { readonly type: 'open'; readonly url: string }
   | { readonly type: 'back' }
   | { readonly type: 'forward' }
-  | { readonly type: 'reload' };
+  | { readonly type: 'reload' }
+  | { readonly type: 'sync'; readonly url: string };
 
 /** Pure parent-side history reducer over the user-submitted absolute URLs. */
 export function navigate(state: NavigationState, action: NavigationAction): NavigationState {
@@ -85,6 +86,14 @@ export function navigate(state: NavigationState, action: NavigationAction): Navi
       return { entries: state.entries, index: Math.min(state.entries.length - 1, state.index + 1) };
     case 'reload':
       return state;
+    case 'sync': {
+      if (state.index < 0) {
+        return state;
+      }
+      const entries = [...state.entries];
+      entries[state.index] = action.url;
+      return { entries, index: state.index };
+    }
   }
 }
 
@@ -177,6 +186,28 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     loadCurrent();
   };
 
+  const syncFrameLocation = (event: MessageEvent): void => {
+    if (event.source !== frame.contentWindow) {
+      return;
+    }
+
+    const payload = event.data as { type?: unknown; url?: unknown } | null;
+    if (payload?.type !== 'julos-browser-location' || typeof payload.url !== 'string') {
+      return;
+    }
+
+    try {
+      const parsed = parseAddressInput(payload.url);
+      const normalized = `${parsed.origin}${parsed.pathQuery}`;
+      nav = navigate(nav, { type: 'sync', url: normalized });
+      address.value = normalized;
+      applyButtons();
+    } catch {
+      // Ignore malformed messages from proxied content.
+    }
+  };
+  window.addEventListener('message', syncFrameLocation);
+
   frame.addEventListener('load', () => {
     if (!loadingTarget || frame.src === 'about:blank') {
       return;
@@ -243,6 +274,7 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
     element: root,
     dispose: () => {
       loadingTarget = false;
+      window.removeEventListener('message', syncFrameLocation);
       frame.src = 'about:blank';
     },
   };
