@@ -1,4 +1,4 @@
-# Publication trigger: v0.4.0-beta.39
+# Publication trigger: v0.4.0-beta.40
 name: JulOS prerelease publish dispatcher
 
 on:
