@@ -225,7 +225,8 @@ internal sealed class WebAppProxyMiddleware
                     target.Upstream,
                     context.Request.Scheme,
                     context.Request.Host.Value ?? string.Empty,
-                    context.Request.IsHttps));
+                    context.Request.IsHttps,
+                    this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null));
             await upstreamResponse.Content
                 .CopyToAsync(context.Response.Body, context.RequestAborted)
                 .ConfigureAwait(false);
@@ -442,7 +443,8 @@ internal sealed class WebAppProxyMiddleware
                     value,
                     context.Upstream,
                     context.RequestScheme,
-                    context.RequestHost))
+                    context.RequestHost,
+                    context.DynamicProxyZone))
                 .ToArray();
             return;
         }
@@ -454,7 +456,8 @@ internal sealed class WebAppProxyMiddleware
         Uri Upstream,
         string RequestScheme,
         string RequestHost,
-        bool RequestIsHttps);
+        bool RequestIsHttps,
+        string? DynamicProxyZone);
 
     private static async Task PumpWebSocketAsync(
         WebSocket browser,

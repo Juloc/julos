@@ -171,7 +171,7 @@ public sealed class WebAppResponsePolicyTests
     }
 
     [TestMethod]
-    public void RewriteRedirectLeavesADifferentOriginUnchanged()
+    public void RewriteRedirectLeavesADifferentOriginUnchangedWithoutDynamicProxyZone()
     {
         Assert.AreEqual(
             "https://accounts.google.com/o/oauth2",
@@ -180,5 +180,24 @@ public sealed class WebAppResponsePolicyTests
                 new Uri("https://10.0.0.5:8443"),
                 "https",
                 "wa123.p.localtest.me"));
+    }
+
+    [TestMethod]
+    public void RewriteRedirectEncodesADifferentOriginIntoTheDynamicProxyZone()
+    {
+        var target = new Uri("https://www.test.de/path?q=1#part");
+        var expectedHost = WebAppOriginCodec.EncodeHost(
+            new Uri("https://www.test.de/"),
+            "os.juloc.de");
+
+        Assert.IsNotNull(expectedHost);
+        Assert.AreEqual(
+            $"https://{expectedHost}/path?q=1#part",
+            WebAppResponsePolicy.RewriteRedirect(
+                target.AbsoluteUri,
+                new Uri("https://test.de/"),
+                "https",
+                "waold.os.juloc.de",
+                "os.juloc.de"));
     }
 }

@@ -147,11 +147,17 @@ public static class WebAppResponsePolicy
     }
 
     /// <summary>
-    /// Rewrites a redirect target header (<c>Location</c> or <c>Content-Location</c>) that points at
-    /// the upstream origin so navigation stays on the proxy host. A relative target, or a target to
-    /// a different origin, is returned unchanged.
+    /// Rewrites a redirect target header (<c>Location</c> or <c>Content-Location</c>) so navigation
+    /// stays inside the JulOS proxy. Same-origin redirects stay on the current proxy host. When a
+    /// dynamic proxy zone is available, cross-origin HTTP/HTTPS redirects are encoded into a new
+    /// JulOS proxy host instead of escaping to the original Internet origin.
     /// </summary>
-    public static string RewriteRedirect(string value, Uri upstream, string requestScheme, string requestHost)
+    public static string RewriteRedirect(
+        string value,
+        Uri upstream,
+        string requestScheme,
+        string requestHost,
+        string? dynamicProxyZone = null)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(upstream);
@@ -164,15 +170,24 @@ public static class WebAppResponsePolicy
             return value;
         }
 
-        if (!string.Equals(
+        if (string.Equals(
                 target.GetLeftPart(UriPartial.Authority),
                 upstream.GetLeftPart(UriPartial.Authority),
                 StringComparison.OrdinalIgnoreCase))
         {
+            return string.Concat(requestScheme, "://", requestHost, target.PathAndQuery, target.Fragment);
+        }
+
+        if (string.IsNullOrWhiteSpace(dynamicProxyZone))
+        {
             return value;
         }
 
-        return string.Concat(requestScheme, "://", requestHost, target.PathAndQuery, target.Fragment);
+        var redirectedOrigin = new Uri(target.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
+        var encodedHost = WebAppOriginCodec.EncodeHost(redirectedOrigin, dynamicProxyZone);
+        return encodedHost is null
+            ? value
+            : string.Concat(requestScheme, "://", encodedHost, target.PathAndQuery, target.Fragment);
     }
 
     private static string AttributeName(string attribute)
