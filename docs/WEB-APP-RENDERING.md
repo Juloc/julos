@@ -62,9 +62,10 @@ JulOS therefore does not move an application underneath a shared path prefix. Ea
   - narrow `Content-Security-Policy` `frame-ancestors` to the JulOS shell origin and drop directives that would block embedding;
   - adjust `Set-Cookie` `Domain` and `SameSite` so the application's own session cookies stay first-party inside the window iframe;
   - resolve relative, scheme-relative and absolute redirect/location headers against the actual upstream request and rewrite HTTP(S) navigation back into the JulOS proxy host;
-  - follow only cookie-free directory-index canonicalizations such as `/index.html -> /` inside JulOS, bounded with explicit loop detection; other same-origin redirects stay client-visible so paths such as `/ -> /Default.asp` remain the document's real URL;
+  - follow only cookie-free directory-index canonicalizations such as `/index.html -> /` inside JulOS, bounded with explicit loop detection; if an index document itself returns 404 during Browser navigation, retry the directory root once before surfacing the failure; other same-origin redirects stay client-visible so paths such as `/ -> /Default.asp` remain the document's real URL;
   - keep cross-origin redirects and redirects that set cookies client-visible, then downgrade upstream 301/308 redirects to temporary 302/307 responses at the proxy boundary, mark redirected responses `no-store`, and send `Clear-Site-Data: "cache"` for permanent upstream redirects so stale encoded-origin redirect caches self-heal;
   - rewrite absolute HTTP(S) navigation/resource URLs in HTML and CSS into encoded JulOS proxy hosts;
+  - attach short-lived Data-Protection-signed capabilities to rewritten subresource URLs so CORS fetches that intentionally omit cookies (for example cross-origin fonts) can still traverse the authenticated proxy without making it public;
   - virtualize encoded `Origin`/`Referer` request headers back to their real upstream origins and map matching `Access-Control-Allow-Origin` responses back to the Browser origin;
   - inject a CSP-hash-authorized Browser bridge into proxied HTML so final URLs/history synchronize with the JulOS address bar and `target=_blank` / `window.open` URLs stay proxied;
   - pass the WebSocket `Upgrade` handshake through and proxy the socket for the life of the connection;

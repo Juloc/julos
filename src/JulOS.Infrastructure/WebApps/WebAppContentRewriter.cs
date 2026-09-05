@@ -14,6 +14,9 @@ public static partial class WebAppContentRewriter
 {
     private const int MaximumProxyLabelLength = 63;
 
+    /// <summary>Query parameter carrying a short-lived Browser subresource capability.</summary>
+    public const string ProxyAccessTokenQueryParameter = "__julos_proxy_access";
+
     /// <summary>Rewritten HTML content plus the CSP source hash for the injected Browser bridge.</summary>
     public sealed class RewrittenHtml
     {
@@ -36,16 +39,28 @@ public static partial class WebAppContentRewriter
         string html,
         Uri upstreamRequestUri,
         string requestScheme,
-        string proxyZone)
+        string proxyZone,
+        Func<string, string?>? accessTokenFactory = null)
     {
         ArgumentNullException.ThrowIfNull(html);
-        var rewritten = HtmlAbsoluteAttributeRegex().Replace(
+        var rewritten = HtmlResourceAttributeRegex().Replace(
             html,
+            match => string.Concat(
+                match.Groups["prefix"].Value,
+                RewriteUrl(
+                    match.Groups["url"].Value,
+                    upstreamRequestUri,
+                    requestScheme,
+                    proxyZone,
+                    accessTokenFactory),
+                match.Groups["suffix"].Value));
+        rewritten = HtmlNavigationAttributeRegex().Replace(
+            rewritten,
             match => string.Concat(
                 match.Groups["prefix"].Value,
                 RewriteUrl(match.Groups["url"].Value, upstreamRequestUri, requestScheme, proxyZone),
                 match.Groups["suffix"].Value));
-        rewritten = RewriteCss(rewritten, upstreamRequestUri, requestScheme, proxyZone);
+        rewritten = RewriteCss(rewritten, upstreamRequestUri, requestScheme, proxyZone, accessTokenFactory);
 
         var bridge = BuildBrowserBridge(upstreamRequestUri, requestScheme, proxyZone);
         var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(bridge)));
@@ -63,20 +78,21 @@ public static partial class WebAppContentRewriter
         string css,
         Uri upstreamRequestUri,
         string requestScheme,
-        string proxyZone)
+        string proxyZone,
+        Func<string, string?>? accessTokenFactory = null)
     {
         ArgumentNullException.ThrowIfNull(css);
         var rewritten = CssUrlRegex().Replace(
             css,
             match => string.Concat(
                 match.Groups["prefix"].Value,
-                RewriteUrl(match.Groups["url"].Value, upstreamRequestUri, requestScheme, proxyZone),
+                RewriteUrl(match.Groups["url"].Value, upstreamRequestUri, requestScheme, proxyZone, accessTokenFactory),
                 match.Groups["suffix"].Value));
         return CssImportRegex().Replace(
             rewritten,
             match => string.Concat(
                 match.Groups["prefix"].Value,
-                RewriteUrl(match.Groups["url"].Value, upstreamRequestUri, requestScheme, proxyZone),
+                RewriteUrl(match.Groups["url"].Value, upstreamRequestUri, requestScheme, proxyZone, accessTokenFactory),
                 match.Groups["suffix"].Value));
     }
 
@@ -85,7 +101,8 @@ public static partial class WebAppContentRewriter
         string value,
         Uri upstreamRequestUri,
         string requestScheme,
-        string proxyZone)
+        string proxyZone,
+        Func<string, string?>? accessTokenFactory = null)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(upstreamRequestUri);
@@ -105,9 +122,24 @@ public static partial class WebAppContentRewriter
 
         var origin = new Uri(target.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute);
         var encodedHost = WebAppOriginCodec.EncodeHost(origin, proxyZone);
-        return encodedHost is null
-            ? value
-            : string.Concat(requestScheme, "://", encodedHost, target.PathAndQuery, target.Fragment);
+        if (encodedHost is null)
+        {
+            return value;
+        }
+
+        var pathAndQuery = target.PathAndQuery;
+        var accessToken = accessTokenFactory?.Invoke(encodedHost);
+        if (!string.IsNullOrWhiteSpace(accessToken))
+        {
+            pathAndQuery = string.Concat(
+                pathAndQuery,
+                pathAndQuery.Contains('?', StringComparison.Ordinal) ? "&" : "?",
+                ProxyAccessTokenQueryParameter,
+                "=",
+                Uri.EscapeDataString(accessToken));
+        }
+
+        return string.Concat(requestScheme, "://", encodedHost, pathAndQuery, target.Fragment);
     }
 
     private static string BuildBrowserBridge(Uri upstreamRequestUri, string requestScheme, string proxyZone)
@@ -141,9 +173,14 @@ const hp=history.pushState.bind(history),hr=history.replaceState.bind(history);h
     }
 
     [GeneratedRegex(
-        @"(?<prefix>\b(?:href|src|action|formaction|poster)\s*=\s*(?<q>[""']))(?<url>(?:https?:)?//[^""'<>]+)(?<suffix>\k<q>)",
+        @"(?<prefix>\b(?:src|poster)\s*=\s*(?<q>[""']))(?<url>(?:https?:)?//[^""'<>]+)(?<suffix>\k<q>)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex HtmlAbsoluteAttributeRegex();
+    private static partial Regex HtmlResourceAttributeRegex();
+
+    [GeneratedRegex(
+        @"(?<prefix>\b(?:href|action|formaction)\s*=\s*(?<q>[""']))(?<url>(?:https?:)?//[^""'<>]+)(?<suffix>\k<q>)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HtmlNavigationAttributeRegex();
 
     [GeneratedRegex(
         @"(?<prefix>url\(\s*(?<q>[""']?))(?<url>(?:https?:)?//[^)""']+)(?<suffix>\k<q>\s*\))",

@@ -128,6 +128,100 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
+    public async Task AcceptsAValidDynamicSubresourceCapabilityWithoutASessionCookie()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            _ = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            var tokens = host.Services.GetRequiredService<JulOS.Server.WebApps.WebAppProxyAccessTokenService>();
+            var token = tokens.Create(encodedHost);
+            using var request = DynamicRequest(
+                encodedHost,
+                $"/panel?x=1&{WebAppContentRewriter.ProxyAccessTokenQueryParameter}={Uri.EscapeDataString(token)}",
+                cookie: null);
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            Assert.AreEqual("UPSTREAM-OK:/panel", await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task RejectsAnInvalidDynamicSubresourceCapability()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+
+            using var request = DynamicRequest(
+                encodedHost,
+                $"/panel?{WebAppContentRewriter.ProxyAccessTokenQueryParameter}=invalid",
+                cookie: null);
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
+    public async Task MissingIndexDocumentFallsBackToDirectoryRootForBrowserNavigation()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using var request = DynamicRequest(encodedHost, "/missing-index/index.html", cookie);
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", "iframe");
+            request.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "navigate");
+            using var response = await client.SendAsync(request).ConfigureAwait(false);
+
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+            Assert.AreEqual(
+                "UPSTREAM-OK:/missing-index/",
+                await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task RejectsAnAuthenticatedUserWithoutTheWebAppPermission()
     {
         var databasePath = CreateDatabasePath();
@@ -648,10 +742,14 @@ public sealed class WebAppProxyEndpointTests
                 ["WebApps:AllowInvalidUpstreamCertificates"] = "true",
             });
 
-    private static HttpRequestMessage DynamicRequest(string encodedHost, string pathAndQuery, string cookie)
+    private static HttpRequestMessage DynamicRequest(string encodedHost, string pathAndQuery, string? cookie)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"http://{encodedHost}{pathAndQuery}");
-        request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        if (cookie is not null)
+        {
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        }
+
         return request;
     }
 

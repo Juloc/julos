@@ -66,10 +66,17 @@ internal sealed class WebAppProxyMiddleware
             new EventId(1505, nameof(LogInternalNavigationRedirect)),
             "Web application proxy follows same-origin navigation redirect from {Source} to {Target}.");
 
+    private static readonly Action<ILogger, string, string, Exception?> LogIndexFallback =
+        LoggerMessage.Define<string, string>(
+            LogLevel.Information,
+            new EventId(1506, nameof(LogIndexFallback)),
+            "Web application proxy retries missing index document from {Source} as {Target}.");
+
     private readonly RequestDelegate next;
     private readonly WebAppTargetRegistry registry;
     private readonly WebAppProxyOptions options;
     private readonly IHttpClientFactory httpClientFactory;
+    private readonly WebAppProxyAccessTokenService accessTokens;
     private readonly ILogger<WebAppProxyMiddleware> logger;
 
     public WebAppProxyMiddleware(
@@ -77,12 +84,14 @@ internal sealed class WebAppProxyMiddleware
         WebAppTargetRegistry registry,
         WebAppProxyOptions options,
         IHttpClientFactory httpClientFactory,
+        WebAppProxyAccessTokenService accessTokens,
         ILogger<WebAppProxyMiddleware> logger)
     {
         this.next = next;
         this.registry = registry;
         this.options = options;
         this.httpClientFactory = httpClientFactory;
+        this.accessTokens = accessTokens;
         this.logger = logger;
     }
 
@@ -97,30 +106,51 @@ internal sealed class WebAppProxyMiddleware
             return;
         }
 
-        if (context.User.Identity?.IsAuthenticated != true)
+        var authenticatedSession = context.User.Identity?.IsAuthenticated == true;
+        var capabilityAuthorized = false;
+        if (!authenticatedSession
+            && target.RequiresAddressPinning
+            && (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+            && context.Request.Query.TryGetValue(
+                WebAppContentRewriter.ProxyAccessTokenQueryParameter,
+                out var tokenValues))
+        {
+            capabilityAuthorized = this.accessTokens.TryValidate(
+                tokenValues.ToString(),
+                context.Request.Host.Host);
+        }
+
+        if (!authenticatedSession && !capabilityAuthorized)
         {
             await WriteFailureAsync(
                 context,
                 StatusCodes.Status401Unauthorized,
                 "webapp.authentication_required",
-                "A JulOS session is required to open a web application.").ConfigureAwait(false);
+                "A JulOS session or valid Browser subresource capability is required.").ConfigureAwait(false);
             return;
         }
 
-        // Reaching a configured or dynamically allowlisted target can expose internal
-        // infrastructure, so authentication alone is not enough: the caller must hold the
-        // web-application permission, which the Administrator role has by default.
-        var authorization = await authorizationService
-            .AuthorizeAsync(context.User, JulOsAuthorizationPolicies.WebAppUse)
-            .ConfigureAwait(false);
-        if (!authorization.Succeeded)
+        if (authenticatedSession)
         {
-            await WriteFailureAsync(
-                context,
-                StatusCodes.Status403Forbidden,
-                "webapp.not_authorized",
-                "This account is not permitted to open web applications.").ConfigureAwait(false);
-            return;
+            // Reaching a configured or dynamically allowlisted target can expose internal
+            // infrastructure, so authenticated callers must hold the web-application permission.
+            var authorization = await authorizationService
+                .AuthorizeAsync(context.User, JulOsAuthorizationPolicies.WebAppUse)
+                .ConfigureAwait(false);
+            if (!authorization.Succeeded)
+            {
+                await WriteFailureAsync(
+                    context,
+                    StatusCodes.Status403Forbidden,
+                    "webapp.not_authorized",
+                    "This account is not permitted to open web applications.").ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (target.RequiresAddressPinning)
+        {
+            RemoveProxyAccessToken(context.Request);
         }
 
         var pinnedAddresses = Array.Empty<IPAddress>();
@@ -320,7 +350,8 @@ internal sealed class WebAppProxyMiddleware
                 publicRequestScheme,
                 target.RequiresAddressPinning,
                 this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null,
-                context.RequestAborted).ConfigureAwait(false);
+                context.RequestAborted,
+                this.accessTokens).ConfigureAwait(false);
 
             CopyResponseHeaders(
                 upstreamResponse,
@@ -412,6 +443,29 @@ internal sealed class WebAppProxyMiddleware
                 throw;
             }
 
+            if (followSameOriginNavigationRedirects
+                && response.StatusCode == HttpStatusCode.NotFound
+                && TryResolveMissingIndexFallback(currentRequest.RequestUri!, out var fallbackTarget)
+                && !visited.Contains(fallbackTarget.AbsoluteUri))
+            {
+                LogIndexFallback(
+                    this.logger,
+                    SanitizeUriForLog(currentRequest.RequestUri!),
+                    SanitizeUriForLog(fallbackTarget),
+                    null);
+                visited.Add(fallbackTarget.AbsoluteUri);
+                response.Dispose();
+                var fallbackRequest = CloneRedirectRequest(
+                    currentRequest,
+                    fallbackTarget,
+                    target,
+                    pinnedAddresses);
+                currentRequest.Dispose();
+                currentRequest = fallbackRequest;
+                followedRedirects++;
+                continue;
+            }
+
             if (!followSameOriginNavigationRedirects
                 || !TryResolveSameOriginNavigationRedirect(
                     currentRequest,
@@ -496,6 +550,35 @@ internal sealed class WebAppProxyMiddleware
         }
 
         redirectTarget = resolved;
+        return true;
+    }
+
+    private static bool TryResolveMissingIndexFallback(Uri source, out Uri target)
+    {
+        target = null!;
+        var path = source.AbsolutePath;
+        var slash = path.LastIndexOf('/');
+        if (slash < 0)
+        {
+            return false;
+        }
+
+        var fileName = path[(slash + 1)..];
+        if (!fileName.Equals("index.html", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.htm", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.php", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.asp", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Equals("index.aspx", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var builder = new UriBuilder(source)
+        {
+            Path = path[..(slash + 1)],
+            Query = source.Query.TrimStart('?'),
+        };
+        target = builder.Uri;
         return true;
     }
 
@@ -679,6 +762,23 @@ internal sealed class WebAppProxyMiddleware
         throw new HttpRequestException("No validated web application upstream address accepted the connection.", lastFailure);
     }
 
+    private static void RemoveProxyAccessToken(HttpRequest request)
+    {
+        if (!request.Query.ContainsKey(WebAppContentRewriter.ProxyAccessTokenQueryParameter))
+        {
+            return;
+        }
+
+        var pairs = request.Query
+            .Where(entry => !string.Equals(
+                entry.Key,
+                WebAppContentRewriter.ProxyAccessTokenQueryParameter,
+                StringComparison.Ordinal))
+            .SelectMany(entry => entry.Value.Select(value =>
+                new KeyValuePair<string, string?>(entry.Key, value)));
+        request.QueryString = QueryString.Create(pairs);
+    }
+
     private static Uri BuildUpstreamUri(
         Uri upstream,
         HttpRequest request,
@@ -797,7 +897,8 @@ internal sealed class WebAppProxyMiddleware
         string requestScheme,
         bool dynamicTarget,
         string? proxyZone,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        WebAppProxyAccessTokenService accessTokens)
     {
         if (!dynamicTarget
             || string.IsNullOrWhiteSpace(proxyZone)
@@ -821,14 +922,24 @@ internal sealed class WebAppProxyMiddleware
         var source = await upstreamResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (string.Equals(mediaType, "text/html", StringComparison.OrdinalIgnoreCase))
         {
-            var html = WebAppContentRewriter.RewriteHtml(source, upstreamRequestUri, requestScheme, proxyZone);
+            var html = WebAppContentRewriter.RewriteHtml(
+                source,
+                upstreamRequestUri,
+                requestScheme,
+                proxyZone,
+                accessTokens.Create);
             return new RewrittenBrowserContent(
                 Encoding.UTF8.GetBytes(html.Content),
                 "text/html; charset=utf-8",
                 html.ScriptHash);
         }
 
-        var css = WebAppContentRewriter.RewriteCss(source, upstreamRequestUri, requestScheme, proxyZone);
+        var css = WebAppContentRewriter.RewriteCss(
+            source,
+            upstreamRequestUri,
+            requestScheme,
+            proxyZone,
+            accessTokens.Create);
         return new RewrittenBrowserContent(
             Encoding.UTF8.GetBytes(css),
             "text/css; charset=utf-8",

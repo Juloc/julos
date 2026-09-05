@@ -1,5 +1,6 @@
 ﻿using JulOS.Infrastructure.WebApps;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace JulOS.Server.WebApps;
@@ -18,6 +19,8 @@ internal static class WebAppProxyServiceCollectionExtensions
         var options = WebAppProxyOptions.Read(configuration);
         services.AddSingleton(options);
         services.AddSingleton(WebAppTargetRegistry.Read(configuration));
+        services.AddDataProtection();
+        services.AddSingleton<WebAppProxyAccessTokenService>();
 
         services
             .AddHttpClient(WebAppProxyMiddleware.HttpClientName)
