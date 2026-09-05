@@ -102,10 +102,10 @@ public static partial class WebAppContentRewriter
         var zoneJson = JsonSerializer.Serialize(proxyZone.Trim('.').ToLowerInvariant());
         var schemeJson = JsonSerializer.Serialize(requestScheme + ":");
 
-        return $$"""
-(()=>{const z={{zoneJson}},ro={{realOriginJson}},fp={{finalPathJson}},ps={{schemeJson}},a="abcdefghijklmnopqrstuvwxyz234567";
+        const string template = """
+(()=>{const z=__ZONE__,ro=__REAL_ORIGIN__,fp=__FINAL_PATH__,ps=__SCHEME__,a="abcdefghijklmnopqrstuvwxyz234567";
 const b=d=>{let o="",q=0,n=0;for(const v of d){q=(q<<8)|v;n+=8;while(n>=5){n-=5;o+=a[(q>>n)&31]}}if(n>0)o+=a[(q<<(5-n))&31];return o};
-const p=v=>{if(typeof v!=="string")return v;let u;try{u=new URL(v,location.href)}catch{return v}if(u.protocol!=="http:"&&u.protocol!=="https:")return v;if(u.hostname===z||u.hostname.endsWith("."+z))return u.href;const s=u.protocol==="https:"?1:0,pt=u.port||(s?"443":"80"),e=new TextEncoder().encode(u.hostname.toLowerCase()+":"+pt),d=new Uint8Array(e.length+1);d[0]=s;d.set(e,1);const l="wa"+b(d);return l.length>{{MaximumProxyLabelLength}}?v:ps+"//"+l+"."+z+u.pathname+u.search+u.hash};
+const p=v=>{if(typeof v!=="string")return v;let u;try{u=new URL(v,location.href)}catch{return v}if(u.protocol!=="http:"&&u.protocol!=="https:")return v;if(u.hostname===z||u.hostname.endsWith("."+z))return u.href;const s=u.protocol==="https:"?1:0,pt=u.port||(s?"443":"80"),e=new TextEncoder().encode(u.hostname.toLowerCase()+":"+pt),d=new Uint8Array(e.length+1);d[0]=s;d.set(e,1);const l="wa"+b(d);return l.length>__MAX_LABEL__?v:ps+"//"+l+"."+z+u.pathname+u.search+u.hash};
 if(location.pathname+location.search!==fp)try{history.replaceState(history.state,"",fp)}catch{}
 const tell=()=>{try{parent.postMessage({type:"julos-browser-location",url:ro+location.pathname+location.search+location.hash},"*")}catch{}};
 tell();const wo=window.open;window.open=function(v,...r){return wo.call(this,p(v),...r)};
@@ -113,6 +113,13 @@ document.addEventListener("click",e=>{const t=e.target&&e.target.closest?e.targe
 document.addEventListener("submit",e=>{const f=e.target;if(f&&f.target==="_blank"&&f.action)f.action=p(f.action)},true);
 const hp=history.pushState.bind(history),hr=history.replaceState.bind(history);history.pushState=(...r)=>{hp(...r);queueMicrotask(tell)};history.replaceState=(...r)=>{hr(...r);queueMicrotask(tell)};addEventListener("popstate",tell);addEventListener("hashchange",tell)})();
 """;
+
+        return template
+            .Replace("__ZONE__", zoneJson, StringComparison.Ordinal)
+            .Replace("__REAL_ORIGIN__", realOriginJson, StringComparison.Ordinal)
+            .Replace("__FINAL_PATH__", finalPathJson, StringComparison.Ordinal)
+            .Replace("__SCHEME__", schemeJson, StringComparison.Ordinal)
+            .Replace("__MAX_LABEL__", MaximumProxyLabelLength.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     [GeneratedRegex(
