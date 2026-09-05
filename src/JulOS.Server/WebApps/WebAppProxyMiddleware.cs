@@ -350,8 +350,8 @@ internal sealed class WebAppProxyMiddleware
                 publicRequestScheme,
                 target.RequiresAddressPinning,
                 this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null,
-                context.RequestAborted,
-                this.accessTokens).ConfigureAwait(false);
+                this.accessTokens,
+                context.RequestAborted).ConfigureAwait(false);
 
             CopyResponseHeaders(
                 upstreamResponse,
@@ -897,8 +897,8 @@ internal sealed class WebAppProxyMiddleware
         string requestScheme,
         bool dynamicTarget,
         string? proxyZone,
-        CancellationToken cancellationToken,
-        WebAppProxyAccessTokenService accessTokens)
+        WebAppProxyAccessTokenService accessTokens,
+        CancellationToken cancellationToken)
     {
         if (!dynamicTarget
             || string.IsNullOrWhiteSpace(proxyZone)
