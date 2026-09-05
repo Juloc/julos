@@ -263,6 +263,47 @@ public sealed class WebAppProxyEndpointTests
     }
 
     [TestMethod]
+    public async Task DynamicHostUsesForwardedHttpsForRedirectsCookiesAndUpstreamMetadata()
+    {
+        var databasePath = CreateDatabasePath();
+        await using var upstream = await StartUpstreamAsync().ConfigureAwait(false);
+        try
+        {
+            var encodedHost = EncodedHost(upstream.Urls.First());
+            using var host = CreateDynamicHost(databasePath);
+            using var client = host.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = false,
+            });
+            var cookie = await SetupAdministratorAsync(client).ConfigureAwait(false);
+
+            using (var forward = DynamicRequest(encodedHost, "/panel", cookie))
+            {
+                forward.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
+                using var response = await client.SendAsync(forward).ConfigureAwait(false);
+
+                Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+                Assert.AreEqual("https", Single(response, "X-Echo-Forwarded-Proto"));
+            }
+
+            using (var redirect = DynamicRequest(encodedHost, "/redirect", cookie))
+            {
+                redirect.Headers.TryAddWithoutValidation("X-Forwarded-Proto", "https");
+                using var response = await client.SendAsync(redirect).ConfigureAwait(false);
+
+                Assert.AreEqual(HttpStatusCode.Redirect, response.StatusCode);
+                Assert.AreEqual($"https://{encodedHost}/dashboard", Single(response, "Location"));
+                StringAssert.Contains(Single(response, "Set-Cookie"), "Secure");
+            }
+        }
+        finally
+        {
+            DeleteDatabase(databasePath);
+        }
+    }
+
+    [TestMethod]
     public async Task DynamicHostWebSocketUsesTheValidatedPinnedAddress()
     {
         var databasePath = CreateDatabasePath();

@@ -149,9 +149,10 @@ internal sealed class WebAppProxyMiddleware
         IPAddress[] pinnedAddresses)
     {
         var request = context.Request;
+        var publicRequestScheme = GetPublicRequestScheme(request);
         using var upstreamRequest = new HttpRequestMessage(
             new HttpMethod(request.Method),
-            BuildUpstreamUri(target.Upstream, request, request.Scheme));
+            BuildUpstreamUri(target.Upstream, request, publicRequestScheme));
 
         if (target.RequiresAddressPinning)
         {
@@ -192,7 +193,7 @@ internal sealed class WebAppProxyMiddleware
 
         upstreamRequest.Headers.Host = target.Upstream.Authority;
         upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Host", context.Request.Host.Value);
-        upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Proto", context.Request.Scheme);
+        upstreamRequest.Headers.TryAddWithoutValidation("X-Forwarded-Proto", publicRequestScheme);
 
         var client = this.httpClientFactory.CreateClient(
             target.RequiresAddressPinning ? DynamicHttpClientName : HttpClientName);
@@ -223,9 +224,9 @@ internal sealed class WebAppProxyMiddleware
                 context.Response,
                 new WebAppResponseContext(
                     target.Upstream,
-                    context.Request.Scheme,
+                    publicRequestScheme,
                     context.Request.Host.Value ?? string.Empty,
-                    context.Request.IsHttps,
+                    string.Equals(publicRequestScheme, "https", StringComparison.Ordinal),
                     this.registry.DynamicEnabled ? this.registry.DynamicProxyZone : null));
             await upstreamResponse.Content
                 .CopyToAsync(context.Response.Body, context.RequestAborted)
@@ -515,6 +516,27 @@ internal sealed class WebAppProxyMiddleware
                 result.EndOfMessage,
                 cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static string GetPublicRequestScheme(HttpRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.IsHttps)
+        {
+            return "https";
+        }
+
+        var forwardedProto = request.Headers["X-Forwarded-Proto"].ToString();
+        var separator = forwardedProto.IndexOf(',', StringComparison.Ordinal);
+        if (separator >= 0)
+        {
+            forwardedProto = forwardedProto[..separator];
+        }
+
+        forwardedProto = forwardedProto.Trim();
+        return string.Equals(forwardedProto, "https", StringComparison.OrdinalIgnoreCase)
+            ? "https"
+            : "http";
     }
 
     private static bool IsSuppressedRequestHeader(string name) =>

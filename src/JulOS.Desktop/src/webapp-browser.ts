@@ -139,7 +139,6 @@ export function createWebAppBrowserSurface(api: ShellApiClient): CoreSurfaceHand
   const frame = document.createElement('iframe');
   frame.className = 'window-webapp';
   frame.title = 'JulOS Browser';
-  frame.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-downloads');
   frame.referrerPolicy = 'no-referrer';
 
   root.append(heading, explanation, toolbar, status, frame);
