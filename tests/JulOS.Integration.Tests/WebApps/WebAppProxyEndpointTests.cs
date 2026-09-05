@@ -859,6 +859,12 @@ public sealed class WebAppProxyEndpointTests
                 return;
             }
 
+            if (context.Request.Path == "/missing-index/index.html")
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+
             if (context.Request.Path == "/folder/index.html")
             {
                 context.Response.StatusCode = StatusCodes.Status301MovedPermanently;
