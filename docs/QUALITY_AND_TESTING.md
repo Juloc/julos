@@ -85,7 +85,7 @@ Continuous integration starts the pinned supported PostgreSQL image and sets `JU
 
 `API-002` adds a real two-writer PostgreSQL test that proves the second stale save fails and the first committed revision remains authoritative. A Server integration test separately verifies the HTTP 409 code and `currentRevision` extension, so storage and transport behavior cannot silently diverge.
 
-`API-003` extends the migrated PostgreSQL suite with the real Identity schema and drives the production HTTP host. It verifies serialized one-time administrator setup, protected API fallback, secure cookie attributes, indistinguishable credential failures, account lockout, per-IP rate limiting, antiforgery-protected logout and configured session expiry.
+`API-003` extends the migrated PostgreSQL suite with the real Identity schema and drives the production HTTP host. It verifies serialized one-time administrator setup, protected API fallback, secure persistent cookie attributes, root-path scope, the 48-hour default and configured session expiry, renewal from authenticated status/desktop boot, indistinguishable credential failures, account lockout, per-IP rate limiting and antiforgery-protected logout.
 
 
 `API-007` adds real PostgreSQL and production-host tests for queued state, user-scoped idempotency, immutable progress events, durable cancellation requests and safe failure causes. The suite proves that no creation response reports success and that a new HTTP request reads the same authoritative state.

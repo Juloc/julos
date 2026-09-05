@@ -51,6 +51,7 @@ internal static class LocalAuthenticationEndpoints
         HttpContext context,
         InitialAdministratorProvisioner provisioner,
         UserManager<LocalUser> userManager,
+        SignInManager<LocalUser> signInManager,
         CancellationToken cancellationToken)
     {
         var setupRequired = await provisioner
@@ -67,6 +68,13 @@ internal static class LocalAuthenticationEndpoints
         }
 
         var user = await userManager.GetUserAsync(context.User).ConfigureAwait(false);
+        if (user is not null)
+        {
+            // Desktop boot calls /auth/status. Reissue the existing persistent cookie here so
+            // opening JulOS renews the full configured lifetime without binding auth to a
+            // desktop/mobile presentation mode or user-agent string.
+            await signInManager.RefreshSignInAsync(user).ConfigureAwait(false);
+        }
 
         return TypedResults.Ok(
             new AuthenticationStatusResponse(
@@ -106,7 +114,7 @@ internal static class LocalAuthenticationEndpoints
                 "Initial administrator created.",
                 cancellationToken).ConfigureAwait(false);
 
-            await signInManager.SignInAsync(user, isPersistent: false).ConfigureAwait(false);
+            await signInManager.SignInAsync(user, isPersistent: true).ConfigureAwait(false);
 
             var response = ToResponse(user);
             return TypedResults.Created("/api/v1/auth/status", response);
@@ -223,7 +231,7 @@ internal static class LocalAuthenticationEndpoints
             AuditOutcome.Succeeded,
             "Login succeeded.",
             cancellationToken).ConfigureAwait(false);
-        await signInManager.SignInAsync(user, isPersistent: false).ConfigureAwait(false);
+        await signInManager.SignInAsync(user, isPersistent: true).ConfigureAwait(false);
 
         return TypedResults.Ok(ToResponse(user));
     }

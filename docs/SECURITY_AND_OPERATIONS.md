@@ -36,14 +36,14 @@ Authentication at one boundary does not automatically authorize another boundary
 Initial deployment supports local accounts with:
 
 - password hashing and verification through ASP.NET Core Identity
-- secure, HTTP-only, same-site-strict cookies named `.JulOS.Session`
-- configurable sliding session timeout
+- persistent, HTTP-only, same-site-strict cookies named `.JulOS.Session`, scoped to `/` so responsive desktop/mobile presentation changes on the same JulOS origin never create a second login
+- configurable sliding session timeout; the default is 48 hours and authenticated `/api/v1/auth/status` refreshes the cookie so opening JulOS renews the full lifetime
 - a per-IP fixed-window limit shared by setup and login
 - account lockout after repeated failures without a user-enumerating response
 - one database-serialized initial administrator creation during setup
 - antiforgery validation before logout
 
-The defaults are 30 minutes for the session, 15 minutes for lockout, five failed passwords before lockout and five setup/login requests per 60 seconds. They are configured through `Authentication__SessionTimeoutMinutes`, `Authentication__LockoutMinutes`, `Authentication__MaximumFailedAccessAttempts`, `Authentication__LoginPermitLimit` and `Authentication__LoginWindowSeconds`. Invalid or unsafe ranges stop Server startup instead of being silently corrected.
+The defaults are 48 hours for the persistent session, 15 minutes for lockout, five failed passwords before lockout and five setup/login requests per 60 seconds. Session timeout accepts 1 through 10080 minutes (seven days). They are configured through `Authentication__SessionTimeoutMinutes`, `Authentication__LockoutMinutes`, `Authentication__MaximumFailedAccessAttempts`, `Authentication__LoginPermitLimit` and `Authentication__LoginWindowSeconds`. Invalid or unsafe ranges stop Server startup instead of being silently corrected.
 
 The initial password must be 12 to 1024 characters and satisfy the Identity digit, lowercase, uppercase, non-alphanumeric and unique-character rules. The setup endpoint never logs or returns it. Password hashes, security stamps and lockout state remain in the `core` identity tables.
 

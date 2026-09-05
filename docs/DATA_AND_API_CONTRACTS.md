@@ -757,11 +757,11 @@ GET  /api/v1/profile
 PUT  /api/v1/profile/preferences
 ```
 
-`GET /api/v1/auth/status` and the one-time setup and login mutations are anonymous. Status exposes only whether initial setup is required and, when a valid session exists, the current user's identifier, username and display name.
+`GET /api/v1/auth/status` and the one-time setup and login mutations are anonymous. Status exposes only whether initial setup is required and, when a valid session exists, the current user's identifier, username and display name. For an authenticated caller, status also refreshes the existing persistent Identity cookie; Desktop calls this endpoint during boot, so reopening JulOS renews the configured session lifetime without coupling authentication to desktop/mobile viewport mode or user-agent identity.
 
 `POST /api/v1/auth/setup` accepts `userName`, `displayName` and `password`, creates exactly one initial administrator and establishes the session. The database serializes competing setup calls through the singleton setup row. A completed setup returns `authentication.setup_already_completed`; it is never silently repeated.
 
-`POST /api/v1/auth/login` establishes the same server-side Identity cookie. Unknown usernames, wrong passwords and locked accounts all return `authentication.invalid_credentials`, so the public response does not disclose account existence or lock state. Setup and login share a per-source rate limit and return the common retryable `request.rate_limited` problem with `Retry-After` when available.
+`POST /api/v1/auth/login` establishes the same persistent server-side Identity cookie. The default expiry is 48 hours with sliding renewal, and the cookie is scoped to the JulOS root path so all Shell presentation modes on the same origin share it. Unknown usernames, wrong passwords and locked accounts all return `authentication.invalid_credentials`, so the public response does not disclose account existence or lock state. Setup and login share a per-source rate limit and return the common retryable `request.rate_limited` problem with `Retry-After` when available.
 
 `GET /api/v1/auth/antiforgery` requires a valid session and returns the request-header name and token. `POST /api/v1/auth/logout` requires that token and ends the session. Raw authentication tokens and password hashes never appear in an API response.
 

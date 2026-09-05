@@ -65,6 +65,8 @@ public sealed class LocalAuthenticationTests
         Assert.IsTrue(sessionCookie.Contains("secure", StringComparison.OrdinalIgnoreCase));
         Assert.IsTrue(sessionCookie.Contains("httponly", StringComparison.OrdinalIgnoreCase));
         Assert.IsTrue(sessionCookie.Contains("samesite=strict", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(sessionCookie.Contains("path=/", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(sessionCookie.Contains("expires=", StringComparison.OrdinalIgnoreCase));
 
         using var authenticatedVersion = await client
             .GetAsync("/api/v1/system/version")
@@ -264,6 +266,40 @@ public sealed class LocalAuthenticationTests
         Assert.AreEqual(CookieSecurePolicy.SameAsRequest, applicationCookie.Cookie.SecurePolicy);
         Assert.AreEqual(SameSiteMode.Strict, applicationCookie.Cookie.SameSite);
         Assert.IsTrue(applicationCookie.Cookie.HttpOnly);
+    }
+
+    [TestMethod]
+    public void DefaultSessionTimeoutIsFortyEightHours()
+    {
+        using var host = new ServerHost(new Dictionary<string, string?>());
+
+        var cookies = host.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
+        var applicationCookie = cookies.Get(IdentityConstants.ApplicationScheme);
+
+        Assert.AreEqual(TimeSpan.FromHours(48), applicationCookie.ExpireTimeSpan);
+        Assert.AreEqual("/", applicationCookie.Cookie.Path);
+        Assert.IsTrue(applicationCookie.SlidingExpiration);
+    }
+
+    [TestMethod]
+    public async Task AuthenticationStatusRenewsThePersistentSessionCookie()
+    {
+        await using var database = await CreateMigratedDatabaseAsync().ConfigureAwait(false);
+        using var host = new ServerHost(database.ConnectionString);
+        using var client = host.CreateClient(ClientOptions);
+
+        using var setup = await client
+            .PostAsJsonAsync("/api/v1/auth/setup", ValidAdministrator())
+            .ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.Created, setup.StatusCode);
+
+        using var status = await client.GetAsync("/api/v1/auth/status").ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, status.StatusCode);
+        var renewedCookie = status.Headers
+            .GetValues("Set-Cookie")
+            .Single(value => value.StartsWith(".JulOS.Session=", StringComparison.Ordinal));
+        Assert.IsTrue(renewedCookie.Contains("expires=", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(renewedCookie.Contains("path=/", StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]

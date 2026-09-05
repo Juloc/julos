@@ -62,6 +62,7 @@ internal static class LocalAuthenticationServices
         services.ConfigureApplicationCookie(cookie =>
         {
             cookie.Cookie.Name = ".JulOS.Session";
+            cookie.Cookie.Path = "/";
             cookie.Cookie.HttpOnly = true;
             cookie.Cookie.IsEssential = true;
             cookie.Cookie.SameSite = SameSiteMode.Strict;

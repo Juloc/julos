@@ -429,9 +429,9 @@ Acceptance:
 
 Implemented with ASP.NET Core Identity persisted in the existing `core` schema. The singleton `authentication_setup` row is locked inside one database transaction, so only one initial administrator can be created even when setup requests race. The administrator receives the system `Administrator` role, while permission evaluation and role-management endpoints remain owned by `API-004`.
 
-The Server uses a secure, HTTP-only, same-site session cookie, a validated configurable session timeout, lockout after repeated failures and a per-IP fixed-window limit for setup and login. Login failures deliberately return one public code for an unknown user, a wrong password and a locked account. Logout requires a valid antiforgery token.
+The Server uses a persistent, HTTP-only, same-site session cookie scoped to `/`, a validated configurable sliding timeout (48 hours by default), renewal when authenticated Desktop boot reads `/api/v1/auth/status`, lockout after repeated failures and a per-IP fixed-window limit for setup and login. Login failures deliberately return one public code for an unknown user, a wrong password and a locked account. Logout requires a valid antiforgery token.
 
-A fallback authorization policy protects every endpoint unless it is explicitly anonymous. Only authentication setup/status/login and health probes are anonymous. Integration tests run against migrated PostgreSQL and prove one-time setup, protected APIs, cookie attributes, lockout, rate limiting, antiforgery logout and configurable session expiry.
+A fallback authorization policy protects every endpoint unless it is explicitly anonymous. Only authentication setup/status/login and health probes are anonymous. Integration tests run against migrated PostgreSQL and prove one-time setup, protected APIs, persistent/root-scoped cookie attributes, default and configurable expiry, boot/status renewal, lockout, rate limiting and antiforgery logout.
 
 ### API-004 — Add role and permission authorization
 

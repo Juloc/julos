@@ -5,7 +5,8 @@ internal sealed class LocalAuthenticationOptions
 {
     internal const string SectionName = "Authentication";
 
-    internal const int DefaultSessionTimeoutMinutes = 30;
+    internal const int DefaultSessionTimeoutMinutes = 2880;
+    internal const int MaximumSessionTimeoutMinutes = 10080;
     internal const int DefaultLockoutMinutes = 15;
     internal const int DefaultMaximumFailedAccessAttempts = 5;
     internal const int DefaultLoginPermitLimit = 5;
@@ -45,10 +46,10 @@ internal sealed class LocalAuthenticationOptions
                 DefaultLoginWindowSeconds),
         };
 
-        if (options.SessionTimeoutMinutes is < 1 or > 1440)
+        if (options.SessionTimeoutMinutes is < 1 or > MaximumSessionTimeoutMinutes)
         {
             throw new InvalidOperationException(
-                $"{SectionName}:{nameof(SessionTimeoutMinutes)} must be between 1 and 1440.");
+                $"{SectionName}:{nameof(SessionTimeoutMinutes)} must be between 1 and {MaximumSessionTimeoutMinutes}.");
         }
 
         if (options.LockoutMinutes is < 1 or > 1440)
