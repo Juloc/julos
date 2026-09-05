@@ -133,7 +133,7 @@ public static partial class WebAppContentRewriter
         {
             pathAndQuery = string.Concat(
                 pathAndQuery,
-                pathAndQuery.Contains('?', StringComparison.Ordinal) ? "&" : "?",
+                pathAndQuery.Contains('?') ? "&" : "?",
                 ProxyAccessTokenQueryParameter,
                 "=",
                 Uri.EscapeDataString(accessToken));
