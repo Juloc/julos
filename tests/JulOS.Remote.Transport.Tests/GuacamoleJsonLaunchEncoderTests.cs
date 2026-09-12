@@ -54,7 +54,9 @@ public sealed class GuacamoleJsonLaunchEncoderTests
             Assert.AreEqual("any", parameters.GetProperty("security").GetString());
             Assert.AreEqual("true", parameters.GetProperty("ignore-cert").GetString());
             Assert.AreEqual("de-de-qwertz", parameters.GetProperty("server-layout").GetString());
-            Assert.AreEqual("reconnect", parameters.GetProperty("resize-method").GetString());
+            Assert.AreEqual(
+                GuacamoleRdpResizeMethods.DisplayUpdate,
+                parameters.GetProperty("resize-method").GetString());
             Assert.AreEqual("false", parameters.GetProperty("enable-wallpaper").GetString());
             Assert.AreEqual("Matgate", parameters.GetProperty("client-name").GetString());
             Assert.AreEqual("true", parameters.GetProperty("enable-drive").GetString());
