@@ -68,8 +68,11 @@ public static class GuacamoleRdpResizeMethods
     /// <summary>Reconnects the RDP session with the new size.</summary>
     public const string Reconnect = "reconnect";
 
+    /// <summary>Leaves Guacamole's optional resize-method parameter unset.</summary>
+    public const string None = "none";
+
     /// <summary>Returns whether one exact resize-method identity is supported.</summary>
-    public static bool IsSupported(string value) => value is DisplayUpdate or Reconnect;
+    public static bool IsSupported(string value) => value is DisplayUpdate or Reconnect or None;
 }
 
 /// <summary>RDP clipboard direction policy identities.</summary>
@@ -108,7 +111,7 @@ public sealed record GuacamoleRdpOptions(
     string ResizeMethod,
     string ClipboardPolicy)
 {
-    /// <summary>Creates the previous transport behavior for consumers that have not adopted explicit policy.</summary>
+    /// <summary>Creates the preferred transport behavior for consumers that have not adopted explicit policy.</summary>
     internal static GuacamoleRdpOptions CompatibilityDefaults(bool ignoreCertificate) =>
         new(
             GuacamoleRdpSecurityModes.Any,
@@ -116,6 +119,6 @@ public sealed record GuacamoleRdpOptions(
                 ? GuacamoleRdpCertificatePolicies.Ignore
                 : GuacamoleRdpCertificatePolicies.Strict,
             Array.Empty<string>(),
-            GuacamoleRdpResizeMethods.Reconnect,
+            GuacamoleRdpResizeMethods.DisplayUpdate,
             GuacamoleRdpClipboardPolicies.Bidirectional);
 }
