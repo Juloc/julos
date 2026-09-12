@@ -295,7 +295,7 @@ static GuacamoleLaunchRequest BuildLaunchRequest(
                 GuacamoleRdpSecurityModes.Any,
                 GuacamoleRdpCertificatePolicies.Ignore,
                 CertificateFingerprints: [],
-                GuacamoleRdpResizeMethods.Reconnect,
+                GuacamoleRdpResizeMethods.DisplayUpdate,
                 GuacamoleRdpClipboardPolicies.Bidirectional),
         };
     }

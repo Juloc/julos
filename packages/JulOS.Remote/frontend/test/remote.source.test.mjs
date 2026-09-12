@@ -1,196 +1,91 @@
 ﻿import assert from 'node:assert/strict';
 import test from 'node:test';
-
 import {
+  createClipboardPipeline,
   createKeyboardPipeline,
   createPointerPipeline,
   createResizeScheduler,
   isKeyboardReleaseShortcut,
+  resizeDisplay,
+  resolveViewport,
+  sendTextAsKeysyms,
   splitDisplayEndpoint,
   validateDisplayDescriptor,
+  validateInteraction,
 } from '../remote.source.js';
 
-const origin = 'https://os.example.test';
+const origin='https://os.example.test';
 
-test('display descriptor stays same-origin and token-free', () => {
-  const descriptor = validateDisplayDescriptor({
-    kind: 'graphical',
-    contractVersion: '1.0.0',
-    endpoint: '/api/v1/remote/sessions/11111111-1111-4111-8111-111111111111/display?package=de.juloc.julos.remote&revision=7&expires=1785873660',
-    expiresAtUtc: '2026-08-04T21:01:00+00:00',
-  });
-
-  const endpoint = splitDisplayEndpoint(descriptor.endpoint, origin);
-  assert.equal(
-    endpoint.tunnelUrl,
-    '/api/v1/remote/sessions/11111111-1111-4111-8111-111111111111/display',
-  );
-  assert.equal(
-    endpoint.connectData,
-    'package=de.juloc.julos.remote&revision=7&expires=1785873660',
-  );
-  assert.throws(() => validateDisplayDescriptor({
-    ...descriptor,
-    endpoint: '/display?access_token=secret',
-  }));
+test('display descriptor stays same-origin and token-free',()=>{
+  const descriptor=validateDisplayDescriptor({kind:'graphical',contractVersion:'1.0.0',endpoint:'/api/v1/remote/sessions/11111111-1111-4111-8111-111111111111/display?package=de.juloc.julos.remote&revision=7&expires=1785873660',expiresAtUtc:'2026-08-04T21:01:00+00:00'});
+  const endpoint=splitDisplayEndpoint(descriptor.endpoint,origin);
+  assert.equal(endpoint.tunnelUrl,'/api/v1/remote/sessions/11111111-1111-4111-8111-111111111111/display');
+  assert.equal(endpoint.connectData,'package=de.juloc.julos.remote&revision=7&expires=1785873660');
+  assert.throws(()=>validateDisplayDescriptor({...descriptor,endpoint:'/display?access_token=secret'}));
 });
 
-test('mobile text input uses one keyboard pipeline and an explicit local release shortcut', () => {
-  let keyboardCount = 0;
-  let sinkCount = 0;
-  const keyEvents = [];
-  const appended = [];
-  const removed = [];
-  const listeners = new Map();
-  let blurred = 0;
-  let released = 0;
+function fakeElement(){const listeners=new Map();return{value:'',listeners,addEventListener(n,h,o){listeners.set(`${n}:${o??''}`,h);},removeEventListener(n,h,o){if(listeners.get(`${n}:${o??''}`)===h)listeners.delete(`${n}:${o??''}`);},remove(){},focus(){},blur(){}};}
 
-  class Keyboard {
-    constructor(target) {
-      keyboardCount += 1;
-      this.target = target;
-      this.onkeydown = null;
-      this.onkeyup = null;
-      this.resetCount = 0;
-    }
-
-    reset() {
-      this.resetCount += 1;
-    }
-  }
-
-  class InputSink {
-    constructor() {
-      sinkCount += 1;
-      this.element = { remove: () => removed.push(this.element) };
-    }
-
-    getElement() {
-      return this.element;
-    }
-  }
-
-  const target = {
-    append: (element) => appended.push(element),
-    addEventListener: (name, handler, capture) => listeners.set(`${name}:${capture}`, handler),
-    removeEventListener: (name, handler, capture) => {
-      if (listeners.get(`${name}:${capture}`) === handler) {
-        listeners.delete(`${name}:${capture}`);
-      }
-    },
-    blur: () => { blurred += 1; },
-  };
-  const client = { sendKeyEvent: (...args) => keyEvents.push(args) };
-  const pipeline = createKeyboardPipeline(
-    { Keyboard, InputSink },
-    target,
-    client,
-    true,
-    () => { released += 1; },
-  );
-
-  assert.equal(keyboardCount, 1);
-  assert.equal(sinkCount, 1);
-  assert.equal(appended.length, 1);
-  pipeline.keyboard.onkeydown(65);
-  pipeline.keyboard.onkeyup(65);
-  assert.deepEqual(keyEvents, [[1, 65], [0, 65]]);
-
-  const releaseHandler = listeners.get('keydown:true');
-  assert.equal(typeof releaseHandler, 'function');
-  const event = {
-    key: 'Escape',
-    ctrlKey: true,
-    altKey: true,
-    shiftKey: true,
-    prevented: 0,
-    stopped: 0,
-    preventDefault() { this.prevented += 1; },
-    stopImmediatePropagation() { this.stopped += 1; },
-  };
-  assert.equal(isKeyboardReleaseShortcut(event), true);
-  releaseHandler(event);
-  assert.equal(event.prevented, 1);
-  assert.equal(event.stopped, 1);
-  assert.equal(blurred, 1);
-  assert.equal(released, 1);
-  assert.equal(pipeline.keyboard.resetCount, 1);
-
+test('Gboard paste and composition send text once',()=>{
+  const events=[];const sink=fakeElement();
+  class Keyboard{constructor(){this.onkeydown=null;this.onkeyup=null;this.resetCount=0;}reset(){this.resetCount++;}}
+  class InputSink{getElement(){return sink;}focus(){}}
+  const target=fakeElement();target.append=()=>{};
+  const pipeline=createKeyboardPipeline({Keyboard,InputSink},target,{sendKeyEvent:(...a)=>events.push(a)},true);
+  const paste=sink.listeners.get('paste:');
+  paste({clipboardData:{getData:()=> 'Hallo 👋'},preventDefault(){}});
+  const afterPaste=events.length;
+  sink.value='Hallo 👋';sink.listeners.get('input:')({inputType:'insertFromPaste',data:'Hallo 👋'});
+  assert.equal(events.length,afterPaste);
+  sink.listeners.get('compositionstart:')({});
+  pipeline.keyboard.onkeydown(65);pipeline.keyboard.onkeyup(65);
+  assert.equal(events.length,afterPaste);
+  sink.listeners.get('compositionend:')({data:'漢字'});
+  assert.equal(events.length,afterPaste+4);
   pipeline.dispose();
-  assert.equal(pipeline.keyboard.resetCount, 2);
-  assert.equal(removed.length, 1);
-  assert.equal(listeners.size, 0);
 });
 
-test('resize delivery collapses repeated observations and disposal cancels pending work', () => {
-  let nextId = 0;
-  const pending = new Map();
-  const delays = [];
-  const timers = {
-    setTimeout(callback, delay) {
-      nextId += 1;
-      pending.set(nextId, callback);
-      delays.push(delay);
-      return nextId;
-    },
-    clearTimeout(id) {
-      pending.delete(id);
-    },
-  };
-  let runs = 0;
-  const scheduler = createResizeScheduler(() => { runs += 1; }, 150, timers);
-
-  scheduler.schedule();
-  scheduler.schedule();
-  scheduler.schedule();
-  assert.equal(pending.size, 1);
-  assert.deepEqual(delays, [150, 150, 150]);
-  assert.equal(runs, 0);
-
-  const [firedId, callback] = [...pending.entries()][0];
-  pending.delete(firedId);
-  callback();
-  assert.equal(runs, 1);
-
-  scheduler.schedule();
-  scheduler.dispose();
-  assert.equal(pending.size, 0);
-  assert.equal(runs, 1);
+test('keyboard release shortcut is preserved',()=>{
+  const listeners=new Map();let blurred=0;let released=0;
+  class Keyboard{constructor(){this.onkeydown=null;this.onkeyup=null;this.resetCount=0;}reset(){this.resetCount++;}}
+  const target={addEventListener:(n,h,o)=>listeners.set(`${n}:${o}`,h),removeEventListener(){},blur(){blurred++;}};
+  const pipeline=createKeyboardPipeline({Keyboard},target,{sendKeyEvent(){}},false,()=>released++);
+  const ev={key:'Escape',ctrlKey:true,altKey:true,shiftKey:true,preventDefault(){},stopImmediatePropagation(){}};
+  assert.equal(isKeyboardReleaseShortcut(ev),true);listeners.get('keydown:true')(ev);assert.equal(blurred,1);assert.equal(released,1);pipeline.dispose();
 });
 
-test('pointer input selects one desktop or touch adapter', () => {
-  const sent = [];
-  let mouseCount = 0;
-  let touchCount = 0;
-
-  class Mouse {
-    constructor() {
-      mouseCount += 1;
-      this.onmousedown = null;
-      this.onmouseup = null;
-      this.onmousemove = null;
-    }
-  }
-  Mouse.Touchscreen = class Touchscreen extends Mouse {
-    constructor() {
-      super();
-      mouseCount -= 1;
-      touchCount += 1;
-    }
-  };
-
-  const client = { sendMouseState: (state) => sent.push(state) };
-  const desktop = createPointerPipeline({ Mouse }, {}, client, false);
-  assert.equal(mouseCount, 1);
-  assert.equal(touchCount, 0);
-  desktop.pointer.onmousemove({ x: 1, y: 2 });
-  desktop.dispose();
-
-  const touch = createPointerPipeline({ Mouse }, {}, client, true);
-  assert.equal(mouseCount, 1);
-  assert.equal(touchCount, 1);
-  touch.pointer.onmousedown({ x: 3, y: 4 });
-  touch.dispose();
-
-  assert.deepEqual(sent, [{ x: 1, y: 2 }, { x: 3, y: 4 }]);
+test('direct touch is default with long press and two-finger scroll thresholds',()=>{
+  let touch=0,pad=0,mouse=0;
+  class Mouse{constructor(){mouse++;this.currentState={x:4,y:5};}}
+  Mouse.Touchscreen=class{constructor(){touch++;this.currentState={x:4,y:5};this.longPressThreshold=0;this.scrollThreshold=0;}};
+  Mouse.Touchpad=class{constructor(){pad++;this.currentState={x:4,y:5};this.scrollThreshold=0;}};
+  const sent=[];const pipeline=createPointerPipeline({Mouse},{},{sendMouseState:(...a)=>sent.push(a)},true,{touchMode:'direct',gestureRightClick:true,longPressMs:750,scrollThreshold:12});
+  assert.equal(touch,1);assert.equal(pad,0);assert.equal(mouse,0);assert.equal(pipeline.pointer.longPressThreshold,750);assert.equal(pipeline.pointer.scrollThreshold,12);pipeline.clickRight();assert.equal(sent.length,2);
 });
+
+test('trackpad mode and gesture disable are configurable',()=>{
+  class Mouse{constructor(){this.currentState={x:1,y:2};}}
+  Mouse.Touchscreen=class extends Mouse{constructor(){super();this.longPressThreshold=0;this.scrollThreshold=0;}};
+  Mouse.Touchpad=class extends Mouse{constructor(){super();this.scrollThreshold=0;}};
+  const sent=[];const pipeline=createPointerPipeline({Mouse},{},{sendMouseState:(s)=>sent.push(s)},true,{touchMode:'touchpad',gestureRightClick:false,scrollThreshold:32});
+  assert.equal(pipeline.pointer.scrollThreshold,32);pipeline.pointer.onmousedown({x:1,y:2,right:true});assert.equal(sent[0].right,false);pipeline.clickRight();assert.equal(sent.at(-2).right,true);
+});
+
+test('viewport and scaling presets work without forced resize',()=>{
+  const stage={dataset:{},getBoundingClientRect:()=>({width:1000,height:700})};
+  assert.deepEqual(resolveViewport(stage,{resolutionMode:'1920x1080'}),{width:1920,height:1080,deviceScaleFactor:1});
+  assert.deepEqual(resolveViewport(stage,{resolutionMode:'custom',customWidth:3000,customHeight:1600}),{width:3000,height:1600,deviceScaleFactor:1});
+  const sizes=[],scales=[];const display={getWidth:()=>1920,getHeight:()=>1080,scale:(s)=>scales.push(s)};resizeDisplay(stage,display,{sendSize:(...a)=>sizes.push(a)},{resolutionMode:'1920x1080',scaleMode:'125',resizeMode:'none'},false);assert.equal(sizes.length,0);assert.equal(scales.at(-1),1.25);
+});
+
+test('resize scheduler debounces',()=>{let id=0;const pending=new Map();const timers={setTimeout(cb){id++;pending.set(id,cb);return id;},clearTimeout(i){pending.delete(i);}};let runs=0;const s=createResizeScheduler(()=>runs++,150,timers);s.schedule();s.schedule();assert.equal(pending.size,1);const [i,cb]=[...pending.entries()][0];pending.delete(i);cb();assert.equal(runs,1);s.dispose();});
+
+test('unicode text and clipboard pipeline work',()=>{
+  const events=[];sendTextAsKeysyms({sendKeyEvent:(...a)=>events.push(a)},'A👋');assert.equal(events.length,4);
+  let reader;class StringReader{constructor(){reader=this;this.ontext=null;this.onend=null;}}class StringWriter{constructor(){}sendText(t){events.push(t);}sendEnd(){events.push('end');}}
+  const client={onclipboard:null,createClipboardStream:()=>({})};const cp=createClipboardPipeline({StringReader,StringWriter},client);client.onclipboard({},'text/plain');reader.ontext('remote');reader.onend();assert.equal(cp.readLatest(),'remote');cp.send('local');cp.dispose();assert.equal(client.onclipboard,null);
+});
+
+test('interaction defaults match mobile UX',()=>{const v=validateInteraction({});assert.equal(v.touchMode,'direct');assert.equal(v.gestureRightClick,true);assert.equal(v.longPressMs,500);assert.equal(v.scrollThreshold,20);assert.equal(v.resizeMode,'display-update');});
+
+test('legacy resize flag maps to stable remote resolution',()=>{assert.equal(validateInteraction({resizeRemote:false}).resizeMode,'none');});

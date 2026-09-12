@@ -108,7 +108,7 @@ public sealed record GuacamoleRdpOptions(
     string ResizeMethod,
     string ClipboardPolicy)
 {
-    /// <summary>Creates the previous transport behavior for consumers that have not adopted explicit policy.</summary>
+    /// <summary>Creates the preferred transport behavior for consumers that have not adopted explicit policy.</summary>
     internal static GuacamoleRdpOptions CompatibilityDefaults(bool ignoreCertificate) =>
         new(
             GuacamoleRdpSecurityModes.Any,
@@ -116,6 +116,6 @@ public sealed record GuacamoleRdpOptions(
                 ? GuacamoleRdpCertificatePolicies.Ignore
                 : GuacamoleRdpCertificatePolicies.Strict,
             Array.Empty<string>(),
-            GuacamoleRdpResizeMethods.Reconnect,
+            GuacamoleRdpResizeMethods.DisplayUpdate,
             GuacamoleRdpClipboardPolicies.Bidirectional);
 }

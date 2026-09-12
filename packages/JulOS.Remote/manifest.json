@@ -1,7 +1,7 @@
 ﻿{
   "SchemaVersion": "1",
   "PackageId": "de.juloc.julos.remote",
-  "Version": "1.0.4",
+  "Version": "1.0.5",
   "PublisherId": "juloc-official",
   "DisplayNameKey": "package.remote.name",
   "DescriptionKey": "package.remote.description",
@@ -57,7 +57,7 @@
   "Migrations": [],
   "Frontend": {
     "ModulePath": "frontend/remote.js",
-    "Sha256": "a0acf2d82d127aaafcb724e28c05b2c72ea63746c9027746f2ed5d1bfdd65c5e",
+    "Sha256": "da58f089987c535c77bb8e56a5f614153812c0088d2d0d741f29892557a24850",
     "ExportedElements": [
       "julos-remote-app",
       "julos-remote-widget"
