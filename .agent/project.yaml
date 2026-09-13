@@ -1,0 +1,26 @@
+project: JulOS
+repository: Juloc/julos
+coordination:
+  repository: Juloc/agent-control
+  issue: 1
+  hubUrl: null
+relatedRepositories:
+  - Juloc/docker
+validation:
+  - dotnet build JulOS.slnx -c Release
+  - dotnet test JulOS.slnx -c Release
+protectedPaths:
+  - VERSION
+  - deploy/**
+  - docs/SECURITY_AND_OPERATIONS.md
+legacyWorkState:
+  migrationIssue: 102
+  files:
+    - docs/IMPLEMENTATION_PLAN.md
+    - docs/WORK_BREAKDOWN.md
+    - docs/BACKLOG.md
+  newWork: GitHub Issues
+notes:
+  - Root AGENTS.md remains the authoritative JulOS-specific architecture, documentation, security and quality guide.
+  - Existing legacy task-state files may remain synchronized until issue #102 completes; do not add newly discovered work there.
+  - Durable product/specification documents remain authoritative for behavior even after task state moves to Issues.
