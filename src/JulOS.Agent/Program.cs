@@ -15,17 +15,23 @@ internal static class Program
         "JULOS_AGENT_VERSION",
         "JULOS_AGENT_HEARTBEAT_SECONDS",
         "JULOS_AGENT_COMMAND_POLL_SECONDS",
+        "JULOS_AGENT_DOCKER_ENABLED",
+        "JULOS_AGENT_DOCKER_SOCKET_PATH",
+        "JULOS_AGENT_DOCKER_CONTROL_ENABLED",
     ];
 
     private static async Task<int> Main()
     {
         AgentBootstrapOptions bootstrap;
+        DockerEngineOptions docker;
         try
         {
-            bootstrap = AgentBootstrapOptions.Read(EnvironmentNames.ToDictionary(
+            var environment = EnvironmentNames.ToDictionary(
                 name => name,
                 Environment.GetEnvironmentVariable,
-                StringComparer.Ordinal));
+                StringComparer.Ordinal);
+            bootstrap = AgentBootstrapOptions.Read(environment);
+            docker = DockerEngineOptions.Read(environment);
             Environment.SetEnvironmentVariable("JULOS_AGENT_ENROLLMENT_TOKEN", null);
         }
         catch (InvalidOperationException exception)
@@ -43,7 +49,7 @@ internal static class Program
 
         try
         {
-            return await RunAsync(bootstrap, shutdown.Token).ConfigureAwait(false);
+            return await RunAsync(bootstrap, docker, shutdown.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
         {
@@ -79,14 +85,14 @@ internal static class Program
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(
-                $"JulOS Agent stopped because of an unexpected {exception.GetType().Name}.");
+            Console.Error.WriteLine($"JulOS Agent stopped because of an unexpected {exception.GetType().Name}.");
             return 1;
         }
     }
 
     private static async Task<int> RunAsync(
         AgentBootstrapOptions bootstrap,
+        DockerEngineOptions dockerOptions,
         CancellationToken cancellationToken)
     {
         using var httpClient = new HttpClient
@@ -94,24 +100,22 @@ internal static class Program
             BaseAddress = bootstrap.ServerEndpoint,
             Timeout = TimeSpan.FromSeconds(30),
         };
-        httpClient.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("JulOS-Agent", bootstrap.Version));
+        httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("JulOS-Agent", bootstrap.Version));
 
         var timeProvider = TimeProvider.System;
         var diagnostics = new AgentRuntimeDiagnostics(timeProvider.GetUtcNow());
-        var capabilityInventory = new AgentCapabilityInventory();
+        var capabilityInventory = new AgentCapabilityInventory(dockerOptions);
         var identityStore = new AgentIdentityStore(bootstrap.IdentityPath);
-        var provisioner = new AgentProvisioner(
-            identityStore,
-            new AgentEnrollmentClient(httpClient),
-            timeProvider);
+        var provisioner = new AgentProvisioner(identityStore, new AgentEnrollmentClient(httpClient), timeProvider);
         var identity = await provisioner.ResolveAsync(bootstrap, cancellationToken).ConfigureAwait(false);
         var options = AgentOptions.Create(bootstrap, identity);
+        using var dockerClient = dockerOptions.Enabled ? new DockerEngineClient(dockerOptions) : null;
         var commandExecutor = new AgentCommandExecutor(
             timeProvider,
             options.Version,
             capabilityInventory,
-            diagnostics);
+            diagnostics,
+            dockerClient);
         var client = new AgentClient(
             httpClient,
             options,
@@ -136,23 +140,15 @@ internal static class Program
                 var status = exception.StatusCode is null
                     ? "transport unavailable"
                     : $"HTTP {(int)exception.StatusCode.Value}";
-                var failureKind = exception.StatusCode is null
-                    ? "transport"
-                    : $"http-{(int)exception.StatusCode.Value}";
-                diagnostics.RecordConnectionFailure(
-                    timeProvider.GetUtcNow(),
-                    failureKind,
-                    reconnectDelay);
+                var failureKind = exception.StatusCode is null ? "transport" : $"http-{(int)exception.StatusCode.Value}";
+                diagnostics.RecordConnectionFailure(timeProvider.GetUtcNow(), failureKind, reconnectDelay);
                 Console.Error.WriteLine(
                     $"JulOS Agent connection failed ({status}); retrying in {reconnectDelay.TotalSeconds:0} seconds.");
             }
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 reconnectDelay = ResetDelayAfterRecovery(diagnostics, reconnectDelay);
-                diagnostics.RecordConnectionFailure(
-                    timeProvider.GetUtcNow(),
-                    "timeout",
-                    reconnectDelay);
+                diagnostics.RecordConnectionFailure(timeProvider.GetUtcNow(), "timeout", reconnectDelay);
                 Console.Error.WriteLine(
                     $"JulOS Agent request timed out; retrying in {reconnectDelay.TotalSeconds:0} seconds.");
             }
@@ -164,10 +160,6 @@ internal static class Program
         return 0;
     }
 
-    private static TimeSpan ResetDelayAfterRecovery(
-        AgentRuntimeDiagnostics diagnostics,
-        TimeSpan currentDelay) =>
-        diagnostics.Snapshot().ConsecutiveFailures == 0
-            ? TimeSpan.FromSeconds(1)
-            : currentDelay;
+    private static TimeSpan ResetDelayAfterRecovery(AgentRuntimeDiagnostics diagnostics, TimeSpan currentDelay) =>
+        diagnostics.Snapshot().ConsecutiveFailures == 0 ? TimeSpan.FromSeconds(1) : currentDelay;
 }
