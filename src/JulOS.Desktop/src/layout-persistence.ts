@@ -78,6 +78,19 @@ export interface LayoutPersistenceOptions {
   readonly onFailure?: (error: unknown) => void | Promise<void>;
 }
 
+/**
+ * How the workspace is arranged, when the caller is changing it.
+ *
+ * An ordinary autosave stores where the windows are and carries the arrangement over
+ * unchanged; only an explicit presentation change passes this.
+ */
+export interface LayoutPresentation {
+  readonly presentationMode: PresentationMode;
+  readonly primaryWindowId: string | null;
+  readonly secondaryWindowId: string | null;
+  readonly splitRatioPermille: number | null;
+}
+
 interface PendingSave {
   document: WorkspaceLayoutDocument;
   timer: ReturnType<typeof globalThis.setTimeout> | null;
@@ -146,6 +159,7 @@ export class DesktopLayoutPersistence {
     workspaceClass: WorkspaceClass,
     windows: readonly PersistedDesktopWindow[],
     widgets: readonly PersistedWidgetPlacement[],
+    presentation?: LayoutPresentation,
   ): void {
     this.#ensureActive();
 
@@ -164,6 +178,7 @@ export class DesktopLayoutPersistence {
     };
     pending.document = {
       ...emptyDocument(resolved?.layout),
+      ...(presentation ?? {}),
       windows: cloneWindows(windows),
       widgets: cloneWidgets(widgets),
     };

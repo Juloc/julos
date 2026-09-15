@@ -755,6 +755,79 @@
   }
 }
 
+/* MOB-005: phone Split and the tablet tiled default. */
+
+/* A tiled or split window owns its whole tile, so it carries no drop shadow that would
+   bleed into its neighbour. */
+.desktop-window[data-presentation="tiled"],
+.desktop-window[data-presentation="phone-split"],
+.desktop-window[data-presentation="phone-single"] {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.desktop-window[data-presentation="tiled"] {
+  border: 1px solid var(--julos-color-border);
+}
+
+/* Focus belongs to exactly one pane, and it has to be visible without hover. */
+.desktop-window[data-pane][data-active="true"] {
+  border-color: color-mix(in srgb, var(--julos-color-accent) 60%, var(--julos-color-border));
+  outline: 2px solid color-mix(in srgb, var(--julos-color-accent) 60%, transparent);
+  outline-offset: -2px;
+}
+
+.phone-split-divider {
+  position: absolute;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--julos-color-border);
+  touch-action: none;
+}
+
+.phone-split-divider[data-orientation="portrait"] {
+  cursor: row-resize;
+}
+
+.phone-split-divider[data-orientation="landscape"] {
+  cursor: col-resize;
+}
+
+/* The grip is drawn inside the divider so the hit area stays the full divider, which is
+   what makes it usable with a finger. */
+.phone-split-divider::after {
+  content: "";
+  border-radius: 999px;
+  background: color-mix(in srgb, CanvasText 45%, transparent);
+}
+
+.phone-split-divider[data-orientation="portrait"]::after {
+  width: 44px;
+  height: 3px;
+}
+
+.phone-split-divider[data-orientation="landscape"]::after {
+  width: 3px;
+  height: 44px;
+}
+
+.phone-split-divider:focus-visible {
+  outline: 2px solid var(--julos-color-accent);
+  outline-offset: 1px;
+}
+
+.taskbar-split-button {
+  min-width: 2rem;
+}
+
+@media (forced-colors: active) {
+  .phone-split-divider {
+    background: CanvasText;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .desktop-window {
     transition: none;

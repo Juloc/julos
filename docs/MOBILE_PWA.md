@@ -160,7 +160,7 @@ Enforcement matrix:
 `MOB-004` implements this model. Two boundaries are worth stating explicitly rather than leaving to be discovered:
 
 - Primary and Secondary are enforced by the `DesktopLayout` aggregate rather than by a deferred composite foreign key, for the reason recorded in `DATA_AND_API_CONTRACTS.md` section 2.7.
-- Layout *identity* is now the workspace class, but the Shell still chooses its responsive **presentation** from the layout viewport width. Phone Split and the Tablet presentation are `MOB-005`; until then a phone workspace stores its windows under the phone layout while continuing to present them the way the current responsive Desktop does.
+- `MOB-005` completes the presentation: the Shell now arranges each workspace from its workspace class rather than from the viewport width, so resizing, rotating or opening a software keyboard cannot change which layout a session is looking at.
 
 The current viewport-only layouts migrate as follows:
 
@@ -196,6 +196,8 @@ A phone has at most two foreground windows.
 
 Orientation changes presentation geometry only. They do not create, select or overwrite another layout.
 
+Implementation notes from `MOB-005`. The divider is a focusable separator with the full divider as its hit area, and a drag stores the position only once it settles, not on every pointer move. A screen too small to give both panes an operable edge presents the Primary window alone without discarding the stored split, so rotating back restores it. A foreground identifier naming a window that is closed or minimized is ignored rather than rendered as an empty pane, and a Core application window is never named as the persisted foreground because it is not part of the stored layout.
+
 ## 7. Tablet presentation
 
 Tablet uses the desktop window and application model with touch-first defaults:
@@ -206,6 +208,8 @@ Tablet uses the desktop window and application model with touch-first defaults:
 - title bars, resize handles and drop zones are touch-safe;
 - keyboard, trackpad, pen and mouse use the same Pointer Events path;
 - free window placement is enabled when sufficient area and precise pointer input are available or the user opts in.
+
+The tiled default splits along the longer edge first and tiles up to four visible windows: one fills the area, two halve it, three give one window a half and the other two a quarter each, four take a quarter each. Beyond four, the windows furthest from the front stay in the task switcher rather than being tiled into a strip too narrow to use. Free placement is enabled when a precise pointer is available and the area is at least 1024 CSS pixels wide.
 
 There is no iPad-specific JulOS implementation. iPadOS receives the tablet workspace with capability-aware input behavior.
 

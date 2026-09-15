@@ -13,6 +13,7 @@ import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
   DesktopLayoutPersistence,
   windowsForPersistence,
+  type LayoutPresentation,
   type WorkspaceLayoutResponse,
   type PersistedDesktopWindow,
   type PersistedWidgetPlacement,
@@ -20,9 +21,15 @@ import {
 import type { NotificationCenterSnapshot, NotificationCenterStore } from './notification-center.js';
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
-import type { SupportedLanguage } from './localization.js';
-import { classifyViewport, deriveResponsiveDesktop, type DesktopViewport } from './responsive-desktop.js';
+import { translate, type SupportedLanguage } from './localization.js';
+import { classifyViewport, type DesktopViewport } from './responsive-desktop.js';
+import { PhoneForegroundController } from './phone-foreground.js';
 import type { WorkspaceClass } from './workspace-contract.js';
+import {
+  clampSplitRatioPermille,
+  deriveWorkspaceStage,
+  type WorkspaceStage,
+} from './workspace-stage.js';
 import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
 import { isDynamicWebAppBrowserAvailable } from './webapp-availability.js';
@@ -83,6 +90,7 @@ export class DesktopRuntime {
   readonly #capabilities = new PackageCapabilityClient();
   readonly #widgetHost = new WidgetHostStore();
   readonly #clientDevices = new ClientDeviceStore();
+  readonly #phoneForeground = new PhoneForegroundController();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
   readonly #keyboard: ShellKeyboardController;
@@ -114,6 +122,8 @@ export class DesktopRuntime {
   #unbindHomeIndicator: (() => void) | null = null;
   #dockRevealTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   #homeGestureStart: { readonly x: number; readonly y: number } | null = null;
+  #dividerElement: HTMLElement | null = null;
+  #dividerDrag: number | null = null;
 
   public constructor(options: DesktopRuntimeOptions) {
     this.#api = options.api;
@@ -183,6 +193,11 @@ export class DesktopRuntime {
     }
 
     if (layout !== null) {
+      this.#phoneForeground.restore({
+        primaryWindowId: layout.layout.primaryWindowId,
+        secondaryWindowId: layout.layout.secondaryWindowId,
+        splitRatioPermille: layout.layout.splitRatioPermille,
+      });
       this.#widgetPlacements = layout.layout.widgets.map((placement) => ({ ...placement }));
       this.#restoringLayout = true;
       try {
@@ -382,7 +397,7 @@ export class DesktopRuntime {
     const availableApplications = new Set(this.#applications.keys());
     for (const window of [...this.#store.windows]) {
       if (!availableApplications.has(window.applicationId)) {
-        this.#store.close(window.id);
+        this.#closeWindow(window.id);
       }
     }
 
@@ -447,12 +462,13 @@ export class DesktopRuntime {
         await this.#loadFrontend(application);
       }
       this.#closeLauncher();
+      this.#phoneForeground.show(launch.window.id);
       this.#renderWindows(this.#store.windows);
       this.#focusActiveWindow();
       this.#scheduleLayout();
     } catch (error) {
       if (launchedWindowId !== null && this.#store.windows.some((window) => window.id === launchedWindowId)) {
-        this.#store.close(launchedWindowId);
+        this.#closeWindow(launchedWindowId);
       }
       this.#onFailure(error);
     }
@@ -626,13 +642,16 @@ export class DesktopRuntime {
   }
 
   #renderWindows(windows: readonly DesktopWindowSnapshot[]): void {
-    const responsive = deriveResponsiveDesktop(
-      Math.max(this.#elements.windowLayer.clientWidth, 320),
-      windows,
-      this.#store.frontWindow?.id ?? null,
-    );
-    const visibleWindowIds = new Set(responsive.visibleWindows.map((window) => window.id));
     const area = this.#usableArea();
+    const stage = deriveWorkspaceStage({
+      workspaceClass: this.#workspaceClass,
+      windows,
+      area,
+      activeWindowId: this.#store.frontWindow?.id ?? null,
+      phone: this.#phoneForeground.state(),
+      freeWindowPlacement: this.#allowsFreeWindowPlacement(area),
+    });
+    const placements = new Map(stage.placements.map((placement) => [placement.windowId, placement]));
     const openIds = new Set(windows.map((window) => window.id));
 
     for (const [windowId, element] of this.#windowElements) {
@@ -647,20 +666,165 @@ export class DesktopRuntime {
 
     for (const window of windows) {
       const element = this.#windowElements.get(window.id) ?? this.#createWindowElement(window);
-      element.hidden = window.state === 'minimized' || !visibleWindowIds.has(window.id);
+      const placement = placements.get(window.id);
+      element.hidden = placement === undefined;
       element.style.zIndex = String(window.zIndex + 1);
       element.dataset['state'] = window.state;
-      element.dataset['active'] = String(this.#store.frontWindow?.id === window.id);
-      element.dataset['presentation'] = responsive.presentation;
+      element.dataset['active'] = String(stage.activeWindowId === window.id);
+      element.dataset['presentation'] = stage.presentation;
+      if (placement?.pane === undefined || placement.pane === null) {
+        delete element.dataset['pane'];
+      } else {
+        element.dataset['pane'] = placement.pane;
+      }
       element.querySelector<HTMLButtonElement>('[data-action="maximize"]')
         ?.setAttribute('aria-label', window.state === 'maximized' ? 'Restore' : 'Maximize');
-      applyBounds(element, responsive.presentation === 'windowed' ? window.bounds : area);
+      applyBounds(element, placement?.bounds ?? area);
       this.#mountWindowSurface(window);
     }
 
+    this.#renderDivider(stage);
     this.#renderTaskbar();
-    this.#updateDockMode(visibleWindowIds.size > 0);
+    this.#updateDockMode(stage.placements.length > 0);
     this.#elements.emptyState.hidden = this.#applications.size > 0;
+  }
+
+  /**
+   * Whether a tablet places windows freely instead of tiling them.
+   *
+   * Section 7 enables free placement where there is both room and a precise pointer. A
+   * coarse-pointer tablet keeps the tiled default, where every window is large enough to
+   * hit without a mouse.
+   */
+  #allowsFreeWindowPlacement(area: UsableArea): boolean {
+    if (this.#workspaceClass !== 'tablet') {
+      return false;
+    }
+    return globalThis.matchMedia('(any-pointer: fine)').matches && area.width >= 1024;
+  }
+
+  /** Draws the divider between two phone panes and lets the user move it. */
+  #renderDivider(stage: WorkspaceStage): void {
+    if (stage.divider === null) {
+      this.#dividerElement?.remove();
+      this.#dividerElement = null;
+      return;
+    }
+
+    const divider = this.#dividerElement ?? this.#createDividerElement();
+    divider.dataset['orientation'] = stage.orientation;
+    applyBounds(divider, stage.divider);
+  }
+
+  #createDividerElement(): HTMLElement {
+    const divider = document.createElement('div');
+    divider.className = 'phone-split-divider';
+    divider.setAttribute('role', 'separator');
+    divider.setAttribute('aria-label', translate(this.#language(), 'splitDivider'));
+    divider.tabIndex = 0;
+    divider.addEventListener('pointerdown', (event) => this.#beginDividerDrag(event, divider));
+    divider.addEventListener('pointermove', (event) => this.#moveDivider(event));
+    divider.addEventListener('pointerup', (event) => this.#endDividerDrag(event, divider));
+    divider.addEventListener('pointercancel', (event) => this.#endDividerDrag(event, divider));
+    this.#elements.windowLayer.append(divider);
+    this.#dividerElement = divider;
+    return divider;
+  }
+
+  #beginDividerDrag(event: PointerEvent, divider: HTMLElement): void {
+    this.#dividerDrag = event.pointerId;
+    divider.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  #moveDivider(event: PointerEvent): void {
+    if (this.#dividerDrag !== event.pointerId) {
+      return;
+    }
+
+    const area = this.#usableArea();
+    const portrait = area.height > area.width;
+    const offset = portrait ? event.clientY - area.y : event.clientX - area.x;
+    const extent = portrait ? area.height : area.width;
+    if (extent <= 0) {
+      return;
+    }
+
+    try {
+      this.#phoneForeground.setSplitRatio(clampSplitRatioPermille((offset / extent) * 1000));
+    } catch {
+      // The split ended under the pointer; there is nothing left to move.
+      return;
+    }
+    this.#renderWindows(this.#store.windows);
+  }
+
+  #endDividerDrag(event: PointerEvent, divider: HTMLElement): void {
+    if (this.#dividerDrag !== event.pointerId) {
+      return;
+    }
+    this.#dividerDrag = null;
+    if (divider.hasPointerCapture(event.pointerId)) {
+      divider.releasePointerCapture(event.pointerId);
+    }
+    // The position is stored once the drag settles, not on every pointer move.
+    this.#scheduleLayout();
+  }
+
+  /**
+   * Offers "Open in split" beside a task that is not already in the foreground.
+   *
+   * Split is always an explicit user action, so it needs a control of its own; nothing
+   * about opening or activating an application may produce one.
+   */
+  #appendSplitAffordance(container: HTMLElement, windowId: string | undefined): void {
+    if (windowId === undefined || this.#workspaceClass !== 'phone') {
+      return;
+    }
+
+    const foreground = this.#phoneForeground.state();
+    if (foreground.primaryWindowId === null || foreground.primaryWindowId === windowId) {
+      return;
+    }
+
+    const language = this.#language();
+    const split = document.createElement('button');
+    split.type = 'button';
+    split.className = 'taskbar-button taskbar-split-button';
+    const ends = foreground.secondaryWindowId === windowId;
+    split.title = translate(language, ends ? 'endSplit' : 'openInSplit');
+    split.setAttribute('aria-label', split.title);
+    split.textContent = ends ? '□' : '◫';
+    split.addEventListener('click', () => {
+      if (ends) {
+        this.#phoneForeground.closeSplit();
+        this.#renderWindows(this.#store.windows);
+        this.#scheduleLayout();
+        return;
+      }
+      this.#showOnPhone(windowId, true);
+    });
+    container.append(split);
+  }
+
+  /** Brings a window to the phone foreground, replacing the focused pane. */
+  #showOnPhone(windowId: string, inSplit: boolean): void {
+    if (this.#workspaceClass !== 'phone') {
+      return;
+    }
+    if (inSplit) {
+      this.#phoneForeground.showInSplit(windowId);
+    } else {
+      this.#phoneForeground.show(windowId);
+    }
+    this.#renderWindows(this.#store.windows);
+    this.#scheduleLayout();
+  }
+
+  /** Closes a window and keeps the phone foreground consistent with what is open. */
+  #closeWindow(windowId: string): void {
+    this.#store.close(windowId);
+    this.#phoneForeground.closed(windowId);
   }
 
   #createWindowElement(window: DesktopWindowSnapshot): HTMLElement {
@@ -768,7 +932,7 @@ export class DesktopRuntime {
       });
     element.querySelector<HTMLButtonElement>('[data-action="close"]')!
       .addEventListener('click', () => {
-        this.#store.close(windowId);
+        this.#closeWindow(windowId);
         this.#scheduleLayout();
       });
   }
@@ -890,11 +1054,13 @@ export class DesktopRuntime {
         const windowId = group.windowIds[0];
         if (windowId !== undefined) {
           this.#taskbar.activateWindow(windowId, this.#usableArea());
+          this.#showOnPhone(windowId, false);
           this.#focusActiveWindow();
           this.#scheduleLayout();
         }
       });
       container.append(button);
+      this.#appendSplitAffordance(container, group.windowIds[0]);
     }
   }
 
@@ -951,7 +1117,7 @@ export class DesktopRuntime {
     if (active === null) {
       return;
     }
-    this.#store.close(active.id);
+    this.#closeWindow(active.id);
     this.#scheduleLayout();
   }
 
@@ -1221,7 +1387,55 @@ export class DesktopRuntime {
       this.#workspaceClass,
       packageWindows,
       this.#widgetPlacements,
+      this.#presentationFor(packageWindows),
     );
+  }
+
+  /**
+   * The arrangement a save stores.
+   *
+   * Only windows that are themselves persisted may be named as the phone foreground. A
+   * Core application window is not part of the stored layout, so pointing the foreground
+   * at one would describe a layout the server is right to reject.
+   */
+  #presentationFor(windows: readonly PersistedDesktopWindow[]): LayoutPresentation | undefined {
+    if (this.#workspaceClass !== 'phone') {
+      return undefined;
+    }
+
+    const persisted = new Set(windows.map((window) => window.windowId));
+    const foreground = this.#phoneForeground.state();
+    const primary = foreground.primaryWindowId !== null && persisted.has(foreground.primaryWindowId)
+      ? foreground.primaryWindowId
+      : null;
+    const secondary = primary !== null
+      && foreground.secondaryWindowId !== null
+      && persisted.has(foreground.secondaryWindowId)
+      ? foreground.secondaryWindowId
+      : null;
+
+    if (primary === null) {
+      return {
+        presentationMode: 'phone-empty',
+        primaryWindowId: null,
+        secondaryWindowId: null,
+        splitRatioPermille: null,
+      };
+    }
+
+    return secondary === null
+      ? {
+        presentationMode: 'phone-single',
+        primaryWindowId: primary,
+        secondaryWindowId: null,
+        splitRatioPermille: null,
+      }
+      : {
+        presentationMode: 'phone-split',
+        primaryWindowId: primary,
+        secondaryWindowId: secondary,
+        splitRatioPermille: clampSplitRatioPermille(foreground.splitRatioPermille ?? 500),
+      };
   }
 
   #ensureStyles(): void {
