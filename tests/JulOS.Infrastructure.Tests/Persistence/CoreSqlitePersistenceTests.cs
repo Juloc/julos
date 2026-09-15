@@ -1,4 +1,6 @@
-﻿using JulOS.Contracts.Layouts;
+﻿using JulOS.Contracts.Devices;
+using JulOS.Contracts.Layouts;
+using JulOS.Infrastructure.Identifiers;
 using JulOS.Infrastructure.Layouts;
 using JulOS.Infrastructure.Persistence.Core;
 
@@ -136,7 +138,10 @@ public sealed class CoreSqlitePersistenceTests
             // unique index that the fix addresses is still enforced regardless of this pragma.
             await context.Database.OpenConnectionAsync();
             _ = await ExecuteScalarAsync(context, "PRAGMA foreign_keys=OFF;");
-            var service = new PostgresDesktopLayoutService(context, TimeProvider.System);
+            var service = new EfWorkspaceLayoutService(
+                context,
+                new TimeOrderedIdentifierGenerator(TimeProvider.System),
+                TimeProvider.System);
 
             var userId = Guid.Parse("11111111-1111-4111-8111-111111111111");
             var appId = Guid.Parse("22222222-2222-4222-8222-222222222222");
@@ -146,51 +151,62 @@ public sealed class CoreSqlitePersistenceTests
 
             static DesktopWindowContract Window(Guid id, Guid application, int zIndex) => new(
                 id, application, LaunchTargetId: null, "normal", 0, 0, 800, 600, 0, 0, 800, 600, zIndex,
-                SessionReferenceId: null);
+                SessionReferenceId: null, DisplaySlot: 0);
 
-            var first = await service.SaveAsync(
-                userId,
-                DesktopViewportNames.Desktop,
-                new SaveDesktopLayoutRequest(
-                    0,
-                    new[] { Window(w1, appId, 0), Window(w2, appId, 1), Window(w3, appId, 2) },
-                    Array.Empty<WidgetPlacementContract>()));
+            var first = await WriteAsync(
+                service, userId, 0, [Window(w1, appId, 0), Window(w2, appId, 1), Window(w3, appId, 2)]);
             Assert.AreEqual(1, first.Revision);
 
             // Bring w1 to the front: the same window ids now carry z-indexes that collide with
             // the previously stored rows if the save updated them in place, tripping the unique
             // index ux_desktop_windows_layout_z_index.
-            var second = await service.SaveAsync(
-                userId,
-                DesktopViewportNames.Desktop,
-                new SaveDesktopLayoutRequest(
-                    first.Revision,
-                    new[] { Window(w2, appId, 0), Window(w3, appId, 1), Window(w1, appId, 2) },
-                    Array.Empty<WidgetPlacementContract>()));
+            var second = await WriteAsync(
+                service, userId, first.Revision, [Window(w2, appId, 0), Window(w3, appId, 1), Window(w1, appId, 2)]);
 
             Assert.AreEqual(2, second.Revision);
             CollectionAssert.AreEqual(
                 new[] { w2, w3, w1 },
-                second.Windows.Select(window => window.WindowId).ToArray());
+                second.Layout.Windows.Select(window => window.WindowId).ToArray());
 
             // Closing the middle window leaves a gap the save must re-pack without conflict.
-            var third = await service.SaveAsync(
-                userId,
-                DesktopViewportNames.Desktop,
-                new SaveDesktopLayoutRequest(
-                    second.Revision,
-                    new[] { Window(w2, appId, 0), Window(w1, appId, 2) },
-                    Array.Empty<WidgetPlacementContract>()));
+            var third = await WriteAsync(
+                service, userId, second.Revision, [Window(w2, appId, 0), Window(w1, appId, 2)]);
 
             Assert.AreEqual(3, third.Revision);
             CollectionAssert.AreEqual(
                 new[] { w2, w1 },
-                third.Windows.Select(window => window.WindowId).ToArray());
+                third.Layout.Windows.Select(window => window.WindowId).ToArray());
         }
         finally
         {
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    private static async Task<WorkspaceLayoutResponse> WriteAsync(
+        EfWorkspaceLayoutService service,
+        Guid userId,
+        int expectedRevision,
+        DesktopWindowContract[] windows)
+    {
+        var result = await service.WriteCurrentAsync(
+            userId,
+            WorkspaceClassNames.DesktopSingle,
+            presentedKey: null,
+            new WorkspaceLayoutWriteRequest(
+                new WorkspaceLayoutDocument(
+                    LayoutId: null,
+                    "Default",
+                    PresentationModeNames.Freeform,
+                    PrimaryWindowId: null,
+                    SecondaryWindowId: null,
+                    SplitRatioPermille: null,
+                    DisplayCount: 1,
+                    UpdatedAtUtc: DateTimeOffset.UnixEpoch,
+                    windows,
+                    []),
+                expectedRevision));
+        return result.Layout;
     }
 }

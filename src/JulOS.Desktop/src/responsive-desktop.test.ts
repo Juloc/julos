@@ -4,7 +4,6 @@ import { test } from 'node:test';
 import {
   classifyViewport,
   deriveResponsiveDesktop,
-  viewportLayoutKey,
 } from './responsive-desktop.js';
 import type { DesktopWindowSnapshot } from './window-store.js';
 
@@ -51,6 +50,3 @@ test('desktop retains all non-minimized windows', () => {
   assert.deepEqual(state.visibleWindows.map((item) => item.id), ['window-1', 'window-2']);
 });
 
-test('layout keys cannot collide across viewport classes', () => {
-  assert.notEqual(viewportLayoutKey('user-1', 'mobile'), viewportLayoutKey('user-1', 'desktop'));
-});

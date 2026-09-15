@@ -1,4 +1,5 @@
 ﻿using JulOS.Domain.Applications;
+using JulOS.Domain.Primitives;
 
 namespace JulOS.Domain.Layouts;
 
@@ -19,9 +20,13 @@ public sealed class DesktopWindow
         ApplicationDefinitionId applicationId,
         LaunchTargetId? launchTargetId,
         WindowBounds bounds,
-        int zIndex)
+        int zIndex,
+        WorkspaceClass workspaceClass,
+        int displaySlot)
     {
         this.Id = id;
+        this.WorkspaceClass = workspaceClass;
+        this.DisplaySlot = displaySlot;
         this.ApplicationId = applicationId;
         this.LaunchTargetId = launchTargetId;
         this.Bounds = bounds;
@@ -51,14 +56,46 @@ public sealed class DesktopWindow
     /// <summary>The stacking position. Higher is nearer the front.</summary>
     public int ZIndex { get; internal set; }
 
+    /// <summary>
+    /// The workspace class of the layout holding this window, stored on the window itself.
+    /// </summary>
+    /// <remarks>
+    /// The copy is what lets the database refuse a window that belongs to one workspace
+    /// class being written into the layout of another. It is never accepted from a client:
+    /// the layout it is added to decides it.
+    /// </remarks>
+    public WorkspaceClass WorkspaceClass { get; }
+
+    /// <summary>
+    /// The zero-based logical display this window belongs to.
+    /// </summary>
+    /// <remarks>
+    /// The slot is stable and is not bounded by the number of displays currently present.
+    /// A window whose display is temporarily absent keeps its slot, is presented on slot
+    /// zero for that session, and returns to its own slot when the display comes back.
+    /// </remarks>
+    public int DisplaySlot { get; }
+
     /// <summary>Opens a window in the normal state at the given bounds.</summary>
+    /// <exception cref="DomainRuleViolationException">The display slot is negative.</exception>
     public static DesktopWindow Open(
         WindowId id,
         ApplicationDefinitionId applicationId,
         LaunchTargetId? launchTargetId,
         WindowBounds bounds,
-        int zIndex) =>
-        new(id, applicationId, launchTargetId, bounds, zIndex);
+        int zIndex,
+        WorkspaceClass workspaceClass,
+        int displaySlot = 0)
+    {
+        if (displaySlot < 0)
+        {
+            throw new DomainRuleViolationException(
+                "desktop.layout_invalid",
+                "A display slot is a zero-based position.");
+        }
+
+        return new DesktopWindow(id, applicationId, launchTargetId, bounds, zIndex, workspaceClass, displaySlot);
+    }
 
     /// <summary>Moves or resizes a window the user is dragging.</summary>
     /// <remarks>

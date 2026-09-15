@@ -1,8 +1,7 @@
 ﻿import { JulOsApiClient, JulOsApiError } from './api-client.js';
 import { desktopMultiDisplayWorkspace } from './multi-display-workspace.js';
+import type { LayoutScope, RestoreMode, WorkspaceClass } from './workspace-contract.js';
 import type { WindowPresentationState, WindowStore } from './window-store.js';
-
-export type DesktopViewport = 'desktop' | 'tablet' | 'mobile';
 
 export interface PersistedDesktopWindow {
   readonly windowId: string;
@@ -19,6 +18,8 @@ export interface PersistedDesktopWindow {
   readonly restoreHeight: number;
   readonly zIndex: number;
   readonly sessionReferenceId: string | null;
+  /** Stable zero-based logical display position; always zero outside `desktop-multi`. */
+  readonly displaySlot: number;
 }
 
 export interface PersistedWidgetPlacement {
@@ -30,20 +31,33 @@ export interface PersistedWidgetPlacement {
   readonly heightUnits: number;
 }
 
-export interface DesktopLayoutDocument {
-  readonly layoutId: string;
-  readonly viewport: DesktopViewport;
+/** How a stored layout arranges its windows. */
+export type PresentationMode = 'freeform' | 'tiled' | 'phone-empty' | 'phone-single' | 'phone-split';
+
+/** The arrangement of one stored layout. */
+export interface WorkspaceLayoutDocument {
+  /** Null for a transient fresh-mode layout that was never stored. */
+  readonly layoutId: string | null;
   readonly name: string;
-  readonly revision: number;
+  readonly presentationMode: PresentationMode;
+  readonly primaryWindowId: string | null;
+  readonly secondaryWindowId: string | null;
+  readonly splitRatioPermille: number | null;
+  readonly displayCount: number;
   readonly updatedAtUtc: string;
   readonly windows: readonly PersistedDesktopWindow[];
   readonly widgets: readonly PersistedWidgetPlacement[];
 }
 
-export interface SaveDesktopLayoutDocument {
+/** The layout a session resolved for one workspace class, and how it resolved. */
+export interface WorkspaceLayoutResponse {
+  readonly workspaceClass: WorkspaceClass;
+  readonly layoutScope: LayoutScope;
+  readonly restoreMode: RestoreMode;
+  /** False in fresh mode, where the server accepts no write at all. */
+  readonly persistenceEnabled: boolean;
   readonly revision: number;
-  readonly windows: readonly PersistedDesktopWindow[];
-  readonly widgets: readonly PersistedWidgetPlacement[];
+  readonly layout: WorkspaceLayoutDocument;
 }
 
 export interface AntiforgeryToken {
@@ -52,7 +66,7 @@ export interface AntiforgeryToken {
 }
 
 export interface LayoutConflict {
-  readonly viewport: DesktopViewport;
+  readonly workspaceClass: WorkspaceClass;
   readonly localRevision: number;
   readonly currentRevision: number | null;
   readonly correlationId: string | null;
@@ -65,23 +79,31 @@ export interface LayoutPersistenceOptions {
 }
 
 interface PendingSave {
-  document: SaveDesktopLayoutDocument;
+  document: WorkspaceLayoutDocument;
   timer: ReturnType<typeof globalThis.setTimeout> | null;
-  inFlight: Promise<DesktopLayoutDocument> | null;
+  inFlight: Promise<WorkspaceLayoutResponse> | null;
 }
 
 /**
- * Persists independent viewport documents. Pointer movement never calls this service;
- * callers schedule only settled window and widget state.
+ * Persists one independent layout document per workspace class.
+ *
+ * Which stored layout a workspace class resolves to — the user's shared one or the one
+ * private to this device — is decided by the server from the device cookie. This client
+ * names the workspace class and nothing else, so it cannot reach a layout it was not
+ * given.
+ *
+ * Pointer movement never calls this service; callers schedule only settled window and
+ * widget state.
  */
 export class DesktopLayoutPersistence {
   readonly #api: JulOsApiClient;
   readonly #debounceMilliseconds: number;
   readonly #onConflict: (conflict: LayoutConflict) => void | Promise<void>;
   readonly #onFailure: (error: unknown) => void | Promise<void>;
-  readonly #pending = new Map<DesktopViewport, PendingSave>();
-  readonly #revisions = new Map<DesktopViewport, number>();
-  readonly #documents = new Map<DesktopViewport, DesktopLayoutDocument>();
+  readonly #pending = new Map<WorkspaceClass, PendingSave>();
+  readonly #revisions = new Map<WorkspaceClass, number>();
+  readonly #documents = new Map<WorkspaceClass, WorkspaceLayoutResponse>();
+  readonly #writable = new Set<WorkspaceClass>();
   #antiforgery: AntiforgeryToken | null = null;
   #disposed = false;
 
@@ -98,57 +120,74 @@ export class DesktopLayoutPersistence {
     }
   }
 
-  public async load(viewport: DesktopViewport): Promise<DesktopLayoutDocument> {
+  public async load(workspaceClass: WorkspaceClass): Promise<WorkspaceLayoutResponse> {
     this.#ensureActive();
-    const layout = await this.#api.get<DesktopLayoutDocument>(layoutPath(viewport));
-    const snapshot = cloneDocument(layout);
-    this.#revisions.set(viewport, snapshot.revision);
-    this.#documents.set(viewport, snapshot);
-    return cloneDocument(snapshot);
+    const resolved = await this.#api.get<WorkspaceLayoutResponse>(layoutPath(workspaceClass));
+    this.#accept(workspaceClass, resolved);
+    return cloneResponse(resolved);
   }
 
-  public snapshot(viewport: DesktopViewport): DesktopLayoutDocument {
+  /** Whether the resolved workspace stores window state at all. */
+  public persistenceEnabled(workspaceClass: WorkspaceClass): boolean {
     this.#ensureActive();
-    const document = this.#documents.get(viewport);
+    return this.#writable.has(workspaceClass);
+  }
+
+  public snapshot(workspaceClass: WorkspaceClass): WorkspaceLayoutResponse {
+    this.#ensureActive();
+    const document = this.#documents.get(workspaceClass);
     if (document === undefined) {
-      throw new Error(`No ${viewport} layout has been loaded or saved.`);
+      throw new Error(`No ${workspaceClass} layout has been loaded or saved.`);
     }
-    return cloneDocument(document);
+    return cloneResponse(document);
   }
 
   public schedule(
-    viewport: DesktopViewport,
+    workspaceClass: WorkspaceClass,
     windows: readonly PersistedDesktopWindow[],
     widgets: readonly PersistedWidgetPlacement[],
   ): void {
     this.#ensureActive();
-    const revision = this.#revisions.get(viewport) ?? 0;
-    const pending = this.#pending.get(viewport) ?? {
-      document: { revision, windows: [], widgets: [] },
+
+    // Fresh mode performs no persistence at all. Scheduling a write that the server would
+    // refuse would turn every autosave into a visible error the user cannot act on.
+    if (!this.#writable.has(workspaceClass)) {
+      return;
+    }
+
+    const resolved = this.#documents.get(workspaceClass);
+    const revision = this.#revisions.get(workspaceClass) ?? 0;
+    const pending = this.#pending.get(workspaceClass) ?? {
+      document: emptyDocument(resolved?.layout),
       timer: null,
       inFlight: null,
     };
-    pending.document = { revision, windows: cloneWindows(windows), widgets: cloneWidgets(widgets) };
+    pending.document = {
+      ...emptyDocument(resolved?.layout),
+      windows: cloneWindows(windows),
+      widgets: cloneWidgets(widgets),
+    };
+    this.#revisions.set(workspaceClass, revision);
     if (pending.timer !== null) {
       globalThis.clearTimeout(pending.timer);
     }
     pending.timer = globalThis.setTimeout(() => {
       pending.timer = null;
-      void this.#flush(viewport, pending);
+      void this.#flush(workspaceClass, pending);
     }, this.#debounceMilliseconds);
-    this.#pending.set(viewport, pending);
+    this.#pending.set(workspaceClass, pending);
   }
 
-  public async flush(viewport?: DesktopViewport): Promise<void> {
+  public async flush(workspaceClass?: WorkspaceClass): Promise<void> {
     this.#ensureActive();
-    if (viewport !== undefined) {
-      const pending = this.#pending.get(viewport);
+    if (workspaceClass !== undefined) {
+      const pending = this.#pending.get(workspaceClass);
       if (pending !== undefined) {
         if (pending.timer !== null) {
           globalThis.clearTimeout(pending.timer);
           pending.timer = null;
         }
-        await this.#flush(viewport, pending);
+        await this.#flush(workspaceClass, pending);
       }
       return;
     }
@@ -162,9 +201,9 @@ export class DesktopLayoutPersistence {
     }));
   }
 
-  public cancel(viewport?: DesktopViewport): void {
+  public cancel(workspaceClass?: WorkspaceClass): void {
     this.#ensureActive();
-    this.#cancel(viewport);
+    this.#cancel(workspaceClass);
   }
 
   public dispose(): void {
@@ -174,49 +213,42 @@ export class DesktopLayoutPersistence {
     this.#cancel();
     this.#documents.clear();
     this.#revisions.clear();
+    this.#writable.clear();
     this.#antiforgery = null;
     this.#disposed = true;
   }
 
-  async #flush(viewport: DesktopViewport, pending: PendingSave): Promise<DesktopLayoutDocument> {
+  async #flush(workspaceClass: WorkspaceClass, pending: PendingSave): Promise<WorkspaceLayoutResponse> {
     if (pending.inFlight !== null) {
       await pending.inFlight;
     }
 
     const token = await this.#readAntiforgery();
-    const document = {
-      ...pending.document,
-      revision: this.#revisions.get(viewport) ?? pending.document.revision,
-    };
-    const save = this.#save(viewport, document, token);
+    const expectedRevision = this.#revisions.get(workspaceClass) ?? 0;
+    const save = this.#save(workspaceClass, pending.document, expectedRevision, token);
     pending.inFlight = save;
 
     try {
-      const stored = cloneDocument(await save);
-      this.#acceptStored(viewport, pending, stored);
-      return cloneDocument(stored);
+      const stored = await save;
+      this.#accept(workspaceClass, stored);
+      return cloneResponse(stored);
     } catch (error) {
       if (error instanceof JulOsApiError && error.status === 409) {
         await this.#onConflict({
-          viewport,
-          localRevision: document.revision,
+          workspaceClass,
+          localRevision: expectedRevision,
           currentRevision: error.problem?.currentRevision ?? null,
           correlationId: error.correlationId,
         });
 
         const currentRevision = error.problem?.currentRevision;
         if (typeof currentRevision === 'number') {
-          const current = await this.#api.get<DesktopLayoutDocument>(layoutPath(viewport));
+          const current = await this.#api.get<WorkspaceLayoutResponse>(layoutPath(workspaceClass));
           if (current.revision === currentRevision) {
-            this.#revisions.set(viewport, current.revision);
-            this.#documents.set(viewport, cloneDocument(current));
-            const retried = cloneDocument(await this.#save(
-              viewport,
-              { ...pending.document, revision: current.revision },
-              token,
-            ));
-            this.#acceptStored(viewport, pending, retried);
-            return cloneDocument(retried);
+            this.#accept(workspaceClass, current);
+            const retried = await this.#save(workspaceClass, pending.document, current.revision, token);
+            this.#accept(workspaceClass, retried);
+            return cloneResponse(retried);
           }
         }
       } else {
@@ -229,44 +261,48 @@ export class DesktopLayoutPersistence {
   }
 
   #save(
-    viewport: DesktopViewport,
-    document: SaveDesktopLayoutDocument,
+    workspaceClass: WorkspaceClass,
+    layout: WorkspaceLayoutDocument,
+    expectedRevision: number,
     token: AntiforgeryToken,
-  ): Promise<DesktopLayoutDocument> {
-    return this.#api.requestJson<DesktopLayoutDocument>(layoutPath(viewport), {
+  ): Promise<WorkspaceLayoutResponse> {
+    return this.#api.requestJson<WorkspaceLayoutResponse>(layoutPath(workspaceClass), {
       method: 'PUT',
-      body: document,
+      body: { layout, expectedRevision },
       headers: { [token.headerName]: token.token },
     });
   }
 
-  #acceptStored(viewport: DesktopViewport, pending: PendingSave, stored: DesktopLayoutDocument): void {
-    this.#revisions.set(viewport, stored.revision);
-    this.#documents.set(viewport, cloneDocument(stored));
-    pending.document = { ...pending.document, revision: stored.revision };
+  #accept(workspaceClass: WorkspaceClass, resolved: WorkspaceLayoutResponse): void {
+    this.#revisions.set(workspaceClass, resolved.revision);
+    this.#documents.set(workspaceClass, cloneResponse(resolved));
+    if (resolved.persistenceEnabled) {
+      this.#writable.add(workspaceClass);
+    } else {
+      this.#writable.delete(workspaceClass);
+      this.#cancel(workspaceClass);
+    }
   }
 
   async #readAntiforgery(): Promise<AntiforgeryToken> {
-    if (this.#antiforgery === null) {
-      this.#antiforgery = await this.#api.get<AntiforgeryToken>('/api/v1/auth/antiforgery');
-    }
+    this.#antiforgery ??= await this.#api.get<AntiforgeryToken>('/api/v1/auth/antiforgery');
     return this.#antiforgery;
   }
 
-  #cancel(viewport?: DesktopViewport): void {
-    const targets = viewport === undefined
+  #cancel(workspaceClass?: WorkspaceClass): void {
+    const targets = workspaceClass === undefined
       ? [...this.#pending.values()]
-      : [this.#pending.get(viewport)].filter((value): value is PendingSave => value !== undefined);
+      : [this.#pending.get(workspaceClass)].filter((value): value is PendingSave => value !== undefined);
     for (const pending of targets) {
       if (pending.timer !== null) {
         globalThis.clearTimeout(pending.timer);
         pending.timer = null;
       }
     }
-    if (viewport === undefined) {
+    if (workspaceClass === undefined) {
       this.#pending.clear();
     } else {
-      this.#pending.delete(viewport);
+      this.#pending.delete(workspaceClass);
     }
   }
 
@@ -293,14 +329,43 @@ export function windowsForPersistence(store: WindowStore): readonly PersistedDes
     restoreHeight: Math.round(window.restoreBounds.height),
     zIndex: window.zIndex,
     sessionReferenceId: null,
+    // Multi-display slot assignment lands with the Multi-Display controller; a
+    // single-display workspace has exactly one slot and the server rejects anything else.
+    displaySlot: 0,
   }));
 }
 
-function layoutPath(viewport: DesktopViewport): string {
-  return `/api/v1/desktop/layouts/${viewport}`;
+function layoutPath(workspaceClass: WorkspaceClass): string {
+  return `/api/v1/workspace-layouts/${encodeURIComponent(workspaceClass)}/current`;
 }
 
-function cloneDocument(document: DesktopLayoutDocument): DesktopLayoutDocument {
+/**
+ * The arrangement a write starts from.
+ *
+ * Presentation mode, the phone foreground windows and the display count are carried over
+ * from the loaded layout rather than invented here: an autosave stores where the windows
+ * are, it does not decide how the workspace is arranged.
+ */
+function emptyDocument(previous: WorkspaceLayoutDocument | undefined): WorkspaceLayoutDocument {
+  return {
+    layoutId: previous?.layoutId ?? null,
+    name: previous?.name ?? 'Default',
+    presentationMode: previous?.presentationMode ?? 'freeform',
+    primaryWindowId: previous?.primaryWindowId ?? null,
+    secondaryWindowId: previous?.secondaryWindowId ?? null,
+    splitRatioPermille: previous?.splitRatioPermille ?? null,
+    displayCount: previous?.displayCount ?? 1,
+    updatedAtUtc: previous?.updatedAtUtc ?? new Date(0).toISOString(),
+    windows: [],
+    widgets: [],
+  };
+}
+
+function cloneResponse(response: WorkspaceLayoutResponse): WorkspaceLayoutResponse {
+  return { ...response, layout: cloneDocument(response.layout) };
+}
+
+function cloneDocument(document: WorkspaceLayoutDocument): WorkspaceLayoutDocument {
   return {
     ...document,
     windows: cloneWindows(document.windows),

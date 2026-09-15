@@ -16,22 +16,22 @@ public sealed class DesktopLayoutTests
     private static readonly int[] FiveInOrder = [0, 1, 2, 3, 4];
 
     [TestMethod]
-    public void MobileAndDesktopLayoutsAreSeparateRecords()
+    public void PhoneAndDesktopLayoutsAreSeparateRecords()
     {
-        var desktop = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
-        var mobile = DesktopLayout.Create(NewLayoutId(), ViewportClass.Mobile);
+        var desktop = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
+        var mobile = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.Phone);
 
         desktop.AddWindow(NewWindow());
 
         Assert.AreEqual(1, desktop.Windows.Count);
         Assert.AreEqual(0, mobile.Windows.Count, "Arranging a wide screen must not overwrite the phone layout.");
-        Assert.AreNotEqual(desktop.ViewportClass, mobile.ViewportClass);
+        Assert.AreNotEqual(desktop.WorkspaceClass, mobile.WorkspaceClass);
     }
 
     [TestMethod]
     public void ZOrderIsAGapFreeSequenceWithoutDuplicates()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
 
         for (var index = 0; index < 5; index++)
         {
@@ -47,7 +47,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void FocusingRaisesAWindowToTheFrontAndRenumbersTheRest()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
         var first = NewWindow();
         var second = NewWindow();
         var third = NewWindow();
@@ -66,7 +66,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void ClosingAWindowLeavesNoGapInTheStack()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
         var first = NewWindow();
         var second = NewWindow();
         var third = NewWindow();
@@ -83,7 +83,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void TheSameWindowCannotBeAddedTwice()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
         var window = NewWindow();
 
         layout.AddWindow(window);
@@ -96,7 +96,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void FocusingAWindowThatIsNotOpenFails()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
 
         var exception = Assert.ThrowsExactly<DomainRuleViolationException>(
             () => layout.Focus(new WindowId(Guid.CreateVersion7())));
@@ -107,7 +107,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void EveryChangeMovesTheRevision()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
         var before = layout.Revision;
 
         layout.AddWindow(NewWindow());
@@ -118,7 +118,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void OverlappingWidgetsAreRejected()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
 
         layout.AddWidget(WidgetPlacement.Place(NewWidgetId(), "host.cpu", 0, 0, 2, 2));
 
@@ -131,7 +131,7 @@ public sealed class DesktopLayoutTests
     [TestMethod]
     public void AdjacentWidgetsAreAccepted()
     {
-        var layout = DesktopLayout.Create(NewLayoutId(), ViewportClass.Desktop);
+        var layout = DesktopLayout.CreateShared(NewLayoutId(), WorkspaceClass.DesktopSingle);
 
         layout.AddWidget(WidgetPlacement.Place(NewWidgetId(), "host.cpu", 0, 0, 2, 2));
         layout.AddWidget(WidgetPlacement.Place(NewWidgetId(), "host.memory", 2, 0, 2, 2));
@@ -161,10 +161,12 @@ public sealed class DesktopLayoutTests
 
     private static WidgetPlacementId NewWidgetId() => new(Guid.CreateVersion7());
 
-    private static DesktopWindow NewWindow() => DesktopWindow.Open(
+    private static DesktopWindow NewWindow(
+        WorkspaceClass workspaceClass = WorkspaceClass.DesktopSingle) => DesktopWindow.Open(
         new WindowId(Guid.CreateVersion7()),
         new ApplicationDefinitionId(Guid.CreateVersion7()),
         launchTargetId: null,
         WindowBounds.Create(100, 100, 800, 600),
-        zIndex: 0);
+        zIndex: 0,
+        workspaceClass);
 }

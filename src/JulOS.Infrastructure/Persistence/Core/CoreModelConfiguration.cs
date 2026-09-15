@@ -256,28 +256,84 @@ internal static class CoreModelConfiguration
         entity.ToTable("desktop_layouts", Schema, table =>
         {
             table.HasCheckConstraint("ck_desktop_layouts_revision", "revision >= 1");
+
+            // A phone arranges its windows differently from every other workspace, so the
+            // mode and the class cannot disagree.
+            table.HasCheckConstraint(
+                "ck_desktop_layouts_mode_class",
+                "(workspace_class = 'Phone' "
+                + "AND presentation_mode IN ('PhoneEmpty', 'PhoneSingle', 'PhoneSplit')) "
+                + "OR (workspace_class <> 'Phone' AND presentation_mode IN ('Freeform', 'Tiled'))");
+
+            // The state matrix from docs/MOBILE_PWA.md section 5: which of the foreground
+            // fields may be set is decided entirely by the mode.
+            table.HasCheckConstraint(
+                "ck_desktop_layouts_presentation_state",
+                "(presentation_mode IN ('Freeform', 'Tiled', 'PhoneEmpty') "
+                + "AND primary_window_id IS NULL AND secondary_window_id IS NULL "
+                + "AND split_ratio_permille IS NULL) "
+                + "OR (presentation_mode = 'PhoneSingle' "
+                + "AND primary_window_id IS NOT NULL AND secondary_window_id IS NULL "
+                + "AND split_ratio_permille IS NULL) "
+                + "OR (presentation_mode = 'PhoneSplit' "
+                + "AND primary_window_id IS NOT NULL AND secondary_window_id IS NOT NULL "
+                + "AND primary_window_id <> secondary_window_id "
+                + "AND split_ratio_permille BETWEEN 250 AND 750)");
+
+            table.HasCheckConstraint(
+                "ck_desktop_layouts_display_count",
+                "display_count >= 1 AND (workspace_class = 'DesktopMulti' OR display_count = 1)");
         });
 
         entity.HasKey(row => row.Id).HasName("pk_desktop_layouts");
+
+        // The window foreign key carries the workspace class as well as the layout, which
+        // needs the pair to be a key on the layout.
+        entity.HasAlternateKey(row => new { row.Id, row.WorkspaceClass })
+            .HasName("ak_desktop_layouts_id_workspace_class");
+
         entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
         entity.Property(row => row.UserId).HasColumnName("user_id");
-        entity.Property(row => row.ViewportClass).HasColumnName("viewport_class").HasConversion<string>().HasMaxLength(16);
+        entity.Property(row => row.WorkspaceClass)
+            .HasColumnName("workspace_class")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+        entity.Property(row => row.ClientDeviceId).HasColumnName("client_device_id");
         entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(128).IsRequired();
-        entity.Property(row => row.IsDefault).HasColumnName("is_default");
+        entity.Property(row => row.PresentationMode)
+            .HasColumnName("presentation_mode")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+        entity.Property(row => row.PrimaryWindowId).HasColumnName("primary_window_id");
+        entity.Property(row => row.SecondaryWindowId).HasColumnName("secondary_window_id");
+        entity.Property(row => row.SplitRatioPermille).HasColumnName("split_ratio_permille");
+        entity.Property(row => row.DisplayCount).HasColumnName("display_count");
         entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
         entity.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc");
 
-        entity.HasIndex(row => new { row.UserId, row.ViewportClass, row.Name })
+        // One shared layout per workspace class, and one per device and workspace class.
+        // A nullable device column cannot express that with a single unique key, because
+        // NULL does not compare equal to NULL, so the rule needs two partial indexes.
+        entity.HasIndex(row => new { row.UserId, row.WorkspaceClass })
             .IsUnique()
-            .HasDatabaseName("ux_desktop_layouts_user_viewport_name");
-        entity.HasIndex(row => new { row.UserId, row.ViewportClass })
+            .HasFilter("client_device_id IS NULL")
+            .HasDatabaseName("ux_desktop_layouts_shared");
+        entity.HasIndex(row => new { row.UserId, row.ClientDeviceId, row.WorkspaceClass })
             .IsUnique()
-            .HasFilter("is_default")
-            .HasDatabaseName("ux_desktop_layouts_default_per_viewport");
+            .HasFilter("client_device_id IS NOT NULL")
+            .HasDatabaseName("ux_desktop_layouts_device");
+
+        entity.HasOne<ClientDeviceRow>()
+            .WithMany()
+            .HasForeignKey(row => new { row.UserId, row.ClientDeviceId })
+            .HasPrincipalKey(row => new { row.OwnerUserId, row.Id })
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_desktop_layouts_device");
 
         entity.HasMany(row => row.Windows)
             .WithOne()
-            .HasForeignKey(row => row.DesktopLayoutId)
+            .HasForeignKey(row => new { row.DesktopLayoutId, row.WorkspaceClass })
+            .HasPrincipalKey(row => new { row.Id, row.WorkspaceClass })
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("fk_desktop_windows_layout");
         entity.HasMany(row => row.Widgets)
@@ -298,6 +354,12 @@ internal static class CoreModelConfiguration
                 "width BETWEEN 1 AND 16384 AND height BETWEEN 1 AND 16384 "
                 + "AND restore_width BETWEEN 1 AND 16384 AND restore_height BETWEEN 1 AND 16384 "
                 + "AND abs(x) <= 65536 AND abs(y) <= 65536 AND abs(restore_x) <= 65536 AND abs(restore_y) <= 65536");
+
+            // The slot is not bounded by the parent layout's current display count: a
+            // window whose display is temporarily absent keeps the slot it will return to.
+            table.HasCheckConstraint(
+                "ck_desktop_windows_display_slot",
+                "display_slot >= 0 AND (workspace_class = 'DesktopMulti' OR display_slot = 0)");
         });
 
         entity.HasKey(row => row.Id).HasName("pk_desktop_windows");
@@ -315,6 +377,11 @@ internal static class CoreModelConfiguration
         entity.Property(row => row.RestoreWidth).HasColumnName("restore_width");
         entity.Property(row => row.RestoreHeight).HasColumnName("restore_height");
         entity.Property(row => row.ZIndex).HasColumnName("z_index");
+        entity.Property(row => row.WorkspaceClass)
+            .HasColumnName("workspace_class")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+        entity.Property(row => row.DisplaySlot).HasColumnName("display_slot");
         entity.Property(row => row.SessionReferenceId).HasColumnName("session_reference_id");
         entity.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc");
         entity.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc");

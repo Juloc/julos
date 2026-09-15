@@ -3,6 +3,7 @@ import {
   ClientDeviceStore,
   defaultDeviceName,
   detectWorkspaceClass,
+  effectiveWorkspaceClass,
   windowCapabilitySource,
 } from './client-devices.js';
 import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
@@ -12,8 +13,7 @@ import { LauncherIndex, type LauncherSearchResult } from './launcher-index.js';
 import {
   DesktopLayoutPersistence,
   windowsForPersistence,
-  type DesktopLayoutDocument,
-  type DesktopViewport,
+  type WorkspaceLayoutResponse,
   type PersistedDesktopWindow,
   type PersistedWidgetPlacement,
 } from './layout-persistence.js';
@@ -21,7 +21,8 @@ import type { NotificationCenterSnapshot, NotificationCenterStore } from './noti
 import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import type { SupportedLanguage } from './localization.js';
-import { classifyViewport, deriveResponsiveDesktop } from './responsive-desktop.js';
+import { classifyViewport, deriveResponsiveDesktop, type DesktopViewport } from './responsive-desktop.js';
+import type { WorkspaceClass } from './workspace-contract.js';
 import { ShellKeyboardController } from './shell-keyboard.js';
 import type { DesktopApplication, DesktopWidget, ShellApiClient } from './shell-api.js';
 import { isDynamicWebAppBrowserAvailable } from './webapp-availability.js';
@@ -100,6 +101,9 @@ export class DesktopRuntime {
   #launcher: LauncherIndex | null = null;
   #launcherQuery = '';
   #viewport: DesktopViewport = 'desktop';
+  // Layout identity, which is separate from the viewport the applications are listed
+  // for: several workspace classes present the same application viewport class.
+  #workspaceClass: WorkspaceClass = 'desktop-single';
   #webAppBrowserAvailable = false;
   #layoutLoaded = false;
   #restoringLayout = false;
@@ -159,6 +163,10 @@ export class DesktopRuntime {
 
     this.#ensureStyles();
     this.#viewport = classifyViewport(Math.max(this.#elements.windowLayer.clientWidth, 320));
+
+    // The device is resolved before the layout is loaded, because its stored pin and
+    // preference decide which workspace class and which of the two stored layouts answer.
+    await this.#registerClientDevice();
     const [[packageApplications, widgets], webAppBrowserAvailable] = await Promise.all([
       this.#readPackageCatalog(),
       this.#readWebAppBrowserAvailability(),
@@ -166,19 +174,19 @@ export class DesktopRuntime {
     this.#webAppBrowserAvailable = webAppBrowserAvailable;
     this.#replaceCatalog(packageApplications, widgets);
 
-    let layout: DesktopLayoutDocument | null = null;
+    let layout: WorkspaceLayoutResponse | null = null;
     try {
-      layout = await this.#layoutPersistence.load(this.#viewport);
+      layout = await this.#layoutPersistence.load(this.#workspaceClass);
       this.#layoutLoaded = true;
     } catch (error) {
       this.#onFailure(error);
     }
 
     if (layout !== null) {
-      this.#widgetPlacements = layout.widgets.map((placement) => ({ ...placement }));
+      this.#widgetPlacements = layout.layout.widgets.map((placement) => ({ ...placement }));
       this.#restoringLayout = true;
       try {
-        this.#restoreLayout(layout.windows);
+        this.#restoreLayout(layout.layout.windows);
       } finally {
         this.#restoringLayout = false;
       }
@@ -203,11 +211,7 @@ export class DesktopRuntime {
     globalThis.addEventListener('resize', this.#resizeHandler);
     this.#bindHomeIndicator();
 
-    await Promise.all([
-      this.#loadRestoredFrontends(),
-      this.#renderWidgets(),
-      this.#registerClientDevice(),
-    ]);
+    await Promise.all([this.#loadRestoredFrontends(), this.#renderWidgets()]);
   }
 
   /**
@@ -218,9 +222,16 @@ export class DesktopRuntime {
    */
   async #registerClientDevice(): Promise<void> {
     const detected = detectWorkspaceClass(windowCapabilitySource(globalThis.window));
+    this.#workspaceClass = detected;
     try {
       await this.#clientDevices.register(defaultDeviceName(detected, this.#language()), detected);
+      const current = this.#clientDevices.currentDevice();
+      if (current !== null) {
+        // A stored pin is authoritative over detection.
+        this.#workspaceClass = effectiveWorkspaceClass(current);
+      }
     } catch (error) {
+      // The desktop is usable without a device record; the detected class still applies.
       this.#onFailure(error);
     }
   }
@@ -244,7 +255,7 @@ export class DesktopRuntime {
     this.#hideWindowSwitcher();
 
     if (this.#layoutLoaded) {
-      void this.#layoutPersistence.flush(this.#viewport)
+      void this.#layoutPersistence.flush(this.#workspaceClass)
         .catch((error: unknown) => this.#onFailure(error))
         .finally(() => this.#layoutPersistence.dispose());
     } else {
@@ -1207,7 +1218,7 @@ export class DesktopRuntime {
     const packageWindows = windowsForPersistence(this.#store)
       .filter((window) => !this.#coreApplications.isCoreApplication(window.applicationDefinitionId));
     this.#layoutPersistence.schedule(
-      this.#viewport,
+      this.#workspaceClass,
       packageWindows,
       this.#widgetPlacements,
     );

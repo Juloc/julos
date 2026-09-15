@@ -2,6 +2,7 @@
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Devices;
+using JulOS.Application.Layouts;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
 using JulOS.Application.Secrets;
@@ -62,6 +63,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = deviceFailure.Message;
         }
+        else if (exception is WorkspaceLayoutFailureException layoutDetail)
+        {
+            context.ProblemDetails.Detail = layoutDetail.Message;
+        }
         else if (exception is ProfileFailureException profileFailure)
         {
             context.ProblemDetails.Detail = profileFailure.Message;
@@ -121,6 +126,11 @@ internal static class ProblemDetailsCustomizer
         if (exception is ClientDeviceException clientDeviceFailure)
         {
             return (clientDeviceFailure.Code, false);
+        }
+
+        if (exception is WorkspaceLayoutFailureException layoutFailure)
+        {
+            return (layoutFailure.Code, false);
         }
 
         if (exception is SecretReferenceFailureException secretFailure)

@@ -157,6 +157,11 @@ Enforcement matrix:
 
 `DesktopLayout.WorkspaceClass` is immutable because each class is a different layout identity. Migration backfills each Window's persisted class from its parent before adding the composite parent key and Window foreign key; application writes never accept a separate client-supplied Window class. No database upper bound ties `DisplaySlot` to current `DisplayCount`: a non-negative slot for a temporarily absent display is retained, presented on slot zero for the current session, and restored to its persisted slot when that participant returns. Provider-specific migration SQL is allowed only for equivalent partial indexes/deferred constraints and is covered by real PostgreSQL and SQLite fixtures. Neither provider may weaken the logical rule.
 
+`MOB-004` implements this model. Two boundaries are worth stating explicitly rather than leaving to be discovered:
+
+- Primary and Secondary are enforced by the `DesktopLayout` aggregate rather than by a deferred composite foreign key, for the reason recorded in `DATA_AND_API_CONTRACTS.md` section 2.7.
+- Layout *identity* is now the workspace class, but the Shell still chooses its responsive **presentation** from the layout viewport width. Phone Split and the Tablet presentation are `MOB-005`; until then a phone workspace stores its windows under the phone layout while continuing to present them the way the current responsive Desktop does.
+
 The current viewport-only layouts migrate as follows:
 
 ```text

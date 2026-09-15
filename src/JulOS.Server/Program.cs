@@ -211,7 +211,7 @@ app.MapJulOsLocalAuthentication();
 app.MapJulOsAuthorization();
 app.MapJulOsProfile();
 app.MapJulOsClientDevices();
-app.MapJulOsDesktopLayouts();
+app.MapJulOsWorkspaceLayouts();
 app.MapJulOsApplications();
 app.MapJulOsPackages();
 app.MapJulOsPackageCapabilities();

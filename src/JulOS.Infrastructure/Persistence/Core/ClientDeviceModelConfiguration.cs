@@ -35,6 +35,12 @@ internal static class ClientDeviceModelConfiguration
         });
 
         entity.HasKey(row => row.Id).HasName("pk_client_devices");
+
+        // Layouts and preferences reference a device together with its owner, so that the
+        // database itself refuses a row pairing one user's identity with another's device.
+        entity.HasAlternateKey(row => new { row.OwnerUserId, row.Id })
+            .HasName("ak_client_devices_owner_device");
+
         entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
         entity.Property(row => row.OwnerUserId).HasColumnName("owner_user_id");
         entity.Property(row => row.ClientInstanceKeyHash)

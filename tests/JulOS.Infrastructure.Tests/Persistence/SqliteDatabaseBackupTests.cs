@@ -155,10 +155,15 @@ public sealed class SqliteDatabaseBackupTests
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            INSERT INTO desktop_layouts (id, user_id, viewport_class, name, is_default, revision, updated_at_utc)
-            VALUES ($id, 'user-1', 'desktop', $id, 0, 1, '2026-01-01 00:00:00');
+            INSERT INTO desktop_layouts (id, user_id, workspace_class, client_device_id, name,
+                                        presentation_mode, display_count, revision, updated_at_utc)
+            VALUES ($id, 'user-1', $class, NULL, $id, 'Freeform', 1, 1, '2026-01-01 00:00:00');
             """;
         _ = command.Parameters.AddWithValue("$id", layoutId);
+        // One shared layout per workspace class, so two seeded layouts need two classes.
+        _ = command.Parameters.AddWithValue(
+            "$class",
+            string.Equals(layoutId, "layout-1", StringComparison.Ordinal) ? "DesktopSingle" : "Tablet");
         _ = await command.ExecuteNonQueryAsync();
     }
 

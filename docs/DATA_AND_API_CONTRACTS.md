@@ -181,7 +181,9 @@ Revision
 UpdatedAtUtc
 ```
 
-PostgreSQL and SQLite use separate partial unique indexes for shared (`ClientDeviceId IS NULL`) and device layouts (`ClientDeviceId IS NOT NULL`). Composite foreign keys enforce device ownership and same-layout Primary/Secondary Window references; check constraints enforce the Phone mode/nullability/ratio matrix. `DesktopLayout.WorkspaceClass` is immutable. `DesktopWindow.WorkspaceClass` is a persistence copy constrained by `(DesktopLayoutId, WorkspaceClass)` to its parent; this permits the provider-equivalent check `DisplaySlot >= 0 AND (WorkspaceClass = 'desktop-multi' OR DisplaySlot = 0)` without a cross-table SQL CHECK. Slots above current `DisplayCount` remain valid dormant restoration targets and resolve temporarily to slot zero rather than losing their persisted identity. `fresh` is enforced by resolver/API because it deliberately selects no persisted row. `MOBILE_PWA.md` defines exact SQL-equivalent rules, selection and deterministic viewport-layout migration.
+PostgreSQL and SQLite use separate partial unique indexes for shared (`ClientDeviceId IS NULL`) and device layouts (`ClientDeviceId IS NOT NULL`). A composite foreign key `(UserId, ClientDeviceId)` to `(OwnerUserId, ClientDeviceId)` enforces device ownership, so a row pairing one user with another user’s device cannot exist. Check constraints enforce the Phone mode/nullability/ratio matrix, including that Primary and Secondary differ in a split.
+
+Primary and Secondary are **not** additionally constrained by a deferred composite foreign key to the window table, which the target model called for. Entity Framework Core cannot express `DEFERRABLE INITIALLY DEFERRED`, and adding it as provider-specific SQL would put the two providers out of step with the model that `DB-001`’s drift guard compares them against — that guard proves the SQLite scripts and the Entity Framework model still agree, and it can only do so while both describe the same schema. Membership is therefore enforced by the `DesktopLayout` aggregate, which rejects a foreground window that is not in the layout before anything is written, and a write clears the foreground references before replacing the windows so a stale identifier cannot survive a save. `DesktopLayout.WorkspaceClass` is immutable. `DesktopWindow.WorkspaceClass` is a persistence copy constrained by `(DesktopLayoutId, WorkspaceClass)` to its parent; this permits the provider-equivalent check `DisplaySlot >= 0 AND (WorkspaceClass = 'desktop-multi' OR DisplaySlot = 0)` without a cross-table SQL CHECK. Slots above current `DisplayCount` remain valid dormant restoration targets and resolve temporarily to slot zero rather than losing their persisted identity. `fresh` is enforced by resolver/API because it deliberately selects no persisted row. `MOBILE_PWA.md` defines exact SQL-equivalent rules, selection and deterministic viewport-layout migration.
 
 ### 2.8 Window state
 
@@ -762,7 +764,17 @@ POST   /api/v1/client-devices/registration
 PUT    /api/v1/client-devices/{clientDeviceId}
 PUT    /api/v1/client-devices/{clientDeviceId}/preferences/{workspaceClass}
 DELETE /api/v1/client-devices/{clientDeviceId}?revision={revision}
+
+GET    /api/v1/workspace-layouts/{workspaceClass}/current
+PUT    /api/v1/workspace-layouts/{workspaceClass}/current
+POST   /api/v1/workspace-layouts/desktop-multi/initialization
 ```
+
+A layout route names a workspace class and nothing else. Which stored layout answers — the user’s shared one or the one private to this device — is resolved on the server from the authenticated user and the owner-scoped device cookie, so a caller cannot select a layout identity, a client device or a scope through request data. `GET` answers with the resolved scope and restore mode beside the layout; the first `PUT` creates and returns `201`, a replacement returns `200`, and a stale expected revision returns the common `409` with `currentRevision`.
+
+A `fresh` workspace answers with a transient layout that has no identity, revision zero and `persistenceEnabled=false`, and refuses a write with `409 desktop.layout_persistence_disabled`. It never falls back to writing the shared layout instead.
+
+A window is written with the workspace class of the layout it is written into; the request carries no class of its own, so a client cannot move a window between workspace classes. `desktop-multi` is created only by `POST .../initialization`, because a physical display topology cannot be inferred from stored window geometry; initializing an existing multi-display layout returns `200` and changes nothing.
 
 Every client-device endpoint requires an authenticated session and, except for the read, an antiforgery token. `POST /registration` resolves the `.JulOS.Device` cookie or registers a new device and sets that cookie; the raw client instance key is returned only in the `Set-Cookie` header and never in a response body, so Desktop JavaScript cannot read it. The cookie is HTTP-only, `SameSite=Strict`, root-scoped and marked Secure exactly when the request is HTTPS, for the reason recorded in decision `D027`.
 

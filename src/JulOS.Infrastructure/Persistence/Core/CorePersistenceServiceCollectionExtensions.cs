@@ -103,7 +103,7 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IAuditService, PostgresAuditService>();
         services.AddScoped<IPermissionAssignmentReader, EfPermissionAssignmentReader>();
         services.AddScoped<IAuthorizationAdministration, IdentityAuthorizationAdministration>();
-        services.AddScoped<IDesktopLayoutService, PostgresDesktopLayoutService>();
+        services.AddScoped<IWorkspaceLayoutService, EfWorkspaceLayoutService>();
         services.AddScoped<IProfileService, EfProfileService>();
         services.AddScoped<IClientDeviceService, EfClientDeviceService>();
         services.AddScoped<IOperationService, PostgresOperationService>();

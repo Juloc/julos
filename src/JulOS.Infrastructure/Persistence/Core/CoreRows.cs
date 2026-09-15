@@ -160,11 +160,22 @@ internal sealed class DesktopLayoutRow
 
     internal Guid UserId { get; set; }
 
-    internal ViewportClass ViewportClass { get; set; }
+    internal WorkspaceClass WorkspaceClass { get; set; }
+
+    /// <summary>Null is the user's shared layout; a value scopes it to one device.</summary>
+    internal Guid? ClientDeviceId { get; set; }
 
     internal required string Name { get; set; }
 
-    internal bool IsDefault { get; set; }
+    internal PresentationMode PresentationMode { get; set; }
+
+    internal Guid? PrimaryWindowId { get; set; }
+
+    internal Guid? SecondaryWindowId { get; set; }
+
+    internal int? SplitRatioPermille { get; set; }
+
+    internal int DisplayCount { get; set; }
 
     internal int Revision { get; set; }
 
@@ -178,7 +189,6 @@ internal sealed class DesktopLayoutRow
         DesktopLayout layout,
         Guid userId,
         string name,
-        bool isDefault,
         DateTimeOffset updatedAtUtc)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -188,9 +198,14 @@ internal sealed class DesktopLayoutRow
         {
             Id = layout.Id.Value,
             UserId = EntityIdentifier.Validated(userId),
-            ViewportClass = layout.ViewportClass,
+            WorkspaceClass = layout.WorkspaceClass,
+            ClientDeviceId = layout.ClientDeviceId,
             Name = name,
-            IsDefault = isDefault,
+            PresentationMode = layout.PresentationMode,
+            PrimaryWindowId = layout.PrimaryWindowId?.Value,
+            SecondaryWindowId = layout.SecondaryWindowId?.Value,
+            SplitRatioPermille = layout.SplitRatioPermille,
+            DisplayCount = layout.DisplayCount,
             Revision = layout.Revision.Value,
             UpdatedAtUtc = updatedAtUtc,
         };
@@ -239,6 +254,12 @@ internal sealed class DesktopWindowRow
 
     internal int ZIndex { get; set; }
 
+    /// <summary>Copy of the parent layout's class, so a cross-class write cannot be stored.</summary>
+    internal WorkspaceClass WorkspaceClass { get; set; }
+
+    /// <summary>Stable zero-based logical display position.</summary>
+    internal int DisplaySlot { get; set; }
+
     internal Guid? SessionReferenceId { get; set; }
 
     internal DateTimeOffset CreatedAtUtc { get; set; }
@@ -272,6 +293,8 @@ internal sealed class DesktopWindowRow
             RestoreWidth = window.RestoreBounds.Width,
             RestoreHeight = window.RestoreBounds.Height,
             ZIndex = window.ZIndex,
+            WorkspaceClass = window.WorkspaceClass,
+            DisplaySlot = window.DisplaySlot,
             SessionReferenceId = sessionReferenceId,
             CreatedAtUtc = observedAtUtc,
             UpdatedAtUtc = observedAtUtc,

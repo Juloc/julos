@@ -127,7 +127,7 @@ public sealed class SqliteSchemaMigrationTests
             connectionString,
             """
             INSERT INTO desktop_layouts (id, user_id, viewport_class, name, is_default, revision, updated_at_utc)
-            VALUES ('layout-1', 'user-1', 'desktop', 'Main', 1, 3, '2026-01-01 00:00:00');
+            VALUES ('layout-1', 'user-1', 'Desktop', 'Main', 1, 3, '2026-01-01 00:00:00');
             INSERT INTO widget_placements (id, desktop_layout_id, widget_key, grid_column, grid_row, width_units, height_units, revision)
             VALUES ('widget-1', 'layout-1', 'host-metrics', 0, 0, 2, 2, 1);
             """);
@@ -136,6 +136,106 @@ public sealed class SqliteSchemaMigrationTests
 
         Assert.AreEqual(3L, await ScalarAsync(connectionString, "SELECT revision FROM desktop_layouts WHERE id = 'layout-1';"));
         Assert.AreEqual(1L, await ScalarAsync(connectionString, "SELECT count(*) FROM widget_placements WHERE desktop_layout_id = 'layout-1';"));
+        Assert.AreEqual(
+            "DesktopSingle",
+            await ScalarAsync(connectionString, "SELECT workspace_class FROM desktop_layouts WHERE id = 'layout-1';"),
+            "A desktop viewport layout becomes the shared desktop-single workspace layout.");
+        Assert.AreEqual(
+            "Freeform",
+            await ScalarAsync(connectionString, "SELECT presentation_mode FROM desktop_layouts WHERE id = 'layout-1';"));
+    }
+
+    [TestMethod]
+    public async Task AMigratedMobileLayoutKeepsEveryWindowAndPicksOnePrimary()
+    {
+        var connectionString = this.CreateDatabasePath();
+        await ExecuteAsync(connectionString, SqliteSchemaCatalog.Baseline.Sql);
+        await ExecuteAsync(
+            connectionString,
+            """
+            INSERT INTO desktop_layouts (id, user_id, viewport_class, name, is_default, revision, updated_at_utc)
+            VALUES ('layout-phone', 'user-1', 'Mobile', 'Main', 1, 9, '2026-01-01 00:00:00');
+            INSERT INTO application_definitions (id, owning_package_id, stable_key, display_name_key,
+                                                 instance_policy, default_width, default_height,
+                                                 minimum_width, minimum_height, is_enabled, revision)
+            VALUES ('app-1', 'de.juloc.julos.reference', 'reference', 'reference.title',
+                    'SingleInstancePerUser', 800, 600, 320, 240, 1, 1);
+            INSERT INTO desktop_windows (id, desktop_layout_id, application_definition_id, launch_target_id, state,
+                                         x, y, width, height, restore_x, restore_y, restore_width, restore_height,
+                                         z_index, session_reference_id, created_at_utc, updated_at_utc, revision)
+            VALUES ('window-back', 'layout-phone', 'app-1', NULL, 'Normal',
+                    0, 0, 390, 844, 0, 0, 390, 844, 0, NULL, '2026-01-01 00:00:00', '2026-01-01 00:00:00', 1),
+                   ('window-front', 'layout-phone', 'app-1', NULL, 'Normal',
+                    0, 0, 390, 844, 0, 0, 390, 844, 2, NULL, '2026-01-01 00:00:00', '2026-01-01 00:00:00', 1),
+                   ('window-hidden', 'layout-phone', 'app-1', NULL, 'Minimized',
+                    0, 0, 390, 844, 0, 0, 390, 844, 3, NULL, '2026-01-01 00:00:00', '2026-01-01 00:00:00', 1);
+            """);
+
+        _ = await SqliteSchemaMigrationRunner.MigrateAsync(connectionString);
+
+        Assert.AreEqual(
+            "Phone",
+            await ScalarAsync(connectionString, "SELECT workspace_class FROM desktop_layouts WHERE id = 'layout-phone';"));
+        Assert.AreEqual(
+            9L,
+            await ScalarAsync(connectionString, "SELECT revision FROM desktop_layouts WHERE id = 'layout-phone';"),
+            "Migration renames the layout identity; it does not count as a user edit.");
+        Assert.AreEqual(
+            3L,
+            await ScalarAsync(connectionString, "SELECT count(*) FROM desktop_windows WHERE desktop_layout_id = 'layout-phone';"),
+            "Every window is retained, including the ones that are not in the foreground.");
+
+        // The non-minimized window nearest the front becomes the single foreground window.
+        // A split is never inferred from a layout that merely held several windows.
+        Assert.AreEqual(
+            "PhoneSingle",
+            await ScalarAsync(connectionString, "SELECT presentation_mode FROM desktop_layouts WHERE id = 'layout-phone';"));
+        Assert.AreEqual(
+            "window-front",
+            await ScalarAsync(connectionString, "SELECT primary_window_id FROM desktop_layouts WHERE id = 'layout-phone';"));
+        Assert.IsNull(
+            await ScalarAsync(connectionString, "SELECT secondary_window_id FROM desktop_layouts WHERE id = 'layout-phone';")
+                as string);
+        Assert.AreEqual(
+            "Phone",
+            await ScalarAsync(connectionString, "SELECT workspace_class FROM desktop_windows WHERE id = 'window-hidden';"),
+            "Each window carries a copy of its parent layout's class after the upgrade.");
+    }
+
+    [TestMethod]
+    public async Task AMigratedMobileLayoutWithOnlyHiddenWindowsShowsNothing()
+    {
+        var connectionString = this.CreateDatabasePath();
+        await ExecuteAsync(connectionString, SqliteSchemaCatalog.Baseline.Sql);
+        await ExecuteAsync(
+            connectionString,
+            """
+            INSERT INTO desktop_layouts (id, user_id, viewport_class, name, is_default, revision, updated_at_utc)
+            VALUES ('layout-phone', 'user-1', 'Mobile', 'Main', 1, 2, '2026-01-01 00:00:00');
+            INSERT INTO application_definitions (id, owning_package_id, stable_key, display_name_key,
+                                                 instance_policy, default_width, default_height,
+                                                 minimum_width, minimum_height, is_enabled, revision)
+            VALUES ('app-1', 'de.juloc.julos.reference', 'reference', 'reference.title',
+                    'SingleInstancePerUser', 800, 600, 320, 240, 1, 1);
+            INSERT INTO desktop_windows (id, desktop_layout_id, application_definition_id, launch_target_id, state,
+                                         x, y, width, height, restore_x, restore_y, restore_width, restore_height,
+                                         z_index, session_reference_id, created_at_utc, updated_at_utc, revision)
+            VALUES ('window-hidden', 'layout-phone', 'app-1', NULL, 'Minimized',
+                    0, 0, 390, 844, 0, 0, 390, 844, 0, NULL, '2026-01-01 00:00:00', '2026-01-01 00:00:00', 1);
+            """);
+
+        _ = await SqliteSchemaMigrationRunner.MigrateAsync(connectionString);
+
+        Assert.AreEqual(
+            "PhoneEmpty",
+            await ScalarAsync(connectionString, "SELECT presentation_mode FROM desktop_layouts WHERE id = 'layout-phone';"));
+        Assert.IsNull(
+            await ScalarAsync(connectionString, "SELECT primary_window_id FROM desktop_layouts WHERE id = 'layout-phone';")
+                as string);
+        Assert.AreEqual(
+            1L,
+            await ScalarAsync(connectionString, "SELECT count(*) FROM desktop_windows WHERE desktop_layout_id = 'layout-phone';"),
+            "A window that is not eligible to be primary is still not deleted.");
     }
 
     [TestMethod]
@@ -149,8 +249,10 @@ public sealed class SqliteSchemaMigrationTests
             () => ExecuteAsync(
                 connectionString,
                 """
-                INSERT INTO desktop_layouts (id, user_id, viewport_class, name, is_default, revision, updated_at_utc)
-                VALUES ('layout-2', 'user-1', 'desktop', 'Invalid', 1, 0, '2026-01-01 00:00:00');
+                INSERT INTO desktop_layouts (id, user_id, workspace_class, client_device_id, name,
+                                            presentation_mode, display_count, revision, updated_at_utc)
+                VALUES ('layout-2', 'user-1', 'DesktopSingle', NULL, 'Invalid',
+                        'Freeform', 1, 0, '2026-01-01 00:00:00');
                 """));
 
         StringAssert.Contains(

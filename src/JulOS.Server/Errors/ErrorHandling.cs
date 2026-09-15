@@ -2,6 +2,7 @@
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Devices;
+using JulOS.Application.Layouts;
 using JulOS.Contracts.Devices;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
@@ -85,6 +86,15 @@ internal static class ErrorHandling
                 OperationFailureReason.InvalidTransition => StatusCodes.Status409Conflict,
                 OperationFailureReason.NotCancellable => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
+            },
+            WorkspaceLayoutFailureException layout => layout.Reason switch
+            {
+                WorkspaceLayoutFailureReason.NotFound => StatusCodes.Status404NotFound,
+                // Fresh mode is a state conflict rather than a malformed request: the same
+                // document would be accepted once the workspace stops starting fresh.
+                WorkspaceLayoutFailureReason.PersistenceDisabled => StatusCodes.Status409Conflict,
+                WorkspaceLayoutFailureReason.PhoneForegroundLimitExceeded => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status400BadRequest,
             },
             ProfileFailureException profile => profile.Reason switch
             {

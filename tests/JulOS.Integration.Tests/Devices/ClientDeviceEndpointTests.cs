@@ -5,8 +5,6 @@ using System.Text.Json;
 using JulOS.Contracts.Authentication;
 using JulOS.Contracts.Devices;
 using JulOS.Contracts.Errors;
-using JulOS.Infrastructure.Persistence.Core;
-
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace JulOS.Integration.Tests.Devices;
@@ -36,7 +34,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task RegistrationIssuesTheKeyOnlyAsACookieAndResolvesTheSameDeviceAfterwards()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
         var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
@@ -79,7 +77,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task RenamingPinningAndPreferringRoundTripThroughTheDocumentedRoutes()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
         var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
@@ -129,7 +127,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task RemovingTheCurrentDeviceClearsItsCookie()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
         var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
@@ -155,7 +153,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task AnUnknownDeviceReportsTheStableClientDeviceErrorCode()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
         var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
@@ -178,7 +176,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task RemovalWithoutAUsableRevisionIsRejected()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
         var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
@@ -212,7 +210,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task EveryMutationRequiresAnAntiforgeryToken()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
         await SetupAdministratorAsync(client).ConfigureAwait(false);
 
@@ -230,7 +228,7 @@ public sealed class ClientDeviceEndpointTests
     [TestMethod]
     public async Task ClientDeviceEndpointsRequireAnAuthenticatedUser()
     {
-        await using var database = await SqliteHost.CreateAsync().ConfigureAwait(false);
+        await using var database = await SqliteServerHost.CreateAsync("client-devices").ConfigureAwait(false);
         using var client = database.CreateClient(ClientOptions);
 
         using var anonymous = await client.GetAsync("/api/v1/client-devices").ConfigureAwait(false);
@@ -309,57 +307,5 @@ public sealed class ClientDeviceEndpointTests
             await response.Content.ReadAsStringAsync().ConfigureAwait(false));
         return document.RootElement.GetProperty(ProblemExtensionNames.Code).GetString()
             ?? throw new AssertFailedException("The problem response has no error code.");
-    }
-
-    /// <summary>A migrated SQLite database with a Server host in front of it.</summary>
-    private sealed class SqliteHost : IAsyncDisposable
-    {
-        private readonly string directory;
-        private readonly ServerHost host;
-
-        private SqliteHost(string directory, ServerHost host)
-        {
-            this.directory = directory;
-            this.host = host;
-        }
-
-        internal static async Task<SqliteHost> CreateAsync()
-        {
-            var directory = Path.Combine(
-                Path.GetTempPath(),
-                "julos-integration-tests",
-                "client-devices",
-                Guid.NewGuid().ToString("N"));
-            _ = Directory.CreateDirectory(directory);
-            var connectionString = $"Data Source={Path.Combine(directory, "julos.db")};Pooling=False";
-
-            await CoreDatabaseMigrator.MigrateAsync(
-                new CoreDatabaseConfiguration(CoreDatabaseProvider.Sqlite, connectionString))
-                .ConfigureAwait(false);
-
-            return new SqliteHost(
-                directory,
-                new ServerHost(
-                    connectionString,
-                    new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" }));
-        }
-
-        internal HttpClient CreateClient(WebApplicationFactoryClientOptions options) =>
-            this.host.CreateClient(options);
-
-        public ValueTask DisposeAsync()
-        {
-            this.host.Dispose();
-            try
-            {
-                Directory.Delete(this.directory, recursive: true);
-            }
-            catch (IOException)
-            {
-                // Temporary test files the operating system still holds are not a failure.
-            }
-
-            return ValueTask.CompletedTask;
-        }
     }
 }

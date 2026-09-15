@@ -1,6 +1,7 @@
 ﻿using JulOS.Domain;
 using JulOS.Domain.Applications;
 using JulOS.Domain.Layouts;
+using JulOS.Domain.Primitives;
 
 namespace JulOS.Domain.Tests.Layouts;
 
@@ -142,5 +143,6 @@ public sealed class DesktopWindowTests
         new ApplicationDefinitionId(Guid.CreateVersion7()),
         launchTargetId: null,
         WindowBounds.Create(100, 100, 800, 600),
-        zIndex: 0);
+        zIndex: 0,
+        WorkspaceClass.DesktopSingle);
 }

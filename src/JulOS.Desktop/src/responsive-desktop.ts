@@ -1,4 +1,11 @@
-﻿import type { DesktopViewport } from './layout-persistence.js';
+﻿/**
+ * The viewport class an application declares compatibility with.
+ *
+ * Deliberately separate from the workspace class that identifies a stored layout:
+ * several workspace classes present the same application viewport, and pinning a device
+ * to a workspace class does not change what any application supports.
+ */
+export type DesktopViewport = 'desktop' | 'tablet' | 'mobile';
 import type { DesktopWindowSnapshot, WindowStore } from './window-store.js';
 
 export type DesktopPresentationMode = 'windowed' | 'focused' | 'task-switching';
@@ -158,14 +165,6 @@ export function deriveResponsiveDesktop(
     taskWindows,
     activeWindowId: selected?.id ?? null,
   };
-}
-
-export function viewportLayoutKey(userId: string, viewport: DesktopViewport): string {
-  const normalizedUser = userId.trim();
-  if (normalizedUser.length === 0 || normalizedUser !== userId) {
-    throw new ResponsiveDesktopError('desktop.user_invalid', 'User identifier is invalid.');
-  }
-  return `${normalizedUser}:${viewport}`;
 }
 
 function validateThresholds(thresholds: ViewportThresholds): void {
