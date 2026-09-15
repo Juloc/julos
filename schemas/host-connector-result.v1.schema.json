@@ -1,0 +1,57 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/host-connector-result.v1.schema.json",
+  "title": "JulOS Host Connector result submission, contract version 1",
+  "description": "The typed result body a Host Connector submits for one claimed request. Binary or interactive data uses an authorized stream, never this body.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["MessageId", "ResultSchemaVersion", "Outcome", "Result", "FailureCode", "FailureDetail"],
+  "properties": {
+    "MessageId": {
+      "description": "Must match the claimed request and the {requestId} path value exactly.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "ResultSchemaVersion": { "type": "integer", "minimum": 1 },
+    "Outcome": { "type": "string", "enum": ["succeeded", "failed", "cancelled"] },
+    "Result": {
+      "description": "Schema-valid typed result for succeeded, null otherwise.",
+      "type": ["object", "null"]
+    },
+    "FailureCode": {
+      "description": "Registered stable code for failed and cancelled, null otherwise.",
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$",
+      "maxLength": 128
+    },
+    "FailureDetail": {
+      "description": "Sanitized bounded text. Never a credential, raw host error or captured command output.",
+      "type": ["string", "null"],
+      "maxLength": 2048
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "Outcome": { "const": "succeeded" } }, "required": ["Outcome"] },
+      "then": {
+        "properties": {
+          "Result": { "type": "object" },
+          "FailureCode": { "type": "null" },
+          "FailureDetail": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "Outcome": { "enum": ["failed", "cancelled"] } },
+        "required": ["Outcome"]
+      },
+      "then": {
+        "properties": {
+          "Result": { "type": "null" },
+          "FailureCode": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

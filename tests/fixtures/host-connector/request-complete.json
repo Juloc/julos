@@ -1,0 +1,21 @@
+﻿{
+  "MessageId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a70",
+  "ContractVersion": 1,
+  "HostConnectorId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60",
+  "OperationId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a71",
+  "CapabilityName": "docker.apps",
+  "CapabilityVersion": 1,
+  "OperationName": "apply",
+  "TargetReference": "installation/0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a72",
+  "PayloadSchemaVersion": 1,
+  "ResultSchemaVersion": 1,
+  "Payload": {
+    "installationId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a72",
+    "desiredState": "running"
+  },
+  "RequestedAtUtc": "2026-03-01T08:10:00Z",
+  "DeadlineAtUtc": "2026-03-01T08:15:00Z",
+  "CorrelationId": "0199a1b2c3d47e5f8a9b0c1d2e3f4a73",
+  "MaximumResultBytes": 262144,
+  "IdempotencyClassification": "reconcile-required"
+}

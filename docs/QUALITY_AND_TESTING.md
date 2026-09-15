@@ -210,6 +210,14 @@ A package cannot depend on another package being installed unless it declares a 
 
 ## 4. Host Connector tests
 
+`HCON-001` contributes the contract half of this list ahead of the implementation: the
+committed schemas and fixtures in `schemas/host-connector-*.v1.schema.json` and
+`tests/fixtures/host-connector` are enforced by the `host-connector-contracts` stage, and
+`tests/JulOS.Agent.Tests/HostConnectorContractTests.cs` locks the migration constants —
+including `MachineIdentityNamespaceV1`, which is asserted against the running Agent
+implementation so an enrolled machine cannot change identity across the cutover. The
+behavioural items below land with `HCON-002`.
+
 - enrollment token consumption
 - client-generated CredentialV1 hash-only storage, exact enrollment retry and no response echo
 - two-phase credential rotation crash/retry/lost-response/expiry matrix with current and pending hash persistence
@@ -389,6 +397,7 @@ Current stages:
 | `remote-frontend-build` | Remote package frontend assets |
 | `remote-frontend-test` | Remote package frontend logic tests |
 | `markdown-links` | relative Markdown links resolve |
+| `host-connector-contracts` | Host Connector request, result, enrollment and journal fixtures validate against the committed schemas; malformed and unsupported-major fixtures are rejected; no contract introduces a generic command, shell, raw TCP destination or Docker API payload |
 | `package-manifests` | package manifest validation |
 | `container-build` | Compose configuration and container image build |
 

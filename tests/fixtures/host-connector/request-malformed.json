@@ -1,0 +1,17 @@
+﻿{
+  "MessageId": "not-a-uuid",
+  "ContractVersion": 1,
+  "HostConnectorId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60",
+  "CapabilityName": "host.metrics.linux",
+  "CapabilityVersion": 0,
+  "OperationName": "Collect",
+  "TargetReference": "",
+  "PayloadSchemaVersion": 1,
+  "ResultSchemaVersion": 1,
+  "Payload": {},
+  "RequestedAtUtc": "2026-03-01T08:00:00Z",
+  "DeadlineAtUtc": "2026-03-01T08:00:30Z",
+  "CorrelationId": "c",
+  "MaximumResultBytes": 65536,
+  "IdempotencyClassification": "whenever"
+}

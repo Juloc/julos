@@ -1,0 +1,8 @@
+﻿{
+  "MessageId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "ResultSchemaVersion": 1,
+  "Outcome": "succeeded",
+  "Result": null,
+  "FailureCode": "host_connector.deadline_exceeded",
+  "FailureDetail": "A succeeded result must carry a typed result and no failure fields."
+}

@@ -1,0 +1,10 @@
+﻿{
+  "EnrollmentToken": "0199a1b2c3d47e5f8a9b0c1d2e3f4a90",
+  "CredentialV1": "CxIZICcuNTxDSlFYX2ZtdHuCiZCXnqWss7rByM_W3eTr8vkABw4VHCMqMTg_Rk1U",
+  "DisplayName": "build-host-1",
+  "MachineIdentity": "3f786850e387550fdab836ed7e6dc881de23001b6c4b3a2f1e0d9c8b7a695847",
+  "OperatingSystem": "linux",
+  "Architecture": "x64",
+  "Version": "1.0.0",
+  "ProtocolVersion": 1
+}

@@ -1,0 +1,8 @@
+﻿{
+  "MessageId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a70",
+  "ResultSchemaVersion": 1,
+  "Outcome": "failed",
+  "Result": null,
+  "FailureCode": "host_connector.outcome_unknown",
+  "FailureDetail": "Interrupted after the external call; a typed inspection request must establish the real state."
+}

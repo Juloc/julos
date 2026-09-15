@@ -7,6 +7,7 @@ import { access, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { findUnpinnedExtensions, findViolations } from './lib/encoding-policy.mjs';
+import { validateHostConnectorContracts } from './lib/host-connector-contracts.mjs';
 import { findBrokenLinks } from './lib/markdown-links.mjs';
 import { readAndValidatePackageManifest } from './lib/package-manifest.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
@@ -221,6 +222,16 @@ const stages = [
       return broken.length === 0
         ? passed('every relative link resolves')
         : failed(`${broken.length} broken link(s):\n  ${broken.join('\n  ')}`);
+    },
+  },
+  {
+    name: 'host-connector-contracts',
+    title: 'Validate the Host Connector contract fixtures',
+    async run() {
+      const errors = await validateHostConnectorContracts();
+      return errors.length === 0
+        ? passed('Host Connector request, result, enrollment and journal fixtures match the committed schemas')
+        : failed(`${errors.length} Host Connector contract error(s):\n  ${errors.join('\n  ')}`);
     },
   },
   {

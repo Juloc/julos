@@ -1,0 +1,72 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/host-connector-journal.v1.schema.json",
+  "title": "JulOS Host Connector durable local request journal entry, schema version 1",
+  "description": "Written before a claimed request executes so an interrupted Connector can tell prepared from executing from result-ready. Operation-bound Secret Leases and stream bytes are never journal fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "JournalSchemaVersion",
+    "HostConnectorId",
+    "RequestId",
+    "ContractVersion",
+    "CapabilityName",
+    "CapabilityVersion",
+    "OperationName",
+    "PayloadSchemaVersion",
+    "ResultSchemaVersion",
+    "IdempotencyClassification",
+    "RequestCanonicalJson",
+    "RequestDigest",
+    "DeadlineAtUtc",
+    "Phase",
+    "ResultCanonicalJson",
+    "ResultDigest",
+    "UpdatedAtUtc"
+  ],
+  "properties": {
+    "JournalSchemaVersion": { "type": "integer", "const": 1 },
+    "HostConnectorId": { "type": "string", "format": "uuid" },
+    "RequestId": { "type": "string", "format": "uuid" },
+    "ContractVersion": { "type": "integer", "const": 1 },
+    "CapabilityName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$",
+      "maxLength": 128
+    },
+    "CapabilityVersion": { "type": "integer", "minimum": 1 },
+    "OperationName": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 64 },
+    "PayloadSchemaVersion": { "type": "integer", "minimum": 1 },
+    "ResultSchemaVersion": { "type": "integer", "minimum": 1 },
+    "IdempotencyClassification": {
+      "type": "string",
+      "enum": ["replay-safe", "reconcile-required"]
+    },
+    "RequestCanonicalJson": {
+      "description": "The exact validated non-secret dispatch envelope, RFC 8785 canonical.",
+      "type": "string",
+      "minLength": 1
+    },
+    "RequestDigest": {
+      "description": "Lowercase SHA-256 over the RFC 8785 bytes.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "DeadlineAtUtc": { "type": "string", "format": "date-time" },
+    "Phase": { "type": "string", "enum": ["prepared", "executing", "result-ready"] },
+    "ResultCanonicalJson": { "type": ["string", "null"] },
+    "ResultDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "UpdatedAtUtc": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "Phase": { "const": "result-ready" } }, "required": ["Phase"] },
+      "then": {
+        "properties": {
+          "ResultCanonicalJson": { "type": "string" },
+          "ResultDigest": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

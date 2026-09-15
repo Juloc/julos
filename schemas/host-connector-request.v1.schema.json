@@ -1,0 +1,70 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/host-connector-request.v1.schema.json",
+  "title": "JulOS Host Connector dispatched request envelope, contract version 1",
+  "description": "The typed envelope a Host Connector claims from the bounded long poll. Payload is capability-scoped data, never permission to run an arbitrary command.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "MessageId",
+    "ContractVersion",
+    "HostConnectorId",
+    "CapabilityName",
+    "CapabilityVersion",
+    "OperationName",
+    "TargetReference",
+    "PayloadSchemaVersion",
+    "ResultSchemaVersion",
+    "Payload",
+    "RequestedAtUtc",
+    "DeadlineAtUtc",
+    "CorrelationId",
+    "MaximumResultBytes",
+    "IdempotencyClassification"
+  ],
+  "properties": {
+    "MessageId": {
+      "description": "Exactly the persisted HostConnectorRequestId and the {requestId} path value used for result submission.",
+      "type": "string",
+      "format": "uuid"
+    },
+    "ContractVersion": { "type": "integer", "const": 1 },
+    "HostConnectorId": { "type": "string", "format": "uuid" },
+    "OperationId": {
+      "description": "Optional durable JulOS operation this request advances.",
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "CapabilityName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9]*)*$",
+      "maxLength": 128
+    },
+    "CapabilityVersion": { "type": "integer", "minimum": 1 },
+    "OperationName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "maxLength": 64
+    },
+    "TargetReference": {
+      "description": "The already-resolved target. Never a free host, port or socket the Connector may choose.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "PayloadSchemaVersion": { "type": "integer", "minimum": 1 },
+    "ResultSchemaVersion": { "type": "integer", "minimum": 1 },
+    "Payload": {
+      "description": "Capability-scoped typed data selected by the capability/operation/schema tuple.",
+      "type": "object"
+    },
+    "RequestedAtUtc": { "type": "string", "format": "date-time" },
+    "DeadlineAtUtc": { "type": "string", "format": "date-time" },
+    "CorrelationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "MaximumResultBytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+    "IdempotencyClassification": {
+      "type": "string",
+      "enum": ["replay-safe", "reconcile-required"]
+    }
+  }
+}

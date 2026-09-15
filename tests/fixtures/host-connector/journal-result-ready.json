@@ -1,0 +1,19 @@
+﻿{
+  "JournalSchemaVersion": 1,
+  "HostConnectorId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60",
+  "RequestId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "ContractVersion": 1,
+  "CapabilityName": "host.metrics.linux",
+  "CapabilityVersion": 1,
+  "OperationName": "collect",
+  "PayloadSchemaVersion": 1,
+  "ResultSchemaVersion": 1,
+  "IdempotencyClassification": "replay-safe",
+  "RequestCanonicalJson": "{\"CapabilityName\":\"host.metrics.linux\",\"MessageId\":\"0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b\"}",
+  "RequestDigest": "3f786850e387550fdab836ed7e6dc881de23001b6c4b3a2f1e0d9c8b7a695847",
+  "DeadlineAtUtc": "2026-03-01T08:00:30Z",
+  "Phase": "result-ready",
+  "ResultCanonicalJson": "{\"Outcome\":\"succeeded\"}",
+  "ResultDigest": "89e6c98d92887913cadf06b2adb97f26cde4849b1f1c1e0d9c8b7a6958473f78",
+  "UpdatedAtUtc": "2026-03-01T08:00:12Z"
+}

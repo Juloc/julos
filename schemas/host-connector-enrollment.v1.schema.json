@@ -1,0 +1,41 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/host-connector-enrollment.v1.schema.json",
+  "title": "JulOS Host Connector enrollment request, protocol version 1",
+  "description": "Redeems a single-use enrollment token. The Connector generates CredentialV1 locally; Server stores only SHA256 of its decoded bytes and never echoes it back.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "EnrollmentToken",
+    "CredentialV1",
+    "DisplayName",
+    "MachineIdentity",
+    "OperatingSystem",
+    "Architecture",
+    "Version",
+    "ProtocolVersion"
+  ],
+  "properties": {
+    "EnrollmentToken": {
+      "description": "Short-lived single-use token created by an administrator.",
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256
+    },
+    "CredentialV1": {
+      "description": "Base64url without padding over 48 random bytes, which encodes to exactly 64 characters.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{64}$"
+    },
+    "DisplayName": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "MachineIdentity": {
+      "description": "lowercase-hex(SHA256(UTF8(\"JulOS.Agent\\u0000\") || UTF8(trimmed machine-id source))). A privacy-bounded duplicate-enrollment probe, never a display name.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "OperatingSystem": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "Architecture": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "Version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "ProtocolVersion": { "type": "integer", "minimum": 1 }
+  }
+}

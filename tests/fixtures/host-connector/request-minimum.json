@@ -1,0 +1,18 @@
+﻿{
+  "MessageId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "ContractVersion": 1,
+  "HostConnectorId": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a60",
+  "OperationId": null,
+  "CapabilityName": "host.metrics.linux",
+  "CapabilityVersion": 1,
+  "OperationName": "collect",
+  "TargetReference": "self",
+  "PayloadSchemaVersion": 1,
+  "ResultSchemaVersion": 1,
+  "Payload": {},
+  "RequestedAtUtc": "2026-03-01T08:00:00Z",
+  "DeadlineAtUtc": "2026-03-01T08:00:30Z",
+  "CorrelationId": "0199a1b2c3d47e5f8a9b0c1d2e3f4a61",
+  "MaximumResultBytes": 65536,
+  "IdempotencyClassification": "replay-safe"
+}
