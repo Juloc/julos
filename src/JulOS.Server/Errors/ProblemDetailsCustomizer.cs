@@ -1,6 +1,7 @@
 ﻿using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
+using JulOS.Application.Devices;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
 using JulOS.Application.Secrets;
@@ -56,6 +57,10 @@ internal static class ProblemDetailsCustomizer
         else if (exception is OperationFailureException operationFailure)
         {
             context.ProblemDetails.Detail = operationFailure.Message;
+        }
+        else if (exception is ClientDeviceException deviceFailure)
+        {
+            context.ProblemDetails.Detail = deviceFailure.Message;
         }
         else if (exception is ProfileFailureException profileFailure)
         {

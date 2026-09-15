@@ -1,6 +1,8 @@
 ﻿using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
 using JulOS.Application.Concurrency;
+using JulOS.Application.Devices;
+using JulOS.Contracts.Devices;
 using JulOS.Application.Profile;
 using JulOS.Application.Operations;
 using JulOS.Application.Secrets;
@@ -99,6 +101,13 @@ internal static class ErrorHandling
                 SecretReferenceFailureReason.Unavailable => StatusCodes.Status503ServiceUnavailable,
                 SecretReferenceFailureReason.LeaseExpired => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
+            },
+            ClientDeviceException device => device.Code switch
+            {
+                ClientDeviceErrorCodes.NotFound => StatusCodes.Status404NotFound,
+                ClientDeviceErrorCodes.NotRegistered => StatusCodes.Status404NotFound,
+                ClientDeviceErrorCodes.NotOwned => StatusCodes.Status403Forbidden,
+                _ => StatusCodes.Status400BadRequest,
             },
             ConcurrencyConflictException => StatusCodes.Status409Conflict,
             DomainRuleViolationException => StatusCodes.Status409Conflict,

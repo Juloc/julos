@@ -425,6 +425,7 @@ Operation Center additionally uses the owner-scoped paged `GET /api/v1/operation
 client_device.not_found
 client_device.not_registered
 client_device.not_owned
+client_device.invalid
 client_device.workspace_preference_invalid
 desktop.workspace_class_invalid
 desktop.phone_foreground_limit_exceeded

@@ -406,8 +406,9 @@ ClientDeviceId
 WorkspaceClass
 LayoutScope                     shared or device
 RestoreMode                     resume or fresh
-Revision
 ```
+
+A Device Workspace Preference carries no revision of its own. It is part of the Client Device aggregate and `(ClientDeviceId, WorkspaceClass)` is its natural key, so the device revision is the single optimistic-concurrency unit for a device and all of its preferences. The API returns the whole device from every preference write for the same reason. This is deliberately stricter than a per-preference revision: two concurrent writes to different workspace classes of the same device conflict, and the loser refetches one authoritative device rather than reconciling several independently versioned rows.
 
 ```text
 UserId
@@ -755,7 +756,17 @@ GET  /api/v1/auth/antiforgery
 POST /api/v1/auth/logout
 GET  /api/v1/profile
 PUT  /api/v1/profile/preferences
+
+GET    /api/v1/client-devices
+POST   /api/v1/client-devices/registration
+PUT    /api/v1/client-devices/{clientDeviceId}
+PUT    /api/v1/client-devices/{clientDeviceId}/preferences/{workspaceClass}
+DELETE /api/v1/client-devices/{clientDeviceId}
 ```
+
+Every client-device endpoint requires an authenticated session and, except for the read, an antiforgery token. `POST /registration` resolves the `.JulOS.Device` cookie or registers a new device and sets that cookie; the raw client instance key is returned only in the `Set-Cookie` header and never in a response body, so Desktop JavaScript cannot read it. The cookie is HTTP-only, `SameSite=Strict`, root-scoped and marked Secure exactly when the request is HTTPS, for the reason recorded in decision `D027`.
+
+Resolution is always filtered by the authenticated user as well as by the key, so presenting another user's cookie registers a new device rather than revealing or adopting theirs. A device owned by another user is reported as `client_device.not_found` rather than `403`, so the API never confirms that someone else's device exists. Removing the device making the request also clears its cookie, so the next request registers a visibly new device instead of presenting a key that resolves to nothing. Mutations publish `client_device.changed` carrying only the device identity and revision.
 
 `GET /api/v1/auth/status` and the one-time setup and login mutations are anonymous. Status exposes only whether initial setup is required and, when a valid session exists, the current user's identifier, username and display name. For an authenticated caller, status also refreshes the existing persistent Identity cookie; Desktop calls this endpoint during boot, so reopening JulOS renews the configured session lifetime without coupling authentication to desktop/mobile viewport mode or user-agent identity.
 

@@ -2,10 +2,12 @@
 using JulOS.Application.Authorization;
 using JulOS.Application.Layouts;
 using JulOS.Application.Operations;
+using JulOS.Application.Devices;
 using JulOS.Application.Profile;
 using JulOS.Application.Remote;
 using JulOS.Infrastructure.Auditing;
 using JulOS.Infrastructure.Authentication;
+using JulOS.Infrastructure.Devices;
 using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Layouts;
 using JulOS.Infrastructure.Operations;
@@ -93,6 +95,7 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IAuthorizationAdministration, IdentityAuthorizationAdministration>();
         services.AddScoped<IDesktopLayoutService, PostgresDesktopLayoutService>();
         services.AddScoped<IProfileService, EfProfileService>();
+        services.AddScoped<IClientDeviceService, EfClientDeviceService>();
         services.AddScoped<IOperationService, PostgresOperationService>();
         services.AddScoped<RemoteSessionContractValidator>();
         services.AddScoped<IRemoteSessionService, PostgresRemoteSessionService>();
