@@ -32,6 +32,14 @@ Dockerfile.* text eol=lf
 *.env text eol=lf
 .env.example text eol=lf
 
+# Generated SQLite migration scripts are embedded verbatim at build time, so their
+# bytes must not depend on the platform they were checked out on. They are not JulOS
+# repository prose, so the D012 byte-order-mark rule does not apply to them.
+*.sql text eol=lf
+
+# SQLite upgrade fixtures are database files, never text.
+*.db binary
+
 *.png binary
 *.jpg binary
 *.jpeg binary

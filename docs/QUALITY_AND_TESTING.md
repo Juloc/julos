@@ -75,7 +75,9 @@ Run against a real supported PostgreSQL container or isolated database:
 - Host Connector rename and viewport-to-workspace upgrade fixtures
 - shared/device partial indexes, same-layout Primary/Secondary foreign keys, Window WorkspaceClass composite key, negative DisplaySlot rejection and dormant out-of-range slot persistence on PostgreSQL and SQLite
 
-The default SQLite store has its own real previous-release file fixtures. Tests run the production migration command and verify identity, credentials, layouts, revisions and audit links. `EnsureCreated` is not accepted as upgrade coverage.
+The default SQLite store has its own real previous-release file fixtures. `tests/fixtures/sqlite/core-0.4.0-beta.42.db` was produced by building that release tag and letting its own `EnsureCreated` path create the schema, so it is independent of the baseline script generated from the current model. Tests run the production migration runner against it and verify users, roles, permission assignments, packages, Agent/Host Metrics rows, layouts, widgets, sessions, secrets and audit links. `EnsureCreated` is not accepted as upgrade coverage.
+
+One test asserts that a migrated database and a database created from the current Entity Framework model expose the identical schema, so the migration scripts and the model cannot drift apart unnoticed.
 
 SQLite is not used as a substitute for PostgreSQL behavior.
 
@@ -374,6 +376,7 @@ Current stages:
 | Stage | Checks |
 |---|---|
 | `policy` | encoding, line endings and final newline against decision `D012`, and that `.gitattributes` pins every extension the policy covers |
+| `version` | the repository version metadata is consistent |
 | `restore` | .NET dependency restore |
 | `build` | .NET solution build |
 | `dotnet-test` | unit and architecture tests |
@@ -382,6 +385,9 @@ Current stages:
 | `desktop-typecheck` | Desktop type checking |
 | `desktop-test` | Desktop logic tests |
 | `desktop-build` | Desktop production assets |
+| `remote-frontend-install` | Remote package frontend dependencies |
+| `remote-frontend-build` | Remote package frontend assets |
+| `remote-frontend-test` | Remote package frontend logic tests |
 | `markdown-links` | relative Markdown links resolve |
 | `package-manifests` | package manifest validation |
 | `container-build` | Compose configuration and container image build |
@@ -396,7 +402,9 @@ The policy is checked against the working tree, and git decides what the working
 
 ## 12. CI structure
 
-`.github/workflows/validation.yml` runs `sh tools/validate.sh` on every pull request and every push to `main`. Continuous integration must not maintain its own list of checks: a new check belongs in `tools/validate.mjs`, which makes local and CI runs identical by construction rather than by review.
+`.github/workflows/ci.yml` runs `sh tools/validate.sh` on every pull request. Continuous integration must not maintain its own list of checks: a new check belongs in `tools/validate.mjs`, which makes local and CI runs identical by construction rather than by review. The workflow also starts the pinned PostgreSQL service and sets `JULOS_TEST_POSTGRES`, so the persistence integration tests that report inconclusive locally do run there.
+
+Pushes to `main` are not validated by a workflow. Trunk-based delivery puts completed work items straight onto `main`, so the full local `tools/validate.sh` run before committing is the only gate those commits pass.
 
 Only downloaded packages are cached. Build output, `node_modules` and generated assets are never restored, so a missing generated dependency fails the run instead of being served from an earlier one. The workflow ends with `git diff --exit-code`, which fails when validation modified a tracked file.
 
@@ -410,11 +418,11 @@ Only downloaded packages are cached. Build output, `node_modules` and generated 
 
 Still to be added to the validation stages, with the work item that adds them:
 
-- PostgreSQL integration tests: `API-001`
-- package manifest validation: `PKG-001`
 - application-catalog index, manifest, key-set and Compose validation: `CAT-001`
-- selected end-to-end tests: `DESK-012`
+- selected end-to-end tests: no owning work item yet; `DESK-012` closed without delivering them
 - dependency and secret scan: `OPS-005`
+
+PostgreSQL integration tests run in continuous integration through the workflow's PostgreSQL service rather than as a separate stage, and package manifest validation is the `package-manifests` stage above.
 
 ### Main
 

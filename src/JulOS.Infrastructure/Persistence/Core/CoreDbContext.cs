@@ -126,7 +126,15 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
 
             foreach (var checkConstraint in entityType.GetDeclaredCheckConstraints().ToArray())
             {
+                var constraintName = checkConstraint.Name;
+                if (constraintName is null
+                    || !SqliteCheckConstraintTranslations.TryTranslate(constraintName, out var sqliteSql))
+                {
+                    continue;
+                }
+
                 entityType.RemoveCheckConstraint(checkConstraint.ModelName);
+                _ = entityType.AddCheckConstraint(constraintName, sqliteSql);
             }
         }
     }

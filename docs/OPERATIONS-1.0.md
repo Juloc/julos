@@ -27,22 +27,26 @@ An existing beta Agent is migrated only by the explicit `HCON-002` identity-migr
 
 ## Backup
 
-The current beta `tools/backup.sh` supports PostgreSQL only. `DB-001` must add the provider-aware 1.0 path before HCON-002 or workspace schema migration is allowed.
+`tools/backup.sh` is provider-aware. It reads `Database__Provider` (or `JULOS_BACKUP_PROVIDER`), falls back to recognising a `Data Source=` connection string as SQLite, and records the chosen format in the archive metadata so an archive can never be restored into the wrong provider.
 
 - PostgreSQL: run `tools/backup.sh` with `JULOS_BACKUP_POSTGRES` and optional `JULOS_PACKAGE_ROOT`; it creates a custom-format dump, package-data archive, metadata and SHA-256 manifest in staging before atomic publication.
-- SQLite after DB-001: stop Server and mutating workers, run the provider-aware backup command against the explicit Core database path; it checkpoints WAL, uses the SQLite backup API into staging, runs `PRAGMA integrity_check`, archives package data, writes metadata/checksums and publishes atomically. Raw copying only the `.db` file while Server runs is unsupported.
+- SQLite: stop Server and mutating workers, then run `tools/backup.sh`. It invokes `JulOS.Server --backup-database`, which checkpoints WAL, copies through SQLite's online backup API into a `.partial` staging file and runs `PRAGMA integrity_check` before publishing (decision `D043`). Package data, metadata and checksums are then written and the directory is published atomically. Raw copying only the `.db` file while Server runs is unsupported, because it omits the write-ahead log.
 
 A backup is not accepted operationally until a restore drill has completed against a separate environment.
 
 ## Restore
 
-Stop Server, Host Connector-facing mutations and package workers. For PostgreSQL run:
+Stop Server, Host Connector-facing mutations and package workers, then run:
 
 ```sh
 tools/restore.sh <backup-directory> --confirm-destructive-restore
 ```
 
-The restore verifies every checksum before changing PostgreSQL or package data. PostgreSQL restore uses one transaction. After DB-001 the same provider-aware entry point recognizes SQLite backup metadata, verifies/checks the staged database with `integrity_check`, then atomically replaces only the configured database file while Server is stopped. Package data is extracted to staging and swapped only after successful extraction. A provider mismatch or missing WAL-consistent metadata fails before mutation.
+The same entry point serves both providers and selects the path from the archive's declared `databaseFormat`; an unknown format fails before anything is touched. Every checksum is verified before the database or package data changes. PostgreSQL restore uses one transaction. SQLite restore calls `JulOS.Server --restore-database`, which runs `integrity_check` on the archive **and** on the staged copy before replacing the live file, so a corrupt archive cannot destroy a working database; the old `-wal` and `-shm` side files are removed with it, because leaving them would apply stale pages on top of the restored file. Package data is extracted to staging and swapped only after successful extraction.
+
+### Supported rollback limit
+
+A backup restores the schema it was taken from. Restoring a backup created before a schema-changing release, then starting the newer Server, is supported: `--migrate-database` recognises the older baseline and upgrades it. The reverse is not supported — an older Server started against a database that already recorded a newer migration exits `4` and refuses to downgrade rather than silently dropping schema it does not understand.
 
 ## Diagnostics
 

@@ -21,6 +21,10 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
   </ItemGroup>
 
+  <ItemGroup Label="Ordered SQLite core-schema migrations applied by --migrate-database.">
+    <EmbeddedResource Include="Persistence\Core\Sqlite\Scripts\*.sql" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="JulOS.Infrastructure.Tests" />
     <InternalsVisibleTo Include="JulOS.Integration.Tests" />

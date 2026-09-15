@@ -427,3 +427,35 @@ Reason: three browser icons expose transport implementation details as product c
 tab/session state and make device handoff incoherent. One server-owned Browser workspace gives JulOS
 the continuity model the product needs while keeping the lightweight local-rendering proxy as the
 default path.
+
+## D043 — SQLite schema upgrades and backups run inside the Server process
+
+**Status:** Accepted
+
+The default SQLite core store (D033) is upgraded by an ordered, checksummed migration runner
+owned by Infrastructure and invoked only by `--migrate-database`. `EnsureCreated` is not an
+upgrade path: it silently does nothing to an existing database, so a model change would leave a
+deployed installation running against a stale schema. Normal Server startup never changes the
+schema on either provider.
+
+An existing database is adopted only when its complete schema fingerprint matches the recorded
+baseline. An unknown, partially upgraded or hand-edited schema fails with
+`database.sqlite_schema_unsupported` instead of being guessed at or repaired. A database that
+records a migration this build does not ship is never downgraded.
+
+SQLite gets the same CHECK constraints PostgreSQL enforces. Because SQLite cannot add a
+constraint to an existing table, the parity migration rebuilds the affected tables using the
+generalized ALTER TABLE procedure from the SQLite manual. Existing rows that violate a rule this
+release enforces make the migration fail and roll back; they are never deleted or rewritten.
+
+Backup and restore of the SQLite store also run inside the Server process, through
+`--backup-database` and `--restore-database`, using SQLite's online backup API and
+`integrity_check`. The alternative — installing the `sqlite3` command-line tool into the runtime
+image — was rejected because it enlarges the production container's attack surface to solve a
+problem the already-referenced `Microsoft.Data.Sqlite` library solves in process. PostgreSQL
+deployments keep `pg_dump`/`pg_restore`; `tools/backup.sh` selects the path from the configured
+provider and records it in the archive metadata, so an archive can never be restored into the
+wrong provider.
+
+Reason: the default store must be upgradable and recoverable without weakening either the
+container or the data-integrity guarantees PostgreSQL deployments already have.

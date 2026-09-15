@@ -427,7 +427,7 @@ Runtime containers, temporary profiles, caches and active sessions are recreated
 Initial supported process:
 
 1. enter backup-consistent mode or use database-consistent snapshot procedure
-2. for SQLite, stop mutations, checkpoint WAL and use the DB-001 SQLite backup API into verified staging; for PostgreSQL create a logical backup
+2. for SQLite, run `JulOS.Server --backup-database`, which checkpoints WAL, copies through SQLite's online backup API into staging and verifies the copy with `integrity_check` before publishing it (decision `D043`); for PostgreSQL create a logical backup
 3. archive key ring and required persistent volumes
 4. record JulOS version and installed package versions
 5. encrypt backup at rest
@@ -452,7 +452,7 @@ A release cannot be marked stable until a clean restore test succeeds.
 
 ### 20.1 Core update
 
-Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Compose runs it as a one-shot service before Server and refuses to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit migration history or core tables manually. After `DB-001`, committed ordered migrations apply to both PostgreSQL and SQLite; real previous-beta fixtures are release gates.
+Core migrations are applied by the explicit `JulOS.Server --migrate-database` process. Both the PostgreSQL and the SQLite Compose stack run it as a one-shot service before Server and refuse to start Server when migration fails. Normal Server startup never mutates the schema, and operators do not edit migration history or core tables manually. Committed ordered migrations apply to both PostgreSQL and SQLite; a real previous-release SQLite fixture is a committed regression test (`tests/fixtures/sqlite`). The command exits `4` for a schema this build cannot recognise or upgrade and `5` for a migration that failed and was rolled back.
 
 - pull versioned images, never an unpinned `latest` deployment reference
 - verify release metadata

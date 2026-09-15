@@ -107,7 +107,14 @@ dotnet tool restore
 dotnet run --project src/JulOS.Server -- --migrate-database
 ```
 
-Normal Server startup never changes the schema. The development Compose stack runs this command in its one-shot `migrate` service before starting Server.
+Normal Server startup never changes the schema, on either provider. Both the development PostgreSQL stack and the alpha SQLite stack run this command in a one-shot `migrate` service before starting Server. PostgreSQL applies Entity Framework migrations; SQLite applies the ordered scripts recorded in `__julos_schema_history`. A schema this build does not recognise exits `4` instead of being repaired, and a database recording a newer migration is never downgraded.
+
+The default SQLite store is backed up and restored through the Server itself, so the runtime image needs no database command-line tool:
+
+```bash
+dotnet run --project src/JulOS.Server -- --backup-database ./artifacts/core.db
+dotnet run --project src/JulOS.Server -- --restore-database ./artifacts/core.db
+```
 
 After a fresh migration, `GET /api/v1/auth/status` reports that initial setup is required. Create the first administrator once through `POST /api/v1/auth/setup`; subsequent API calls use the secure `.JulOS.Session` cookie. Authenticated users read their current profile from `GET /api/v1/profile` and update validated language, time-zone, theme and motion preferences through `PUT /api/v1/profile/preferences` with an antiforgery token and current revision. Authentication and profile payloads, failures and operational defaults are specified in [`docs/DATA_AND_API_CONTRACTS.md`](docs/DATA_AND_API_CONTRACTS.md) and [`docs/SECURITY_AND_OPERATIONS.md`](docs/SECURITY_AND_OPERATIONS.md).
 

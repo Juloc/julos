@@ -49,6 +49,20 @@ if (DatabaseMigrationCommand.IsRequested(args))
         .ConfigureAwait(false);
 }
 
+if (DatabaseBackupCommand.IsBackupRequested(args))
+{
+    return await DatabaseBackupCommand
+        .RunBackupAsync(args, builder.Configuration)
+        .ConfigureAwait(false);
+}
+
+if (DatabaseBackupCommand.IsRestoreRequested(args))
+{
+    return await DatabaseBackupCommand
+        .RunRestoreAsync(args, builder.Configuration)
+        .ConfigureAwait(false);
+}
+
 const string ReadinessTag = "ready";
 var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 
@@ -96,10 +110,8 @@ builder.Services
 
 var app = builder.Build();
 
-if (coreDatabase.Provider == CoreDatabaseProvider.Sqlite)
-{
-    await CoreDatabaseMigrator.MigrateAsync(coreDatabase).ConfigureAwait(false);
-}
+// Normal startup never changes the schema, on either provider. Both the SQLite and the
+// PostgreSQL stack run the one-shot `--migrate-database` job before Server starts.
 
 // Grant the administrator role any permission added to the catalog since setup
 // completed (for example after an upgrade). This is best-effort: a database that

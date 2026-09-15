@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using JulOS.Infrastructure.Persistence.Core.Sqlite;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace JulOS.Infrastructure.Persistence.Core;
 
@@ -15,13 +17,15 @@ public static class CoreDatabaseMigrator
         var options = new DbContextOptionsBuilder<CoreDbContext>();
         CorePersistenceServiceCollectionExtensions.Configure(options, database);
 
-        await using var context = new CoreDbContext(options.Options);
         if (database.Provider == CoreDatabaseProvider.Sqlite)
         {
-            _ = await context.Database.EnsureCreatedAsync(cancellationToken).ConfigureAwait(false);
+            _ = await SqliteSchemaMigrationRunner
+                .MigrateAsync(database.ConnectionString, timeProvider: null, cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 
+        await using var context = new CoreDbContext(options.Options);
         await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
     }
 

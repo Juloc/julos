@@ -27,6 +27,12 @@ docker compose --env-file .env -f compose.sqlite.yaml up -d
 docker compose --env-file .env -f compose.sqlite.yaml ps
 ```
 
+The stack runs a one-shot `migrate` service before the server. Normal server startup never
+changes the database schema, so the schema is created and upgraded only there. When
+`migrate` exits non-zero the server is not started: exit code `4` means this build does not
+recognise the existing schema and `5` means a migration failed and was rolled back. Read its
+log with `docker compose --env-file .env -f compose.sqlite.yaml logs migrate`.
+
 The server listens on `http://127.0.0.1:8080` by default. Core data, package state and Data Protection keys persist in the `julos-data` named volume below `/var/lib/julos`.
 
 SQLite supports one JulOS server replica on one host. Do not share its database file between containers or hosts.
@@ -50,8 +56,25 @@ docker compose --env-file .env -f compose.sqlite.yaml logs --tail=200 server
 
 ```bash
 docker compose --env-file .env -f compose.sqlite.yaml stop server
-docker run --rm -v julos-beta_julos-data:/data -v "$PWD":/backup alpine \
-  cp /data/data/julos.db /backup/julos-beta.db
+docker compose --env-file .env -f compose.sqlite.yaml run --rm \
+  -v "$PWD":/backup server \
+  dotnet /application/JulOS.Server.dll --backup-database /backup/julos-beta.db
+docker compose --env-file .env -f compose.sqlite.yaml start server
+```
+
+The command checkpoints the write-ahead log, copies through SQLite's online backup API and
+verifies the copy with `integrity_check` before publishing it. Copying `julos.db` directly
+off the volume is unsupported: it silently omits the `-wal` side file, so the copy can be
+missing the most recent committed writes.
+
+Restore the same file with `--restore-database`, which verifies the archive before it
+replaces anything:
+
+```bash
+docker compose --env-file .env -f compose.sqlite.yaml stop server
+docker compose --env-file .env -f compose.sqlite.yaml run --rm \
+  -v "$PWD":/backup server \
+  dotnet /application/JulOS.Server.dll --restore-database /backup/julos-beta.db
 docker compose --env-file .env -f compose.sqlite.yaml start server
 ```
 
@@ -61,7 +84,11 @@ Keep `JULOS_PRIMARY_KEY` in a protected password store. Losing it makes protecte
 
 Before changing versions, create a database backup and read the target release notes. Keep the same `JULOS_PRIMARY_KEY`, update the immutable server image tag and run `pull` followed by `up -d`.
 
-A container rollback does not reverse incompatible database schema changes. Restore the matching database backup when a release explicitly requires it.
+A container rollback does not reverse database schema changes. Upgrading is supported: the
+`migrate` service recognises the schema an earlier release created and upgrades it in place.
+Downgrading is not: an older server started against a database that already recorded a newer
+migration exits `4` and refuses to run rather than dropping schema it does not understand.
+Restore the matching database backup when a release explicitly requires a rollback.
 
 ## Reset
 

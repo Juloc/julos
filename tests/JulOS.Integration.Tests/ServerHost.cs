@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 
 using JulOS.Application.Concurrency;
 using JulOS.Contracts.Agents;
+using JulOS.Infrastructure.Persistence.Core.Sqlite;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -67,6 +68,19 @@ internal sealed class ServerHost : WebApplicationFactory<Program>
         this.includeConcurrencyConflictEndpoint = includeConcurrencyConflictEndpoint;
         this.settings = settings ?? new Dictionary<string, string?>();
         this.configureServices = configureServices;
+
+        // Server no longer creates or changes the schema at startup (DB-001), so the test
+        // host runs the migration first exactly as the one-shot `migrate` Compose service
+        // does before Server in both deployment stacks. A test that wants to control the
+        // schema itself may still migrate explicitly; the runner is idempotent.
+        if (this.settings.TryGetValue("Database:Provider", out var provider)
+            && string.Equals(provider, "sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            SqliteSchemaMigrationRunner
+                .MigrateAsync(connectionString)
+                .GetAwaiter()
+                .GetResult();
+        }
     }
 
     protected override void ConfigureClient(HttpClient client)

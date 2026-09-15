@@ -3,30 +3,46 @@
 
 name: julos-beta
 
+x-julos-server: &julos-server
+  image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.31}
+  environment:
+    ASPNETCORE_ENVIRONMENT: Production
+    ASPNETCORE_HTTP_PORTS: 8080
+    Database__Provider: sqlite
+    ConnectionStrings__CoreDatabase: Data Source=/var/lib/julos/data/julos.db;Cache=Shared
+    Packages__Root: /var/lib/julos/packages
+    DataProtection__KeyRingPath: /var/lib/julos/data-protection
+    Secrets__ActiveKeyId: primary
+    Secrets__KeyRingPath: /run/julos-secret-keys
+    Secrets__LeaseLifetimeSeconds: 300
+    Remote__Display__ProviderEndpointTemplate: ${JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE:-}
+    Remote__Display__PublicOrigin: ${JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN:-}
+    Remote__Display__GrantLifetimeSeconds: ${JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS:-60}
+  secrets:
+    - source: julos-primary-key
+      target: /run/julos-secret-keys/primary.key
+      uid: "1654"
+      gid: "1654"
+      mode: 0400
+  volumes:
+    - julos-data:/var/lib/julos
+  security_opt:
+    - no-new-privileges:true
+
 services:
+  # Normal Server startup never changes the schema, so the SQLite stack runs the explicit
+  # migration exactly like the PostgreSQL stack does. A schema this build does not
+  # recognise exits non-zero here and Server is never started against it.
+  migrate:
+    <<: *julos-server
+    command: ["dotnet", "/application/JulOS.Server.dll", "--migrate-database"]
+    restart: "no"
+
   server:
-    image: ${JULOS_SERVER_IMAGE:-ghcr.io/juloc/julos-server:0.4.0-beta.31}
-    environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_HTTP_PORTS: 8080
-      Database__Provider: sqlite
-      ConnectionStrings__CoreDatabase: Data Source=/var/lib/julos/data/julos.db;Cache=Shared
-      Packages__Root: /var/lib/julos/packages
-      DataProtection__KeyRingPath: /var/lib/julos/data-protection
-      Secrets__ActiveKeyId: primary
-      Secrets__KeyRingPath: /run/julos-secret-keys
-      Secrets__LeaseLifetimeSeconds: 300
-      Remote__Display__ProviderEndpointTemplate: ${JULOS_REMOTE_DISPLAY_PROVIDER_ENDPOINT_TEMPLATE:-}
-      Remote__Display__PublicOrigin: ${JULOS_REMOTE_DISPLAY_PUBLIC_ORIGIN:-}
-      Remote__Display__GrantLifetimeSeconds: ${JULOS_REMOTE_DISPLAY_GRANT_LIFETIME_SECONDS:-60}
-    secrets:
-      - source: julos-primary-key
-        target: /run/julos-secret-keys/primary.key
-        uid: "1654"
-        gid: "1654"
-        mode: 0400
-    volumes:
-      - julos-data:/var/lib/julos
+    <<: *julos-server
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "${JULOS_BIND_ADDRESS:-127.0.0.1}:${JULOS_SERVER_PORT:-8080}:8080"
     healthcheck:
@@ -35,8 +51,6 @@ services:
       timeout: 10s
       retries: 12
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
     restart: unless-stopped
 
 secrets:
