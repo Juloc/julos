@@ -93,11 +93,29 @@ html,
 body {
   width: 100%;
   min-width: 320px;
-  height: 100%;
   margin: 0;
   overflow: hidden;
   background: var(--julos-color-background);
   color: var(--julos-color-text);
+
+  /*
+   * Mobile browser chrome collapses on scroll, so 100vh is taller than the window and
+   * leaves the taskbar below the fold. 100dvh tracks the dynamic viewport instead.
+   * --julos-viewport-height is published from VisualViewport by viewport-metrics.ts and
+   * additionally follows a software keyboard, which dvh alone does not do on every
+   * browser. The 100% first line keeps older engines working.
+   */
+  height: 100%;
+  height: 100dvh;
+  height: var(--julos-viewport-height, 100dvh);
+}
+
+/*
+ * Anything anchored to the bottom edge stays clear of an open software keyboard.
+ * The inset is zero whenever no keyboard is visible, so desktop layout is unaffected.
+ */
+:root {
+  --julos-keyboard-inset: 0px;
 }
 
 button,

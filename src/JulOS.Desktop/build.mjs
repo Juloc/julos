@@ -2,14 +2,18 @@
 // pinned Apache Guacamole browser client used by interactive package displays.
 
 import { createHash } from 'node:crypto';
-import { cp, mkdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 
+import { renderIcon, renderMaskableIcon } from './raster-icons.mjs';
+
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const staticDirectory = join(projectDirectory, 'static');
 const outputDirectory = join(projectDirectory, 'dist');
+const versionFile = join(projectDirectory, '..', '..', 'VERSION');
+const buildIdPlaceholder = '__JULOS_BUILD_ID__';
 const vendorDirectory = join(outputDirectory, 'vendor');
 const artifactUrl = 'https://repo.maven.apache.org/maven2/org/apache/guacamole/guacamole-common-js/1.6.0/guacamole-common-js-1.6.0.zip';
 const artifactSha256 = '718cde229cfa601c52ddc201afe3f3ed951b8b756957387776d0c460786f0448';
@@ -19,6 +23,34 @@ const librarySha256 = 'cc89f710ecc544477dbe6bfea453fab752dafa1b1ab9770f523676e7b
 await mkdir(outputDirectory, { recursive: true });
 await cp(staticDirectory, outputDirectory, { recursive: true });
 await mkdir(vendorDirectory, { recursive: true });
+
+// The service worker's cache name must change with every release. A constant name would
+// make the activate handler's "delete every cache that is not mine" step a no-op forever,
+// so a cache-first immutable asset would be served from the previous build indefinitely.
+const buildId = (await readFile(versionFile, 'utf8')).replace(/^﻿/, '').trim();
+const serviceWorkerSource = join(outputDirectory, 'service-worker.js');
+const serviceWorker = await readFile(serviceWorkerSource, 'utf8');
+if (!serviceWorker.includes(buildIdPlaceholder)) {
+  throw new Error(
+    `The service worker must contain ${buildIdPlaceholder} so the build can stamp its cache version.`,
+  );
+}
+await writeFile(
+  serviceWorkerSource,
+  serviceWorker.replaceAll(buildIdPlaceholder, buildId),
+  'utf8',
+);
+
+// iOS Safari ignores the manifest icon list and installs the PNG from
+// <link rel="apple-touch-icon">, so raster icons are required for installability. They
+// are rasterized from the same shapes as the SVGs rather than committed as binaries that
+// could drift from them.
+const iconDirectory = join(outputDirectory, 'icons');
+await mkdir(iconDirectory, { recursive: true });
+for (const size of [180, 192, 512]) {
+  await writeFile(join(iconDirectory, `julos-${size}.png`), renderIcon(size));
+}
+await writeFile(join(iconDirectory, 'julos-maskable-512.png'), renderMaskableIcon(512));
 
 const response = await fetch(artifactUrl, {
   headers: { Accept: 'application/zip' },
