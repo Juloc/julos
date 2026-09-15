@@ -1,4 +1,11 @@
 ﻿import { AgentDashboardStore, type AgentDashboardEntry } from './agent-dashboard.js';
+import {
+  ClientDeviceStore,
+  preferenceFor,
+  preferenceWorkspaceClasses,
+  type ClientDeviceSnapshot,
+  type ClientDeviceView,
+} from './client-devices.js';
 import { NotificationCenterStore, type NotificationCenterSnapshot } from './notification-center.js';
 import {
   PackageManagerStore,
@@ -9,6 +16,11 @@ import {
 import type { SupportedLanguage } from './localization.js';
 import type { DesktopApplication, ShellApiClient, UserProfile } from './shell-api.js';
 import { createWebAppBrowserSurface } from './webapp-browser.js';
+import {
+  isWorkspaceClassOverride,
+  type WorkspaceClass,
+  type WorkspaceClassOverride,
+} from './workspace-contract.js';
 
 export const CoreApplicationIds = {
   settings: 'core.settings',
@@ -26,6 +38,7 @@ export interface CoreSurfaceHandle {
 
 export interface CoreApplicationCatalogOptions {
   readonly api: ShellApiClient;
+  readonly clientDevices: ClientDeviceStore;
   readonly notifications: NotificationCenterStore;
   readonly language: () => SupportedLanguage;
   readonly onFailure: (error: unknown) => void;
@@ -36,6 +49,7 @@ export interface CoreApplicationCatalogOptions {
 /** Provides JulOS-owned system utilities as normal windows in the desktop runtime. */
 export class CoreApplicationCatalog {
   readonly #api: ShellApiClient;
+  readonly #clientDevices: ClientDeviceStore;
   readonly #notifications: NotificationCenterStore;
   readonly #language: () => SupportedLanguage;
   readonly #onFailure: (error: unknown) => void;
@@ -45,6 +59,7 @@ export class CoreApplicationCatalog {
 
   public constructor(options: CoreApplicationCatalogOptions) {
     this.#api = options.api;
+    this.#clientDevices = options.clientDevices;
     this.#notifications = options.notifications;
     this.#language = options.language;
     this.#onFailure = options.onFailure;
@@ -119,7 +134,8 @@ export class CoreApplicationCatalog {
     save.className = 'core-primary-button';
     save.textContent = text(language, 'save');
     form.append(languageSelect.label, themeSelect.label, motionSelect.label, timeZoneField.label, save);
-    root.append(heading, status, form);
+    const devices = this.#deviceSection(language);
+    root.append(heading, status, form, devices.element);
 
     let profile: UserProfile | null = null;
     const load = async (): Promise<void> => {
@@ -160,7 +176,165 @@ export class CoreApplicationCatalog {
     });
 
     void load();
-    return { element: root, dispose: () => undefined };
+    return { element: root, dispose: devices.dispose };
+  }
+
+  /**
+   * The client-device list inside Settings, from `docs/MOBILE_PWA.md` sections 3 and 4.
+   *
+   * Every control here writes through the owner-scoped API with the revision the rendered
+   * record carried, so a change made on another device loses rather than silently wins.
+   */
+  #deviceSection(language: SupportedLanguage): CoreSurfaceHandle {
+    const store = this.#clientDevices;
+    const root = document.createElement('div');
+    root.className = 'core-device-section';
+    const heading = document.createElement('h3');
+    heading.textContent = text(language, 'devices');
+    const intro = statusText(text(language, 'devicesDescription'));
+    const list = document.createElement('div');
+    list.className = 'core-list device-list';
+    root.append(heading, intro, list);
+
+    const render = (snapshot: ClientDeviceSnapshot): void => {
+      list.replaceChildren();
+      if (snapshot.lastError !== null) {
+        list.append(statusText(snapshot.lastError, 'error'));
+      }
+      if (snapshot.devices.length === 0) {
+        list.append(emptyMessage(text(language, snapshot.loading ? 'loading' : 'noDevices')));
+        return;
+      }
+      for (const device of snapshot.devices) {
+        list.append(this.#deviceCard(store, device, language));
+      }
+    };
+
+    const unsubscribe = store.subscribe(render);
+    void store.refresh().catch(this.#onFailure);
+    return { element: root, dispose: unsubscribe };
+  }
+
+  #deviceCard(
+    store: ClientDeviceStore,
+    device: ClientDeviceView,
+    language: SupportedLanguage,
+  ): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'core-card device-card';
+    card.dataset['currentDevice'] = String(device.isCurrentDevice);
+
+    const header = document.createElement('div');
+    header.className = 'core-card-heading';
+    const name = document.createElement('strong');
+    name.textContent = device.displayName;
+    header.append(name);
+    if (device.isCurrentDevice) {
+      const badge = document.createElement('span');
+      badge.className = 'connectivity-badge';
+      badge.textContent = text(language, 'thisDevice');
+      header.append(badge);
+    }
+
+    const identity = document.createElement('form');
+    identity.className = 'core-form';
+    const nameField = inputField(text(language, 'deviceName'));
+    nameField.input.value = device.displayName;
+    nameField.input.maxLength = 128;
+    nameField.input.required = true;
+    const pin = selectField(text(language, 'presentation'), [
+      ['', `${text(language, 'presentationAutomatic')} · ${workspaceLabel(device.lastDetectedWorkspaceClass, language)}`],
+      ['phone', workspaceLabel('phone', language)],
+      ['tablet', workspaceLabel('tablet', language)],
+      ['desktop-single', workspaceLabel('desktop-single', language)],
+    ]);
+    pin.select.value = device.workspaceClassOverride ?? '';
+    const save = document.createElement('button');
+    save.type = 'submit';
+    save.className = 'core-primary-button';
+    save.textContent = text(language, 'save');
+    identity.append(nameField.label, pin.label, save);
+    identity.addEventListener('submit', (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      void store
+        .update(device, nameField.input.value.trim(), readWorkspacePin(pin.select.value))
+        .catch(this.#onFailure)
+        .finally(() => { save.disabled = false; });
+    });
+
+    const preferences = document.createElement('div');
+    preferences.className = 'core-list device-preferences';
+    for (const workspaceClass of preferenceWorkspaceClasses(device)) {
+      preferences.append(this.#devicePreference(store, device, workspaceClass, language));
+    }
+
+    const seen = document.createElement('small');
+    seen.className = 'core-muted';
+    seen.textContent = `${text(language, 'lastSeen')} · ${formatDate(device.lastSeenAtUtc, language)}`;
+
+    const remove = actionButton(
+      text(language, 'remove'),
+      async () => {
+        const question = device.isCurrentDevice ? 'confirmRemoveCurrentDevice' : 'confirmRemoveDevice';
+        if (globalThis.confirm(text(language, question))) {
+          await store.remove(device);
+        }
+      },
+      this.#onFailure,
+    );
+    remove.classList.add('danger');
+
+    card.append(header, identity, preferences, seen, remove);
+    return card;
+  }
+
+  /** One workspace class's layout scope and restore mode for a single device. */
+  #devicePreference(
+    store: ClientDeviceStore,
+    device: ClientDeviceView,
+    workspaceClass: WorkspaceClass,
+    language: SupportedLanguage,
+  ): HTMLElement {
+    const current = preferenceFor(device, workspaceClass);
+    const group = document.createElement('fieldset');
+    group.className = 'core-fieldset device-preference';
+    group.dataset['workspaceClass'] = workspaceClass;
+    const caption = document.createElement('legend');
+    caption.textContent = workspaceLabel(workspaceClass, language);
+
+    const scope = selectField(text(language, 'layoutScope'), [
+      ['shared', text(language, 'layoutShared')],
+      ['device', text(language, 'layoutDevice')],
+    ]);
+    scope.select.value = current.layoutScope;
+    const restore = selectField(text(language, 'restoreMode'), [
+      ['resume', text(language, 'restoreResume')],
+      ['fresh', text(language, 'restoreFresh')],
+    ]);
+    restore.select.value = current.restoreMode;
+
+    const apply = (): void => {
+      scope.select.disabled = true;
+      restore.select.disabled = true;
+      void store
+        .setPreference(
+          device,
+          workspaceClass,
+          scope.select.value === 'device' ? 'device' : 'shared',
+          restore.select.value === 'fresh' ? 'fresh' : 'resume',
+        )
+        .catch(this.#onFailure)
+        .finally(() => {
+          scope.select.disabled = false;
+          restore.select.disabled = false;
+        });
+    };
+
+    scope.select.addEventListener('change', apply);
+    restore.select.addEventListener('change', apply);
+    group.append(caption, scope.label, restore.label);
+    return group;
   }
 
   #createPackageManagerSurface(): CoreSurfaceHandle {
@@ -611,6 +785,24 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 }
 
+/** Reads the workspace pin a select carries; the empty option means automatic. */
+function readWorkspacePin(value: string): WorkspaceClassOverride | null {
+  return isWorkspaceClassOverride(value) ? value : null;
+}
+
+function workspaceLabel(workspaceClass: WorkspaceClass, language: SupportedLanguage): string {
+  switch (workspaceClass) {
+    case 'phone':
+      return text(language, 'workspacePhone');
+    case 'tablet':
+      return text(language, 'workspaceTablet');
+    case 'desktop-multi':
+      return text(language, 'workspaceDesktopMulti');
+    default:
+      return text(language, 'workspaceDesktopSingle');
+  }
+}
+
 function themeValue(value: string): 'system' | 'light' | 'dark' {
   return value === 'dark' ? 'dark' : value === 'light' ? 'light' : 'system';
 }
@@ -634,6 +826,14 @@ const messages = {
     advancedInstall: 'Advanced · install external signed package', packageFile: 'Package (.zip)', signatureFile: 'Signature file', publisherId: 'Publisher ID',
     publisherKeyId: 'Publisher key ID', install: 'Install', installing: 'Installing…', installed: 'Installed', filesRequired: 'Package and signature files are required.',
     configuration: 'Configuration JSON', configure: 'Configure',
+    devices: 'Devices', thisDevice: 'This device', deviceName: 'Device name', noDevices: 'No devices are registered.',
+    devicesDescription: 'Browsers and installed apps you have opened JulOS in. A device stores layout preferences only; it never grants access to your account.',
+    presentation: 'Presentation', presentationAutomatic: 'Automatic', lastSeen: 'Last seen',
+    workspacePhone: 'Phone', workspaceTablet: 'Tablet', workspaceDesktopSingle: 'Desktop', workspaceDesktopMulti: 'Multiple displays',
+    layoutScope: 'Window layout', layoutShared: 'Shared with my other devices', layoutDevice: 'Only on this device',
+    restoreMode: 'When JulOS opens', restoreResume: 'Restore my windows', restoreFresh: 'Start with an empty desktop',
+    confirmRemoveDevice: 'Remove this device? Layouts and preferences stored only for it are deleted. Shared layouts are kept.',
+    confirmRemoveCurrentDevice: 'Remove the device you are using? It is registered again straight away as a new device, so layouts and preferences stored only for it are lost.',
   },
   de: {
     settings: 'Einstellungen', packages: 'Paketverwaltung', packageStore: 'JulOS Store', agents: 'Agents', notifications: 'Benachrichtigungen', problems: 'Probleme', webappBrowser: 'Browser',
@@ -647,5 +847,13 @@ const messages = {
     advancedInstall: 'Erweitert · externes signiertes Paket installieren', packageFile: 'Paket (.zip)', signatureFile: 'Signaturdatei', publisherId: 'Publisher-ID',
     publisherKeyId: 'Publisher-Key-ID', install: 'Installieren', installing: 'Installieren…', installed: 'Installiert', filesRequired: 'Paket- und Signaturdatei sind erforderlich.',
     configuration: 'Konfiguration als JSON', configure: 'Konfigurieren',
+    devices: 'Geräte', thisDevice: 'Dieses Gerät', deviceName: 'Gerätename', noDevices: 'Keine Geräte registriert.',
+    devicesDescription: 'Browser und installierte Apps, in denen du JulOS geöffnet hast. Ein Gerät speichert nur Layout-Einstellungen und gewährt nie Zugriff auf dein Konto.',
+    presentation: 'Darstellung', presentationAutomatic: 'Automatisch', lastSeen: 'Zuletzt gesehen',
+    workspacePhone: 'Telefon', workspaceTablet: 'Tablet', workspaceDesktopSingle: 'Desktop', workspaceDesktopMulti: 'Mehrere Bildschirme',
+    layoutScope: 'Fensterlayout', layoutShared: 'Mit meinen anderen Geräten geteilt', layoutDevice: 'Nur auf diesem Gerät',
+    restoreMode: 'Beim Öffnen von JulOS', restoreResume: 'Meine Fenster wiederherstellen', restoreFresh: 'Mit leerem Desktop starten',
+    confirmRemoveDevice: 'Dieses Gerät entfernen? Layouts und Einstellungen, die nur dafür gespeichert sind, werden gelöscht. Geteilte Layouts bleiben erhalten.',
+    confirmRemoveCurrentDevice: 'Das Gerät entfernen, das du gerade benutzt? Es wird sofort als neues Gerät registriert; Layouts und Einstellungen, die nur dafür gespeichert sind, gehen verloren.',
   },
 } as const;

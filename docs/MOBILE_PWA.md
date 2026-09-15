@@ -64,6 +64,16 @@ Rules:
 - removing a device removes only device-scoped preferences/layouts, never shared layouts or application data;
 - device identity is not accepted as authorization for any other resource.
 
+### 3.1 Settings surface
+
+Settings lists every device the authenticated user has registered, marks the one making the request, and offers per device a name, a presentation pin and, for each workspace class that device can actually present, the layout scope and restore mode.
+
+The pin defaults to automatic, which shows the class the device last detected. Only `phone`, `tablet` and `desktop-single` can be pinned, because `desktop-multi` is entered through the Multi-Display controller.
+
+Preference controls are offered only for classes the device can reach: its effective class, `desktop-multi` in addition when that class is a desktop one, and any class that already has a stored preference so an earlier choice never becomes unreachable behind a later pin. Every write carries the revision the rendered record had, and the list is reloaded from Server whether the write succeeded or conflicted, so a rejected edit is never left on screen as if it had applied.
+
+Removing the device in use clears its cookie, so Desktop registers again immediately; the replacement is a visibly new device and the layouts stored only for the removed one are gone. The confirmation says so before the removal happens.
+
 ## 4. Layout resolution
 
 A user has one shared layout per workspace class by default. Each client device may choose:

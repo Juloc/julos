@@ -1,4 +1,10 @@
 ﻿import { JulOsApiError } from './api-client.js';
+import {
+  ClientDeviceStore,
+  defaultDeviceName,
+  detectWorkspaceClass,
+  windowCapabilitySource,
+} from './client-devices.js';
 import { CoreApplicationCatalog, CoreApplicationIds } from './core-applications.js';
 import { desktopNotificationCenter } from './desktop-observability.js';
 import { classifyHomeIndicatorGesture } from './home-gesture.js';
@@ -75,6 +81,7 @@ export class DesktopRuntime {
   readonly #frontendHost = new PackageFrontendHost();
   readonly #capabilities = new PackageCapabilityClient();
   readonly #widgetHost = new WidgetHostStore();
+  readonly #clientDevices = new ClientDeviceStore();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
   readonly #keyboard: ShellKeyboardController;
@@ -116,6 +123,7 @@ export class DesktopRuntime {
     );
     this.#coreApplications = new CoreApplicationCatalog({
       api: options.api,
+      clientDevices: this.#clientDevices,
       notifications: this.#notifications,
       language: options.language,
       onFailure: options.onFailure,
@@ -195,7 +203,26 @@ export class DesktopRuntime {
     globalThis.addEventListener('resize', this.#resizeHandler);
     this.#bindHomeIndicator();
 
-    await Promise.all([this.#loadRestoredFrontends(), this.#renderWidgets()]);
+    await Promise.all([
+      this.#loadRestoredFrontends(),
+      this.#renderWidgets(),
+      this.#registerClientDevice(),
+    ]);
+  }
+
+  /**
+   * Registers this browser as a client device, or resolves the one its cookie names.
+   *
+   * The desktop is fully usable without a device record — the record only carries layout
+   * preferences — so a failure here is reported and does not stop the runtime.
+   */
+  async #registerClientDevice(): Promise<void> {
+    const detected = detectWorkspaceClass(windowCapabilitySource(globalThis.window));
+    try {
+      await this.#clientDevices.register(defaultDeviceName(detected, this.#language()), detected);
+    } catch (error) {
+      this.#onFailure(error);
+    }
   }
 
   public stop(): void {

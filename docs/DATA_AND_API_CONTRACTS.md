@@ -761,10 +761,12 @@ GET    /api/v1/client-devices
 POST   /api/v1/client-devices/registration
 PUT    /api/v1/client-devices/{clientDeviceId}
 PUT    /api/v1/client-devices/{clientDeviceId}/preferences/{workspaceClass}
-DELETE /api/v1/client-devices/{clientDeviceId}
+DELETE /api/v1/client-devices/{clientDeviceId}?revision={revision}
 ```
 
 Every client-device endpoint requires an authenticated session and, except for the read, an antiforgery token. `POST /registration` resolves the `.JulOS.Device` cookie or registers a new device and sets that cookie; the raw client instance key is returned only in the `Set-Cookie` header and never in a response body, so Desktop JavaScript cannot read it. The cookie is HTTP-only, `SameSite=Strict`, root-scoped and marked Secure exactly when the request is HTTPS, for the reason recorded in decision `D027`.
+
+Removal carries the revision it expects as the `revision` query value. A missing, unparsable or non-positive value is rejected as `request.invalid` before anything is read, so a delete can never be sent without naming the state it believed it was deleting. The stable `client_device.*` codes reach the caller as the problem `code`; they are not flattened into the generic status-derived platform code.
 
 Resolution is always filtered by the authenticated user as well as by the key, so presenting another user's cookie registers a new device rather than revealing or adopting theirs. A device owned by another user is reported as `client_device.not_found` rather than `403`, so the API never confirms that someone else's device exists. Removing the device making the request also clears its cookie, so the next request registers a visibly new device instead of presenting a key that resolves to nothing. Mutations publish `client_device.changed` carrying only the device identity and revision.
 

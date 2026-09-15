@@ -118,6 +118,11 @@ internal static class ProblemDetailsCustomizer
             return (profileFailure.Code, false);
         }
 
+        if (exception is ClientDeviceException clientDeviceFailure)
+        {
+            return (clientDeviceFailure.Code, false);
+        }
+
         if (exception is SecretReferenceFailureException secretFailure)
         {
             return (

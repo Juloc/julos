@@ -120,19 +120,24 @@ internal static class ClientDeviceEndpoints
     private static async Task<IResult> RemoveAsync(
         HttpContext context,
         Guid clientDeviceId,
-        int expectedRevision,
+        int revision,
         IAntiforgery antiforgery,
         IClientDeviceService devices,
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
 
+        // A missing or unparsable value is already rejected as request.invalid by parameter
+        // binding; this covers the values that parse but cannot identify a stored revision,
+        // so every unusable revision reports the one documented code.
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(revision);
+
         var userId = CurrentUserId(context.User);
         var removingCurrent = await IsCurrentDeviceAsync(devices, userId, context, clientDeviceId, cancellationToken)
             .ConfigureAwait(false);
 
         await devices
-            .RemoveAsync(userId, clientDeviceId, expectedRevision, cancellationToken)
+            .RemoveAsync(userId, clientDeviceId, revision, cancellationToken)
             .ConfigureAwait(false);
 
         // Removing the device you are using must not leave a cookie that resolves to

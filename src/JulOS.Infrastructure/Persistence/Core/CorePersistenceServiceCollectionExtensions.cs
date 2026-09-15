@@ -5,9 +5,11 @@ using JulOS.Application.Operations;
 using JulOS.Application.Devices;
 using JulOS.Application.Profile;
 using JulOS.Application.Remote;
+using JulOS.Domain.Primitives;
 using JulOS.Infrastructure.Auditing;
 using JulOS.Infrastructure.Authentication;
 using JulOS.Infrastructure.Devices;
+using JulOS.Infrastructure.Identifiers;
 using JulOS.Infrastructure.Authorization;
 using JulOS.Infrastructure.Layouts;
 using JulOS.Infrastructure.Operations;
@@ -17,6 +19,7 @@ using JulOS.Infrastructure.Remote;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace JulOS.Infrastructure.Persistence.Core;
 
@@ -89,6 +92,13 @@ public static class CorePersistenceServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(database);
 
         services.AddDbContext<CoreDbContext>(options => Configure(options, database));
+
+        // Identity generation belongs to the store: the services registered below create
+        // aggregates and all of them must use the same time-ordered scheme. TryAdd leaves a
+        // composition root that already registered a time source or generator in control.
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IIdentifierGenerator>(provider =>
+            new TimeOrderedIdentifierGenerator(provider.GetRequiredService<TimeProvider>()));
         services.AddScoped<InitialAdministratorProvisioner>();
         services.AddScoped<IAuditService, PostgresAuditService>();
         services.AddScoped<IPermissionAssignmentReader, EfPermissionAssignmentReader>();
