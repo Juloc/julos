@@ -211,7 +211,10 @@ test('classification rejects non-positive dimensions instead of guessing', () =>
 
 test('the committed workspace-resolution fixtures all resolve as documented', () => {
   const path = join(repositoryRoot(), 'tests', 'fixtures', 'mobile-pwa', 'workspace-resolution.json');
-  const fixture = JSON.parse(readFileSync(path, 'utf8')) as { cases: readonly ResolutionCase[] };
+  // Repository JSON carries a byte order mark under the D012 encoding policy, which
+  // JSON.parse rejects; tools/lib/package-manifest.mjs strips it the same way.
+  const text = readFileSync(path, 'utf8').replace(/^﻿/, '');
+  const fixture = JSON.parse(text) as { cases: readonly ResolutionCase[] };
 
   assert.ok(fixture.cases.length >= 10, 'the fixture set must cover every documented rule');
 
