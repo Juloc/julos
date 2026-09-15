@@ -1,0 +1,160 @@
+﻿{
+  "description": "MOB-001 workspace classification and resolution fixtures from docs/MOBILE_PWA.md sections 2 and 4. Consumed by src/JulOS.Desktop/src/workspace-contract.test.ts and available to the server-side resolution MOB-003/MOB-004 adds.",
+  "contractVersion": 1,
+  "cases": [
+    {
+      "name": "phone in portrait",
+      "capabilities": {
+        "primaryPointerCoarse": true,
+        "anyPointerFine": false,
+        "screenMinimumDimensionCssPx": 393,
+        "layoutViewportWidthCssPx": 393
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "phone",
+      "expectedResolved": "phone"
+    },
+    {
+      "name": "same phone in landscape keeps its class",
+      "capabilities": {
+        "primaryPointerCoarse": true,
+        "anyPointerFine": false,
+        "screenMinimumDimensionCssPx": 393,
+        "layoutViewportWidthCssPx": 852
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "phone",
+      "expectedResolved": "phone"
+    },
+    {
+      "name": "software keyboard shrinks the visual viewport but not the layout viewport",
+      "capabilities": {
+        "primaryPointerCoarse": true,
+        "anyPointerFine": false,
+        "screenMinimumDimensionCssPx": 834,
+        "layoutViewportWidthCssPx": 834
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "tablet",
+      "expectedResolved": "tablet"
+    },
+    {
+      "name": "tablet with an attached trackpad uses the width rules",
+      "capabilities": {
+        "primaryPointerCoarse": true,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 834,
+        "layoutViewportWidthCssPx": 1194
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "desktop-single"
+    },
+    {
+      "name": "narrow desktop window below the phone threshold",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 599
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "phone",
+      "expectedResolved": "phone"
+    },
+    {
+      "name": "exactly at the tablet threshold",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 600
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "tablet",
+      "expectedResolved": "tablet"
+    },
+    {
+      "name": "exactly at the desktop threshold",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 1024
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "desktop-single"
+    },
+    {
+      "name": "device override wins over detection",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 1920
+      },
+      "override": "tablet",
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "tablet"
+    },
+    {
+      "name": "multi-display needs an explicit request",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 1920
+      },
+      "override": null,
+      "multiDisplayRequested": false,
+      "activeDisplayParticipants": 3,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "desktop-single"
+    },
+    {
+      "name": "multi-display needs at least two participants",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 1920
+      },
+      "override": null,
+      "multiDisplayRequested": true,
+      "activeDisplayParticipants": 1,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "desktop-single"
+    },
+    {
+      "name": "explicit multi-display with two participants",
+      "capabilities": {
+        "primaryPointerCoarse": false,
+        "anyPointerFine": true,
+        "screenMinimumDimensionCssPx": 1080,
+        "layoutViewportWidthCssPx": 1920
+      },
+      "override": null,
+      "multiDisplayRequested": true,
+      "activeDisplayParticipants": 2,
+      "expectedDetected": "desktop-single",
+      "expectedResolved": "desktop-multi"
+    }
+  ]
+}

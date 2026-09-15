@@ -345,6 +345,8 @@ Required installability:
 - stable start URL within the authenticated Shell;
 - service worker registered by the Shell.
 
+This matrix is executable, not prose only: `src/JulOS.Desktop/src/pwa-cache-policy.ts` implements it as deny-by-default policy with the allow and deny prefixes as exported data, and `pwa-cache-policy.test.ts` covers every row below. The worker `MOB-002` ships consumes that module rather than restating the rule.
+
 The service worker may cache only versioned immutable Shell assets and a non-sensitive disconnected document. It must not persistently cache:
 
 - authenticated API responses;
@@ -452,6 +454,13 @@ pwa.server_unreachable
 `MOB-004` depends on the supported SQLite migration foundation from `DB-001`. Suspension does not become the Phone default until `MOB-006` and `MOB-007` are complete.
 
 ## 18. Required tests
+
+`MOB-001` contributes the contract half ahead of the implementation: the workspace,
+Surface, Shell-navigation and cache-policy modules under `src/JulOS.Desktop/src/*-contract.ts`
+and `pwa-cache-policy.ts` each have a matching `.test.ts`, and the classification and
+resolution cases are driven by `tests/fixtures/mobile-pwa/workspace-resolution.json` so the
+same fixtures can verify the server-side resolution `MOB-003`/`MOB-004` adds. The items
+below land with their owning work item.
 
 Domain and persistence:
 
