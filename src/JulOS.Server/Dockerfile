@@ -7,12 +7,15 @@
 
 FROM node:24.18.0-alpine AS desktop-build
 
-WORKDIR /desktop
+# The stage mirrors the repository layout because build.mjs stamps the service-worker
+# cache version from the VERSION file it resolves at ../../VERSION.
+WORKDIR /repository/src/JulOS.Desktop
 
 COPY src/JulOS.Desktop/package.json src/JulOS.Desktop/package-lock.json ./
 RUN npm ci
 
-COPY src/JulOS.Desktop/tsconfig.json src/JulOS.Desktop/build.mjs ./
+COPY VERSION /repository/VERSION
+COPY src/JulOS.Desktop/tsconfig.json src/JulOS.Desktop/build.mjs src/JulOS.Desktop/raster-icons.mjs ./
 COPY src/JulOS.Desktop/src/ ./src/
 COPY src/JulOS.Desktop/static/ ./static/
 RUN npm run build
@@ -37,7 +40,7 @@ COPY src/JulOS.PackageSdk/ src/JulOS.PackageSdk/
 COPY src/JulOS.Infrastructure/ src/JulOS.Infrastructure/
 COPY src/JulOS.Server/ src/JulOS.Server/
 
-COPY --from=desktop-build /desktop/dist/ src/JulOS.Server/wwwroot/
+COPY --from=desktop-build /repository/src/JulOS.Desktop/dist/ src/JulOS.Server/wwwroot/
 
 RUN dotnet publish src/JulOS.Server/JulOS.Server.csproj \
       --configuration Release \
