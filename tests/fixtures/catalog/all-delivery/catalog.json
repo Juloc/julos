@@ -1,0 +1,17 @@
+﻿{
+  "schema": "app-catalog-index.v1",
+  "sourceId": "community.example",
+  "generatedAtUtc": "2026-08-25T12:00:00Z",
+  "keySet": {
+    "path": "keys.json",
+    "sha256": "76ca49b378f7a4aecf10373eb76fea5b65091eb4855363cb272df562ac2e9391"
+  },
+  "entries": [
+    {
+      "appId": "sample",
+      "version": "1.0.0",
+      "path": "apps/sample/1.0.0/app.json",
+      "sha256": "47771cda41f898f2c52b903b8d8fb9f68efe654e88bf583caaddcba2c84e7e79"
+    }
+  ]
+}

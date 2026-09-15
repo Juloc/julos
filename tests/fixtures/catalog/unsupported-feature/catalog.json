@@ -1,0 +1,14 @@
+﻿{
+  "schema": "app-catalog-index.v1",
+  "sourceId": "community.example",
+  "generatedAtUtc": "2026-08-25T12:00:00Z",
+  "keySet": null,
+  "entries": [
+    {
+      "appId": "sample",
+      "version": "1.0.0",
+      "path": "apps/sample/1.0.0/app.json",
+      "sha256": "8d5a2eb6f36e53a28379e332e1ee90a4b75f4d30419d995f423bd2a259c3ab98"
+    }
+  ]
+}

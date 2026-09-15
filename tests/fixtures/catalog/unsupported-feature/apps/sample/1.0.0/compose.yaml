@@ -1,0 +1,10 @@
+services:
+  app:
+    image: example/app:1.0.0
+    container_name: fixed-name
+    build: .
+    environment:
+      HOME_SECRET: ${HOST_SECRET}
+    ports:
+      - "8000-8010:8000"
+    network_mode: container:other

@@ -1,0 +1,14 @@
+﻿{
+  "schema": "app-catalog-index.v1",
+  "sourceId": "community.example",
+  "generatedAtUtc": "2026-08-25T12:00:00Z",
+  "keySet": null,
+  "entries": [
+    {
+      "appId": "sample",
+      "version": "1.0.0",
+      "path": "../valid/apps/home-assistant/2026.8.0/app.json",
+      "sha256": "f5563cdcfd43e957c30036fab6eb8d2e2b2179e7060fbb1db8ffc16c518575b0"
+    }
+  ]
+}

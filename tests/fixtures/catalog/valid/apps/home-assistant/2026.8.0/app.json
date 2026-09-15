@@ -1,0 +1,53 @@
+﻿{
+  "schema": "app-manifest.v1",
+  "appId": "home-assistant",
+  "version": "2026.8.0",
+  "name": {
+    "en": "Home Assistant",
+    "de": "Home Assistant"
+  },
+  "description": {
+    "en": "Home automation",
+    "de": "Hausautomation"
+  },
+  "icon": {
+    "path": "assets/icon.svg",
+    "sha256": "45cdcadad61e86ce81b0f08e658b61d8d44229eb5e2cd0e4e464b8b5ec1a8698"
+  },
+  "architectures": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "categories": [
+    "home-automation"
+  ],
+  "parameters": [
+    {
+      "key": "timezone",
+      "type": "string",
+      "required": true,
+      "default": "UTC"
+    }
+  ],
+  "x-vendor-notes": "Inert metadata: preserved, never executed.",
+  "deliveryOptions": [
+    {
+      "key": "connect",
+      "kind": "connection",
+      "connectionKind": "home-assistant-api",
+      "endpointPolicy": "https-or-private-http"
+    },
+    {
+      "key": "compose",
+      "kind": "docker-compose",
+      "composePath": "compose.yaml",
+      "composeSha256": "5ca0beaac40d52b0a043bbc49ec169823a83d8326734fd3054ee9c82cf571c8a",
+      "ui": {
+        "service": "home-assistant",
+        "port": 8123,
+        "scheme": "http",
+        "path": "/"
+      }
+    }
+  ]
+}

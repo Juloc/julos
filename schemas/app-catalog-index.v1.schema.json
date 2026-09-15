@@ -1,0 +1,46 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/app-catalog-index.v1.schema.json",
+  "title": "JulOS application catalog index, version 1",
+  "description": "The catalog.json at every source root. Entry paths are relative, normalized, cannot escape the source root and must match their digest before the entry is parsed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "sourceId", "generatedAtUtc", "entries"],
+  "properties": {
+    "schema": { "type": "string", "const": "app-catalog-index.v1" },
+    "sourceId": {
+      "description": "Stable source identity. It must match the configured source after the first successful import.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9][a-z0-9-]*)*$",
+      "maxLength": 128
+    },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "keySet": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["appId", "version", "path", "sha256"],
+        "properties": {
+          "appId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+          },
+          "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

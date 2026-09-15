@@ -1,0 +1,52 @@
+# Home Assistant, expressed in the julos-compose-v1 subset.
+name: home-assistant
+
+services:
+  home-assistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.8.0
+    restart: unless-stopped
+    environment:
+      TZ: "{{julos:param:timezone}}"
+      PRICE: "10$$"
+    ports:
+      - "8123:8123/tcp"
+    expose:
+      - "8123"
+    volumes:
+      - config:/config
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    read_only: false
+    security_opt:
+      - no-new-privileges:true
+
+  companion:
+    image: ghcr.io/example/companion:1.2.3
+    depends_on:
+      home-assistant:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: on-failure:5
+
+volumes:
+  config:
+
+networks:
+  internal:
+
+x-julos:
+  ui:
+    service: home-assistant
+    port: 8123
+    scheme: http
+    path: /
+  parameters:
+    - key: timezone
+      type: string
+      required: true

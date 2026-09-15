@@ -1,0 +1,42 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://juloc.de/schemas/app-catalog-keyset.v1.schema.json",
+  "title": "JulOS application catalog publisher key set, version 1",
+  "description": "The optional keys.json at a source root, digest-checked before parsing. Transport trust (HTTPS, Git, OCI) never makes a publisher key trusted: official fingerprints are pinned by the JulOS release and a custom fingerprint is trusted only by explicit administrator action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "publisherId", "keys"],
+  "properties": {
+    "schema": { "type": "string", "const": "app-catalog-keyset.v1" },
+    "publisherId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "keys": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "keyId",
+          "algorithm",
+          "publicKeySpkiBase64",
+          "publicKeyFingerprint",
+          "validFromUtc",
+          "validUntilUtc",
+          "revokedAtUtc"
+        ],
+        "properties": {
+          "keyId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+          "algorithm": { "type": "string", "const": "ecdsa-p256-sha256-p1363" },
+          "publicKeySpkiBase64": { "type": "string", "pattern": "^[A-Za-z0-9+/]+={0,2}$" },
+          "publicKeyFingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "validFromUtc": { "type": "string", "format": "date-time" },
+          "validUntilUtc": { "type": ["string", "null"], "format": "date-time" },
+          "revokedAtUtc": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    }
+  }
+}

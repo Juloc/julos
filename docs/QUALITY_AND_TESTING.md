@@ -188,6 +188,12 @@ A package cannot depend on another package being installed unless it declares a 
 
 ### 3.1 Catalog and managed-application tests
 
+`CAT-001` delivers the schema, bundle and Compose-subset half of this list as the
+`catalog-manifests` stage over the bundles in `tests/fixtures/catalog`: valid,
+all-delivery, critical-rights, malformed, duplicate, traversal, integrity and
+unsupported-feature. The source, trust, key-policy and installation-lifecycle items below
+land with `CAT-002` and the `APP-00x` work items.
+
 - `app-catalog-index.v1` and `app-manifest.v1` fixtures for every delivery kind;
 - official, HTTPS, Git, OCI and local source identity/cache behavior;
 - standalone draft Connection, connection-scoped Secret Binding, validation/readiness and in-use deletion behavior;
@@ -398,6 +404,7 @@ Current stages:
 | `remote-frontend-test` | Remote package frontend logic tests |
 | `markdown-links` | relative Markdown links resolve |
 | `host-connector-contracts` | Host Connector request, result, enrollment and journal fixtures validate against the committed schemas; malformed and unsupported-major fixtures are rejected; no contract introduces a generic command, shell, raw TCP destination or Docker API payload |
+| `catalog-manifests` | application-catalog index, manifest and key-set schemas; bundle path, symlink, size and digest rules; the closed `julos-compose-v1` subset and its critical-rights extraction; and that parse/canonicalize/reparse produces identical definition and plan digests |
 | `package-manifests` | package manifest validation |
 | `container-build` | Compose configuration and container image build |
 
@@ -427,7 +434,6 @@ Only downloaded packages are cached. Build output, `node_modules` and generated 
 
 Still to be added to the validation stages, with the work item that adds them:
 
-- application-catalog index, manifest, key-set and Compose validation: `CAT-001`
 - selected end-to-end tests: no owning work item yet; `DESK-012` closed without delivering them
 - dependency and secret scan: `OPS-005`
 

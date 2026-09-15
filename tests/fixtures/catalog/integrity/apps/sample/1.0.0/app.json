@@ -1,0 +1,24 @@
+﻿{
+  "schema": "app-manifest.v1",
+  "appId": "sample",
+  "version": "1.0.0",
+  "name": {
+    "en": "Sample",
+    "de": "Beispiel"
+  },
+  "description": {
+    "en": "Sample application",
+    "de": "Beispielanwendung"
+  },
+  "architectures": [
+    "linux/amd64"
+  ],
+  "deliveryOptions": [
+    {
+      "key": "connect",
+      "kind": "connection",
+      "connectionKind": "sample-api",
+      "endpointPolicy": "https-only"
+    }
+  ]
+}

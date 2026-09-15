@@ -1,0 +1,15 @@
+﻿{
+  "schema": "app-catalog-keyset.v1",
+  "publisherId": "juloc-official",
+  "keys": [
+    {
+      "keyId": "official-2026-01",
+      "algorithm": "ecdsa-p256-sha256-p1363",
+      "publicKeySpkiBase64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZmFrZS1wdWJsaWMta2V5LWZvci1maXh0dXJlcy1vbmx5LW5vdC1yZWFs",
+      "publicKeyFingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "validFromUtc": "2026-01-01T00:00:00Z",
+      "validUntilUtc": null,
+      "revokedAtUtc": null
+    }
+  ]
+}

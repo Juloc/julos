@@ -3,14 +3,16 @@
 // second hand-written copy of the same rules that could drift from them.
 //
 // Supported: type, const, enum, required, additionalProperties, properties, items,
-// pattern, minLength, maxLength, minimum, maximum, format (uuid, date-time), allOf,
-// if/then. An unsupported keyword is reported rather than ignored, so a schema can never
-// appear to be enforced when it is not.
+// pattern, minLength, maxLength, minItems, maxItems, minimum, maximum,
+// format (uuid, date-time), allOf, if/then and same-document $ref into $defs.
+// An unsupported keyword is reported rather than ignored, so a schema can never appear to
+// be enforced when it is not.
 
 const supportedKeywords = new Set([
-  '$schema', '$id', 'title', 'description',
+  '$schema', '$id', '$ref', '$defs', 'title', 'description',
   'type', 'const', 'enum', 'required', 'additionalProperties', 'properties', 'items',
   'pattern', 'minLength', 'maxLength', 'minimum', 'maximum', 'format',
+  'minItems', 'maxItems',
   'allOf', 'if', 'then',
 ]);
 
@@ -39,6 +41,9 @@ export function findUnsupportedKeywords(schema, path = 'schema') {
   if (schema.if) unsupported.push(...findUnsupportedKeywords(schema.if, `${path}.if`));
   if (schema.then) unsupported.push(...findUnsupportedKeywords(schema.then, `${path}.then`));
   if (schema.items) unsupported.push(...findUnsupportedKeywords(schema.items, `${path}.items`));
+  for (const [key, value] of Object.entries(schema.$defs ?? {})) {
+    unsupported.push(...findUnsupportedKeywords(value, `${path}.$defs.${key}`));
+  }
 
   return unsupported;
 }
@@ -46,19 +51,42 @@ export function findUnsupportedKeywords(schema, path = 'schema') {
 /** Validates `value` against `schema` and returns human-readable errors. */
 export function validate(value, schema, path = '') {
   const errors = [];
-  check(value, schema, path || 'root', errors);
+  check(value, schema, path || 'root', errors, schema);
   return errors;
 }
 
 /** Returns true when `value` satisfies `schema`, used for `if` branches. */
-function matches(value, schema) {
-  return check(value, schema, 'probe', []) === 0;
+function matches(value, schema, root) {
+  return check(value, schema, 'probe', [], root) === 0;
 }
 
-function check(value, schema, path, errors) {
+/**
+ * Resolves a local `#/$defs/name` reference.
+ *
+ * Only same-document references are supported; a remote reference would make validation
+ * depend on the network, which a repository validator must never do.
+ */
+function resolve(schema, root, path, errors) {
+  if (typeof schema?.$ref !== 'string') return schema;
+
+  const match = /^#\/\$defs\/([A-Za-z0-9_-]+)$/.exec(schema.$ref);
+  const target = match === null ? undefined : root?.$defs?.[match[1]];
+  if (target === undefined) {
+    errors.push(`${path}: unsupported schema reference '${schema.$ref}'`);
+    return null;
+  }
+  return target;
+}
+
+function check(value, schema, path, errors, root) {
   const before = errors.length;
 
   if (!isRecord(schema)) return 0;
+
+  if (schema.$ref !== undefined) {
+    const resolved = resolve(schema, root, path, errors);
+    return resolved === null ? errors.length - before : check(value, resolved, path, errors, root);
+  }
 
   if (schema.type !== undefined && !matchesType(value, schema.type)) {
     errors.push(`${path}: expected type ${asList(schema.type)}, got ${describe(value)}`);
@@ -115,27 +143,36 @@ function check(value, schema, path, errors) {
 
     for (const [key, propertySchema] of Object.entries(properties)) {
       if (Object.hasOwn(value, key)) {
-        check(value[key], propertySchema, `${path}.${key}`, errors);
+        check(value[key], propertySchema, `${path}.${key}`, errors, root);
       }
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (schema.minItems !== undefined && value.length < schema.minItems) {
+      errors.push(`${path}: fewer than ${schema.minItems} item(s)`);
+    }
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+      errors.push(`${path}: more than ${schema.maxItems} item(s)`);
     }
   }
 
   if (Array.isArray(value) && schema.items) {
     for (const [index, entry] of value.entries()) {
-      check(entry, schema.items, `${path}[${index}]`, errors);
+      check(entry, schema.items, `${path}[${index}]`, errors, root);
     }
   }
 
   for (const branch of schema.allOf ?? []) {
     if (branch.if && branch.then) {
-      if (matches(value, branch.if)) check(value, branch.then, path, errors);
+      if (matches(value, branch.if, root)) check(value, branch.then, path, errors, root);
       continue;
     }
-    check(value, branch, path, errors);
+    check(value, branch, path, errors, root);
   }
 
-  if (schema.if && schema.then && matches(value, schema.if)) {
-    check(value, schema.then, path, errors);
+  if (schema.if && schema.then && matches(value, schema.if, root)) {
+    check(value, schema.then, path, errors, root);
   }
 
   return errors.length - before;

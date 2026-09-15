@@ -37,6 +37,12 @@ Dockerfile.* text eol=lf
 # repository prose, so the D012 byte-order-mark rule does not apply to them.
 *.sql text eol=lf
 
+# SVG assets are digest-referenced by package manifests and catalog manifests, so their
+# bytes must be identical on every platform. Left at `text=auto` they would be checked
+# out with CRLF on Windows and LF elsewhere, and the recorded digest would match on only
+# one of them.
+*.svg text eol=lf
+
 # SQLite upgrade fixtures are database files, never text.
 *.db binary
 

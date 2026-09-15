@@ -6,8 +6,10 @@ import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { validateCatalogBundle } from './lib/catalog.mjs';
 import { findUnpinnedExtensions, findViolations } from './lib/encoding-policy.mjs';
 import { validateHostConnectorContracts } from './lib/host-connector-contracts.mjs';
+import { canonicalJson, planDigest, validateJulosCompose } from './lib/julos-compose.mjs';
 import { findBrokenLinks } from './lib/markdown-links.mjs';
 import { readAndValidatePackageManifest } from './lib/package-manifest.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
@@ -232,6 +234,90 @@ const stages = [
       return errors.length === 0
         ? passed('Host Connector request, result, enrollment and journal fixtures match the committed schemas')
         : failed(`${errors.length} Host Connector contract error(s):\n  ${errors.join('\n  ')}`);
+    },
+  },
+  {
+    name: 'catalog-manifests',
+    title: 'Validate the application-catalog schemas, bundles and Compose subset',
+    async run() {
+      const fixtureRoot = join(repositoryRoot, 'tests', 'fixtures', 'catalog');
+
+      // Each bundle states how many errors it must produce. A bundle that is supposed to
+      // fail but validates, or that fails for no reason at all, is itself a failure.
+      const bundles = [
+        { name: 'valid', accept: true },
+        { name: 'all-delivery', accept: true },
+        { name: 'critical-rights', accept: true, expectRights: 6 },
+        { name: 'malformed', accept: false, mentions: 'unknown field' },
+        { name: 'duplicate', accept: false, mentions: 'duplicate catalog entry' },
+        { name: 'traversal', accept: false, mentions: 'escapes the source root' },
+        { name: 'integrity', accept: false, mentions: 'catalog.integrity_mismatch' },
+        { name: 'unsupported-feature', accept: false, mentions: 'catalog.compose_feature_unsupported' },
+      ];
+
+      const failures = [];
+
+      for (const bundle of bundles) {
+        const result = await validateCatalogBundle(join(fixtureRoot, bundle.name));
+
+        if (bundle.accept && result.errors.length > 0) {
+          failures.push(`${bundle.name}: expected to validate but failed:\n    ${result.errors.join('\n    ')}`);
+          continue;
+        }
+
+        if (!bundle.accept) {
+          if (result.errors.length === 0) {
+            failures.push(`${bundle.name}: expected rejection but the bundle validated`);
+            continue;
+          }
+          if (!result.errors.some((error) => error.includes(bundle.mentions))) {
+            failures.push(
+              `${bundle.name}: rejected, but no error mentioned '${bundle.mentions}':\n    ${result.errors.join('\n    ')}`,
+            );
+          }
+          continue;
+        }
+
+        if (bundle.expectRights !== undefined) {
+          const rights = result.entries.reduce((total, entry) => total + entry.criticalRights.length, 0);
+          if (rights !== bundle.expectRights) {
+            failures.push(`${bundle.name}: expected ${bundle.expectRights} critical right(s), found ${rights}`);
+          }
+        }
+
+        // Parse, canonicalize and reparse must produce the same definition and plan
+        // digests, otherwise normalization is not deterministic and a preview could not
+        // be compared against an apply.
+        for (const entry of result.entries) {
+          const reparsedDefinition = JSON.parse(canonicalJson(entry.manifest));
+          if (canonicalJson(reparsedDefinition) !== canonicalJson(entry.manifest)) {
+            failures.push(`${bundle.name}: ${entry.identity} definition canonicalization is not stable`);
+          }
+
+          if (entry.plan !== null) {
+            const reparsedPlan = JSON.parse(canonicalJson(entry.plan));
+            if (planDigest(reparsedPlan) !== entry.planDigest) {
+              failures.push(`${bundle.name}: ${entry.identity} plan digest is not stable across reparse`);
+            }
+          }
+        }
+      }
+
+      // The same document must normalize identically however its equivalent short and
+      // long forms are written.
+      const shortForm = 'services:\n  app:\n    image: example/app:1\n    ports:\n      - "8080:80/tcp"\n';
+      const longForm = 'services:\n  app:\n    image: example/app:1\n    ports:\n      - target: 80\n        published: 8080\n        protocol: tcp\n        mode: host\n';
+      const first = validateJulosCompose(shortForm);
+      const second = validateJulosCompose(longForm);
+      if (first.plan === null || second.plan === null) {
+        failures.push(`equivalent short and long port forms must both validate:\n    ${[...first.errors, ...second.errors].join('\n    ')}`);
+      } else if (planDigest(first.plan) !== planDigest(second.plan)) {
+        failures.push('equivalent short and long port forms must normalize to the same plan');
+      }
+
+      return failures.length === 0
+        ? passed(`${bundles.length} catalog bundle(s), the julos-compose-v1 subset and digest stability validate`)
+        : failed(`${failures.length} catalog error(s):\n  ${failures.join('\n  ')}`);
     },
   },
   {
