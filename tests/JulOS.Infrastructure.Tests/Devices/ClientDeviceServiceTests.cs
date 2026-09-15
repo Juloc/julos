@@ -118,7 +118,7 @@ public sealed class ClientDeviceServiceTests
         Assert.AreEqual(0, (await fixture.Service.ListAsync(Bob, null)).Count);
 
         var update = await Assert.ThrowsExactlyAsync<ClientDeviceException>(
-            () => fixture.Service.UpdateAsync(Bob, id, new UpdateClientDeviceRequest("Taken", null, 1)));
+            () => fixture.Service.UpdateAsync(Bob, id, new UpdateClientDeviceRequest("Taken", null, 1), null));
         Assert.AreEqual(ClientDeviceErrorCodes.NotFound, update.Code);
 
         var remove = await Assert.ThrowsExactlyAsync<ClientDeviceException>(
@@ -138,12 +138,12 @@ public sealed class ClientDeviceServiceTests
         var id = registered.Device.ClientDeviceId;
 
         var updated = await fixture.Service.SetPreferenceAsync(
-            Alice, id, "phone", new UpdateDeviceWorkspacePreferenceRequest("device", "fresh", 1));
+            Alice, id, "phone", new UpdateDeviceWorkspacePreferenceRequest("device", "fresh", 1), null);
         Assert.AreEqual(2, updated.Revision);
 
         var conflict = await Assert.ThrowsExactlyAsync<ConcurrencyConflictException>(
             () => fixture.Service.SetPreferenceAsync(
-                Alice, id, "phone", new UpdateDeviceWorkspacePreferenceRequest("shared", "resume", 1)));
+                Alice, id, "phone", new UpdateDeviceWorkspacePreferenceRequest("shared", "resume", 1), null));
 
         Assert.AreEqual(2, conflict.CurrentRevision);
 
@@ -164,7 +164,8 @@ public sealed class ClientDeviceServiceTests
             () => fixture.Service.UpdateAsync(
                 Alice,
                 registered.Device.ClientDeviceId,
-                new UpdateClientDeviceRequest("Laptop", "desktop-multi", 1)));
+                new UpdateClientDeviceRequest("Laptop", "desktop-multi", 1),
+                null));
 
         Assert.AreEqual(ClientDeviceErrorCodes.WorkspacePreferenceInvalid, failure.Code);
     }
@@ -181,10 +182,10 @@ public sealed class ClientDeviceServiceTests
 
         _ = await fixture.Service.SetPreferenceAsync(
             Alice, kept.Device.ClientDeviceId, "phone",
-            new UpdateDeviceWorkspacePreferenceRequest("device", "fresh", 1));
+            new UpdateDeviceWorkspacePreferenceRequest("device", "fresh", 1), null);
         var removedWithPreference = await fixture.Service.SetPreferenceAsync(
             Alice, removed.Device.ClientDeviceId, "phone",
-            new UpdateDeviceWorkspacePreferenceRequest("device", "resume", 1));
+            new UpdateDeviceWorkspacePreferenceRequest("device", "resume", 1), null);
 
         await fixture.Service.RemoveAsync(
             Alice, removed.Device.ClientDeviceId, removedWithPreference.Revision);

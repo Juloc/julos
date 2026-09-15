@@ -158,6 +158,7 @@ internal sealed class EfClientDeviceService : IClientDeviceService
         Guid userId,
         Guid clientDeviceId,
         UpdateClientDeviceRequest request,
+        string? presentedKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -177,7 +178,7 @@ internal sealed class EfClientDeviceService : IClientDeviceService
 
         _ = await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await this.PublishChangedAsync(row.Id, row.Revision, cancellationToken).ConfigureAwait(false);
-        return ToResponse(row, isCurrent: false);
+        return ToResponse(row, IsCurrent(row, presentedKey));
     }
 
     public async Task<ClientDeviceResponse> SetPreferenceAsync(
@@ -185,6 +186,7 @@ internal sealed class EfClientDeviceService : IClientDeviceService
         Guid clientDeviceId,
         string workspaceClass,
         UpdateDeviceWorkspacePreferenceRequest request,
+        string? presentedKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -213,7 +215,7 @@ internal sealed class EfClientDeviceService : IClientDeviceService
         row.Revision = device.Revision.Value;
         _ = await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await this.PublishChangedAsync(row.Id, row.Revision, cancellationToken).ConfigureAwait(false);
-        return ToResponse(row, isCurrent: false);
+        return ToResponse(row, IsCurrent(row, presentedKey));
     }
 
     public async Task RemoveAsync(
@@ -300,6 +302,11 @@ internal sealed class EfClientDeviceService : IClientDeviceService
             .Replace('+', '-')
             .Replace('/', '_')
             .TrimEnd('=');
+
+    /// <summary>Whether a presented cookie key identifies this stored device.</summary>
+    private static bool IsCurrent(ClientDeviceRow row, string? presentedKey) =>
+        presentedKey is not null
+        && string.Equals(row.ClientInstanceKeyHash, HashKey(presentedKey), StringComparison.Ordinal);
 
     private static string HashKey(string key) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));

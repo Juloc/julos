@@ -89,7 +89,7 @@ internal static class ClientDeviceEndpoints
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
 
         var device = await devices
-            .UpdateAsync(CurrentUserId(context.User), clientDeviceId, request, cancellationToken)
+            .UpdateAsync(CurrentUserId(context.User), clientDeviceId, request, ReadKey(context), cancellationToken)
             .ConfigureAwait(false);
         return TypedResults.Ok(device);
     }
@@ -112,6 +112,7 @@ internal static class ClientDeviceEndpoints
                 clientDeviceId,
                 workspaceClass,
                 request,
+                ReadKey(context),
                 cancellationToken)
             .ConfigureAwait(false);
         return TypedResults.Ok(device);

@@ -44,11 +44,13 @@ public interface IClientDeviceService
     /// <param name="userId">Authenticated user.</param>
     /// <param name="clientDeviceId">Device to change.</param>
     /// <param name="request">New name, pin and expected revision.</param>
+    /// <param name="presentedKey">Key of the calling device, used only to report whether the result is current.</param>
     /// <param name="cancellationToken">Operation cancellation.</param>
     Task<ClientDeviceResponse> UpdateAsync(
         Guid userId,
         Guid clientDeviceId,
         UpdateClientDeviceRequest request,
+        string? presentedKey,
         CancellationToken cancellationToken = default);
 
     /// <summary>Sets one device's preference for a single workspace class.</summary>
@@ -56,12 +58,14 @@ public interface IClientDeviceService
     /// <param name="clientDeviceId">Device to change.</param>
     /// <param name="workspaceClass">Workspace class the preference applies to.</param>
     /// <param name="request">Scope, restore mode and expected revision.</param>
+    /// <param name="presentedKey">Key of the calling device, used only to report whether the result is current.</param>
     /// <param name="cancellationToken">Operation cancellation.</param>
     Task<ClientDeviceResponse> SetPreferenceAsync(
         Guid userId,
         Guid clientDeviceId,
         string workspaceClass,
         UpdateDeviceWorkspacePreferenceRequest request,
+        string? presentedKey,
         CancellationToken cancellationToken = default);
 
     /// <summary>

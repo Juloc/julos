@@ -95,6 +95,9 @@ public sealed class ClientDeviceEndpointTests
         var updated = await ReadDeviceAsync(renamed).ConfigureAwait(false);
         Assert.AreEqual("Kitchen tablet", updated.DisplayName);
         Assert.AreEqual(WorkspaceClassNames.Tablet, updated.WorkspaceClassOverride);
+        Assert.IsTrue(
+            updated.IsCurrentDevice,
+            "A mutation response must report the calling device as current, as the list does.");
 
         using var preferred = await SendAsync(
             client,
@@ -108,6 +111,7 @@ public sealed class ClientDeviceEndpointTests
         Assert.AreEqual(WorkspaceClassNames.Tablet, preference.WorkspaceClass);
         Assert.AreEqual("device", preference.LayoutScope);
         Assert.AreEqual("fresh", preference.RestoreMode);
+        Assert.IsTrue(withPreference.IsCurrentDevice);
 
         // A write based on the revision the caller already spent must lose.
         using var stale = await SendAsync(
