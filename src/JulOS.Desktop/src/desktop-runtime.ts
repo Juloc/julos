@@ -236,9 +236,12 @@ export class DesktopRuntime {
    * preferences — so a failure here is reported and does not stop the runtime.
    */
   async #registerClientDevice(): Promise<void> {
-    const detected = detectWorkspaceClass(windowCapabilitySource(globalThis.window));
-    this.#workspaceClass = detected;
+    // Nothing in here may prevent the desktop from starting. Classification reads browser
+    // capabilities, which not every browser reports, and a device record only carries
+    // layout preferences: without one the desktop still works, on the default class.
     try {
+      const detected = detectWorkspaceClass(windowCapabilitySource(globalThis.window));
+      this.#workspaceClass = detected;
       await this.#clientDevices.register(defaultDeviceName(detected, this.#language()), detected);
       const current = this.#clientDevices.currentDevice();
       if (current !== null) {
@@ -246,7 +249,6 @@ export class DesktopRuntime {
         this.#workspaceClass = effectiveWorkspaceClass(current);
       }
     } catch (error) {
-      // The desktop is usable without a device record; the detected class still applies.
       this.#onFailure(error);
     }
   }

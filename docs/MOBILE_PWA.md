@@ -37,6 +37,8 @@ Automatic workspace classification is deterministic and uses only current presen
 
 `desktop-multi` is entered only through the explicit Multi-Display controller when at least two display participants are active. Layout viewport means `document.documentElement.clientWidth`, not `VisualViewport`; a software keyboard therefore cannot change workspace identity. The coarse-device minimum screen dimension remains stable across orientation, so a Phone does not become a Tablet in landscape. A stored device override is authoritative. User-agent or hardware fingerprinting is forbidden.
 
+Not every browser reports a usable `screen`: embedded, headless and emulated contexts, and some privacy configurations, report zero. Where the coarse-device minimum dimension is unavailable, the layout viewport width stands in for it. That is a weaker signal — a narrow window on a large display then classifies by its width — but classification must always produce an answer, because a Shell that cannot decide what it is cannot start.
+
 ## 3. Client device registration
 
 On first authenticated use, Server creates a cryptographically random 256-bit client instance key, stores only its hash, sets the value in a Secure, HTTP-only, SameSite-Strict cookie and returns an opaque `ClientDeviceId`. Desktop JavaScript never receives the raw key. The key identifies layout preferences only and is not an authentication credential.

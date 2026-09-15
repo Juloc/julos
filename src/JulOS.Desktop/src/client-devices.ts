@@ -66,12 +66,23 @@ export interface CapabilitySource {
   readonly layoutViewportWidthCssPx: number;
 }
 
-/** Reads the four permitted capability inputs. No user-agent or hardware value is read. */
+/**
+ * Reads the four permitted capability inputs. No user-agent or hardware value is read.
+ *
+ * Not every browser reports a usable `screen`: embedded, headless and emulated contexts,
+ * and some privacy configurations, report zero. The layout viewport is always available,
+ * so it stands in for the screen minimum there. That is a weaker signal — a narrow window
+ * on a large display classifies by its width — but it is a classification, and the
+ * alternative is a Shell that cannot decide what it is at all.
+ */
 export function readPresentationCapabilities(source: CapabilitySource): PresentationCapabilities {
+  const reportedMinimum = Math.min(source.screenWidthCssPx, source.screenHeightCssPx);
   return {
     primaryPointerCoarse: source.matchMedia('(pointer: coarse)').matches,
     anyPointerFine: source.matchMedia('(any-pointer: fine)').matches,
-    screenMinimumDimensionCssPx: Math.min(source.screenWidthCssPx, source.screenHeightCssPx),
+    screenMinimumDimensionCssPx: reportedMinimum > 0
+      ? reportedMinimum
+      : source.layoutViewportWidthCssPx,
     layoutViewportWidthCssPx: source.layoutViewportWidthCssPx,
   };
 }

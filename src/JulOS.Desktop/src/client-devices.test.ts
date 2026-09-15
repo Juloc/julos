@@ -45,6 +45,28 @@ test('a touch phone a tablet and a mouse desktop classify differently', () => {
   );
 });
 
+test('a browser that reports no screen still classifies', () => {
+  // Embedded, headless and emulated contexts report screen 0x0, and some privacy
+  // configurations clamp it. Classification has to survive that: the Shell cannot start
+  // without deciding what it is, and this used to abort the whole desktop runtime.
+  const capabilities = readPresentationCapabilities(capabilitySource({
+    coarse: false,
+    fine: true,
+    screen: [0, 0],
+    layoutWidth: 768,
+  }));
+
+  assert.equal(capabilities.screenMinimumDimensionCssPx, 768);
+  assert.equal(
+    detectWorkspaceClass(capabilitySource({ coarse: false, fine: true, screen: [0, 0], layoutWidth: 768 })),
+    'tablet',
+  );
+  assert.equal(
+    detectWorkspaceClass(capabilitySource({ coarse: false, fine: true, screen: [0, 0], layoutWidth: 1600 })),
+    'desktop-single',
+  );
+});
+
 test('an unset preference resolves to the documented shared and resume default', () => {
   const device = clientDevice({ preferences: [] });
 
