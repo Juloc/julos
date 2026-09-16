@@ -1,5 +1,6 @@
 ﻿using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
+using JulOS.Application.Catalog;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Devices;
 using JulOS.Application.Layouts;
@@ -79,6 +80,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = secretFailure.Message;
         }
+        else if (exception is CatalogFailureException catalogDetail)
+        {
+            context.ProblemDetails.Detail = catalogDetail.Message;
+        }
         else if (exception is not null)
         {
             context.ProblemDetails.Detail = null;
@@ -130,6 +135,11 @@ internal static class ProblemDetailsCustomizer
         if (exception is ClientDeviceException clientDeviceFailure)
         {
             return (clientDeviceFailure.Code, false);
+        }
+
+        if (exception is CatalogFailureException catalogFailure)
+        {
+            return (catalogFailure.Code, false);
         }
 
         if (exception is WorkspaceLayoutFailureException layoutFailure)

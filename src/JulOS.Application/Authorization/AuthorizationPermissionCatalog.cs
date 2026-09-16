@@ -20,6 +20,8 @@ public static class AuthorizationPermissionCatalog
         PermissionName.Parse(AuthorizationPermissionNames.PackageRead),
         PermissionName.Parse(AuthorizationPermissionNames.PackageManage),
         PermissionName.Parse(AuthorizationPermissionNames.WebAppUse),
+        PermissionName.Parse(AuthorizationPermissionNames.CatalogRead),
         PermissionName.Parse(AuthorizationPermissionNames.CatalogTrustManage),
+        PermissionName.Parse(AuthorizationPermissionNames.CatalogSourcesManage),
     ];
 }

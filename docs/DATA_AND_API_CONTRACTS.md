@@ -482,6 +482,8 @@ Revision
 
 The official fingerprint set is release configuration. Administrator trust is bound to source, publisher, key ID and fingerprint. A key ID observed with different bytes fails refresh rather than replacing the record. A check constraint requires both administrator-decision fields to be null for `unknown` and non-null for `trusted`/`distrusted`; API clear/trust/distrust behavior is revisioned exactly as defined in `APPLICATION_CATALOG.md`.
 
+The first two records are the `core.catalog_sources` and `core.catalog_publisher_keys` tables since `CAT-002`; the catalog entry cache and the app installation are still open. `Location` is bounded to 512 characters and carries a unique index filtered to `DeletedAtUtc IS NULL`, so at most one live source reads from a location while a tombstone keeps the same location re-addable — installed applications resolve through the tombstone, which is why removal is never a delete. `(CatalogSourceId, PublisherId, KeyId)` is unique, and a key row cascades from its source. Check constraints also pin both enum value sets, restrict `official` to the built-in source in kind and trust level together, and require a source that reports `fresh` or `stale` to carry the successful revision and digest it is reporting about — a stale marker means a previous catalog is still being served, so there has to be one.
+
 ```text
 AppInstallationId
 CatalogSourceId
@@ -919,6 +921,8 @@ DELETE /api/v1/app-installations/{installationId}
 ```
 
 Every apply references an unexpired preview digest and returns a durable Operation. Publisher-key trust mutations use the exact revisioned DTO, `catalog.trust.manage` permission and status behavior in `APPLICATION_CATALOG.md`; source mutation and publisher-key trust are never conflated. The full request, ownership and error contract is `APPLICATION_CATALOG.md`.
+
+The five source routes and the three publisher-key routes are implemented since `CAT-002`. The source routes require `catalog.sources.manage`, the publisher-key GETs require `catalog.read`, and the trust `PUT` requires `catalog.trust.manage`; the mutations additionally require antiforgery. `DELETE` and `PUT` carry `expectedRevision` and return `409 request.concurrency_conflict` on a stale one. `POST /api/v1/catalog/sources/{sourceId}/refresh` and the two `catalog/apps` routes are still open, because they need the refresh adapters and the entry cache.
 
 ### 5.7 Problems and notifications
 

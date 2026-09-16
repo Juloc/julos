@@ -1480,6 +1480,8 @@ Deliver:
 - separate `catalog.trust.manage` permission with Administrator backfill and exact publisher-key list/read/trust API
 - source permissions, Secret References, refresh Operation and Problems
 
+Landed so far: the trust evaluator and publisher-key record; then source persistence with its two tables, the source administration API, the publisher-key trust API and the `catalog.read`/`catalog.sources.manage` permissions. Still open: the five refresh adapters, commit and digest locking, the atomic last-valid cache and the refresh Operation.
+
 Acceptance:
 
 - failed/partial refresh never replaces the last valid cache

@@ -298,12 +298,16 @@ Revision
 
 Rules:
 
-- private credentials use Secret References;
+- private credentials use Secret References, and a location carrying a password is refused rather than stored: the location is returned to administrators and written to the audit trail, so a password in it would be a secret in a URL and in a log. A userinfo without a password is left alone, because `git@host:path` names a user rather than a credential;
 - Git sources resolve a branch/tag to a commit and cache the commit, never only the moving name;
 - HTTPS and OCI sources cache the immutable response/artifact digest;
 - a failed refresh keeps the last valid catalog with an explicit stale marker;
 - a refresh never replaces a valid cache with a partially parsed source;
 - removing a source does not remove installed applications.
+
+Source persistence, the source administration API and the publisher-key trust API landed in `CAT-002`. The record above is the `core.catalog_sources` table; the observed keys are `core.catalog_publisher_keys`. Two rules are enforced by the database as well as by the domain: at most one live source per `Location` — a partial unique index, so a tombstone does not block re-adding the same location — and at most one key per `(CatalogSourceId, PublisherId, KeyId)`. `Location` is bounded to 512 characters so that the uniqueness index stays within the index row limit. `SourceKind` is fixed at creation: changing it would keep the identity installed applications point at while changing what that identity means. Only the built-in source may carry `official` as either kind or trust level, so an administrator cannot mint a second official source and inherit the pinned key set that belongs to the real one. Every add, change, removal and trust decision is written to the audit trail with the acting administrator; a trust decision additionally records the fingerprint that was compared.
+
+The refresh adapters for the five source kinds, commit and digest locking, the atomic last-valid cache with its stale marker, and the refresh Operation are still open. `LastRefreshState`, `LastSuccessfulRevision`, `LastSuccessfulDigest` and `LastFailureCode` are persisted and returned already, and a source that has never refreshed reports `never` rather than a guessed state.
 
 ## 6. Trust and integrity
 
@@ -619,7 +623,9 @@ POST /api/v1/catalog/builder/validations
 POST /api/v1/catalog/builder/exports
 ```
 
-`PUT administrator-trust` accepts `{ administratorTrustState: "unknown" | "trusted" | "distrusted", expectedRevision }`. It requires `catalog.trust.manage`, antiforgery and exact optimistic concurrency. Success returns the sanitized publisher-key metadata with `200`; a stale revision returns the common `409 request.concurrency_conflict`, and an inaccessible key returns `404 catalog.publisher_key_not_found`. `unknown` clears the stored administrator decision. `trusted` never overrides integrity, validity or revocation policy. Publisher-key GETs require `catalog.read` and return fingerprint, algorithm, validity/revocation, observation revisions and administrator-decision metadata; they need not return the full SPKI bytes.
+`POST /api/v1/catalog/sources` accepts `{ kind, displayName, location, authenticationSecretReferenceId, trustLevel }` and returns `201` with the stored source. `PUT` accepts the same fields without `kind`, plus `enabled` and `expectedRevision`. `DELETE` takes `?expectedRevision=` and returns `200` with the tombstone rather than `204`, because removing a source changes what the caller is looking at instead of making it disappear. `GET /api/v1/catalog/sources` returns the live sources; `?includeRemoved=true` adds the tombstones installed applications still resolve through. Source reads and mutations require `catalog.sources.manage`, because a source location and its credential reference are installation configuration rather than catalog content. A location another live source already reads from returns `409 catalog.source_duplicate`; a change to a removed source returns `409 catalog.source_removed`; an unknown source returns `404 catalog.source_not_found`. No response ever contains a credential: only the identifier of the secret reference holding it.
+
+`PUT administrator-trust` accepts `{ administratorTrustState: "unknown" | "trusted" | "distrusted", expectedRevision }`. It requires `catalog.trust.manage`, antiforgery and exact optimistic concurrency. Success returns the sanitized publisher-key metadata with `200`; a stale revision returns the common `409 request.concurrency_conflict`, and an inaccessible key returns `404 catalog.publisher_key_not_found`. `unknown` clears the stored administrator decision, including who made it, so an undecided key never keeps pointing at an administrator who no longer stands behind it. `trusted` never overrides integrity, validity or revocation policy. Publisher-key GETs require `catalog.read` and return fingerprint, algorithm, validity/revocation, observation revisions and administrator-decision metadata. They deliberately do not return the SPKI bytes: the fingerprint is what an administrator compares against the value the publisher states, and it is what the decision is about.
 
 All mutations require antiforgery protection. Long-running mutations return a durable Operation. Preview results contain a digest and expiry; apply must reference the exact preview digest so changed input cannot bypass confirmation.
 
@@ -647,7 +653,7 @@ docker.container.terminal
 
 Read, deployment, data deletion and terminal access remain separate. A catalog entry cannot grant permissions to itself.
 
-`catalog.trust.manage` exists as a permission of its own since `CAT-002` and is granted to the initial administrator role. Adding a source says where to look; trusting a key says whose signature is enough to install from. The second is the larger decision and is held separately.
+`catalog.read`, `catalog.sources.manage` and `catalog.trust.manage` exist since `CAT-002` and are granted to the initial administrator role. Adding a source says where to look; trusting a key says whose signature is enough to install from. The second is the larger decision and is held separately.
 
 ## 12. Preview and apply
 
@@ -829,6 +835,12 @@ catalog.integrity_mismatch
 catalog.signature_invalid
 catalog.signature_key_unavailable
 catalog.publisher_key_not_found
+catalog.publisher_key_invalid
+catalog.publisher_key_conflict
+catalog.source_not_found
+catalog.source_invalid
+catalog.source_removed
+catalog.source_duplicate
 catalog.compose_feature_unsupported
 catalog.preview_expired
 catalog.preview_changed

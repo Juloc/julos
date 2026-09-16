@@ -1,5 +1,6 @@
 ﻿using JulOS.Application.Authentication;
 using JulOS.Application.Authorization;
+using JulOS.Application.Catalog;
 using JulOS.Application.Concurrency;
 using JulOS.Application.Devices;
 using JulOS.Application.Layouts;
@@ -123,6 +124,15 @@ internal static class ErrorHandling
                 ClientDeviceErrorCodes.NotFound => StatusCodes.Status404NotFound,
                 ClientDeviceErrorCodes.NotRegistered => StatusCodes.Status404NotFound,
                 ClientDeviceErrorCodes.NotOwned => StatusCodes.Status403Forbidden,
+                _ => StatusCodes.Status400BadRequest,
+            },
+            CatalogFailureException catalogFailure => catalogFailure.Reason switch
+            {
+                CatalogFailureReason.NotFound => StatusCodes.Status404NotFound,
+                // Both are state conflicts: the same document would be accepted against a
+                // live source, or against a location no other source is reading from.
+                CatalogFailureReason.Removed => StatusCodes.Status409Conflict,
+                CatalogFailureReason.Duplicate => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status400BadRequest,
             },
             ConcurrencyConflictException => StatusCodes.Status409Conflict,

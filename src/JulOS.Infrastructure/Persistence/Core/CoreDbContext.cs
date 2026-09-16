@@ -54,6 +54,8 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<SecretReferenceRow> SecretReferences => this.Set<SecretReferenceRow>();
     internal DbSet<ClientDeviceRow> ClientDevices => this.Set<ClientDeviceRow>();
     internal DbSet<ApplicationExecutionPreferenceRow> ApplicationExecutionPreferences => this.Set<ApplicationExecutionPreferenceRow>();
+    internal DbSet<CatalogSourceRow> CatalogSources => this.Set<CatalogSourceRow>();
+    internal DbSet<CatalogPublisherKeyRow> CatalogPublisherKeys => this.Set<CatalogPublisherKeyRow>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -96,6 +98,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
         AgentPersistenceModelConfiguration.Configure(builder);
         RemoteSessionModelConfiguration.Configure(builder);
         ClientDeviceModelConfiguration.Configure(builder);
+        CatalogModelConfiguration.Configure(builder);
 
         if (this.Database.IsSqlite())
         {

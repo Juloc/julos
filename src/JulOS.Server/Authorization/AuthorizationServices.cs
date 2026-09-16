@@ -65,8 +65,16 @@ internal static class AuthorizationServices
                 AuthorizationPermissionNames.WebAppUse);
             AddPermissionPolicy(
                 options,
+                JulOsAuthorizationPolicies.CatalogRead,
+                AuthorizationPermissionNames.CatalogRead);
+            AddPermissionPolicy(
+                options,
                 JulOsAuthorizationPolicies.CatalogTrustManage,
                 AuthorizationPermissionNames.CatalogTrustManage);
+            AddPermissionPolicy(
+                options,
+                JulOsAuthorizationPolicies.CatalogSourcesManage,
+                AuthorizationPermissionNames.CatalogSourcesManage);
         });
 
         return services;

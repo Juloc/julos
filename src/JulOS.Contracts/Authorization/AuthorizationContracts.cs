@@ -36,6 +36,9 @@ public static class AuthorizationPermissionNames
     /// <summary>Open local web-application targets through the transparent reverse proxy.</summary>
     public const string WebAppUse = "core.webapp.use";
 
+    /// <summary>Read catalog metadata, including the publisher keys a source published.</summary>
+    public const string CatalogRead = "catalog.read";
+
     /// <summary>Decide whether a catalog publisher key is trusted.</summary>
     /// <remarks>
     /// Deliberately separate from managing catalog sources. Adding a source says where to
@@ -43,6 +46,9 @@ public static class AuthorizationPermissionNames
     /// larger decision and is held separately.
     /// </remarks>
     public const string CatalogTrustManage = "catalog.trust.manage";
+
+    /// <summary>Add, change and remove the catalog sources this installation reads from.</summary>
+    public const string CatalogSourcesManage = "catalog.sources.manage";
 }
 
 /// <summary>Stable authorization assignment subject types.</summary>

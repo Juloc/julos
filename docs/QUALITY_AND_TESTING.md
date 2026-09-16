@@ -309,6 +309,7 @@ Runtime Manager is security-critical. Tests verify:
 - Host Connector revocation
 - client-device cross-user isolation and non-authentication behavior
 - publisher-key trust mutation requires `catalog.trust.manage` and cannot override integrity/validity/revocation failure
+- catalog source administration requires `catalog.sources.manage`, never returns a source credential, and refuses a second live source for a location
 - service-worker forbidden-cache coverage
 - service-worker activation never forces reload before per-page flush or explicit local discard
 - Docker installation ownership and terminal permission/scope/audit coverage
