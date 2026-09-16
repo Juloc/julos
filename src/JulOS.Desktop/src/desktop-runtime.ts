@@ -29,6 +29,7 @@ import {
   readIsolatedRequest,
   type IsolatedGrants,
 } from './isolated-frontend.js';
+import { OperationCenterStore } from './operation-center.js';
 import { PhoneForegroundController } from './phone-foreground.js';
 import { SurfaceActivityMonitor } from './surface-activity.js';
 import { readSurfaceHost, SurfaceScheduler } from './surface-scheduler.js';
@@ -100,6 +101,7 @@ export class DesktopRuntime {
   readonly #clientDevices = new ClientDeviceStore();
   readonly #phoneForeground = new PhoneForegroundController();
   readonly #preferences = new ExecutionPreferenceClient();
+  readonly #operations = new OperationCenterStore();
   readonly #packageElements = new Map<string, HTMLElement>();
   readonly #isolatedListeners = new Map<string, () => void>();
   readonly #layoutPersistence: DesktopLayoutPersistence;
@@ -163,6 +165,7 @@ export class DesktopRuntime {
     this.#coreApplications = new CoreApplicationCatalog({
       api: options.api,
       clientDevices: this.#clientDevices,
+      operations: this.#operations,
       notifications: this.#notifications,
       language: options.language,
       onFailure: options.onFailure,
@@ -327,6 +330,24 @@ export class DesktopRuntime {
   public search(query: string): void {
     this.#launcherQuery = query;
     this.#renderLauncher(query);
+  }
+
+  /**
+   * Routes one realtime event to the state it belongs to.
+   *
+   * The event carries identity and revision only; whatever consumes it refetches the
+   * authoritative record rather than trusting the notification.
+   */
+  public async applyRealtimeEvent(eventType: string, resourceId: string, revision: number | null): Promise<void> {
+    if (eventType !== 'operation.changed') {
+      return;
+    }
+
+    try {
+      await this.#operations.applyChange(resourceId, revision);
+    } catch (error) {
+      this.#onFailure(error);
+    }
   }
 
   public openApplication(applicationId: string, targetId?: string): void {

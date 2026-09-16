@@ -335,6 +335,8 @@ Desktop exposes queued and running Operations independently from their originati
 
 Closing, suspending or reloading a surface does not cancel an Operation. Cancellation is a separate permission-checked action through the existing Operation API.
 
+`MOB-008` implements this as a Core application. It leads with work that is still running, can be narrowed to failures, and pages through older work with the cursor above. A failure shows only its stable code and sanitized detail, never an exception or a credential. Cancellation appears as an action only while it is still meaningful; once requested, the Center says so rather than offering the same action again, because the request is already stored and the executor acknowledges it when it can.
+
 ## 13. Shell-owned back navigation
 
 All supported back input enters one `ShellNavigationController`:

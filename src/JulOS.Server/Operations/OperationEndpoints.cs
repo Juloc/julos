@@ -22,6 +22,8 @@ internal static class OperationEndpoints
         group.MapPost(string.Empty, CreateAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.OperationCreate)
             .RequireJulOsAntiforgery();
+        group.MapGet(string.Empty, ListAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.OperationRead);
         group.MapGet("/{operationId:guid}", ReadAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.OperationRead);
         group.MapGet("/{operationId:guid}/events", ReadProgressAsync)
@@ -56,6 +58,58 @@ internal static class OperationEndpoints
         return TypedResults.Accepted(
             $"/api/v1/operations/{operation.OperationId:D}",
             ToResponse(operation));
+    }
+
+    private static async Task<IResult> ListAsync(
+        HttpContext context,
+        string? states,
+        string? sourcePackageId,
+        DateTimeOffset? createdAfterUtc,
+        string? cursor,
+        int? limit,
+        IOperationService operations,
+        CancellationToken cancellationToken)
+    {
+        var page = await operations.ListAsync(
+            new OperationQuery(
+                // Always the authenticated user. A global read permission does not turn
+                // this into a cross-user administrative API.
+                CurrentUserId(context.User),
+                ParseStates(states),
+                string.IsNullOrWhiteSpace(sourcePackageId) ? null : sourcePackageId,
+                createdAfterUtc,
+                cursor,
+                limit),
+            cancellationToken).ConfigureAwait(false);
+
+        return TypedResults.Ok(new OperationPageResponse(
+            page.Items.Select(ToResponse).ToArray(),
+            page.NextCursor));
+    }
+
+    /// <summary>Reads the optional state filter, refusing a state that does not exist.</summary>
+    private static List<OperationState>? ParseStates(string? states)
+    {
+        if (string.IsNullOrWhiteSpace(states))
+        {
+            return null;
+        }
+
+        var parsed = new List<OperationState>();
+        foreach (var name in states.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            parsed.Add(name switch
+            {
+                "queued" => OperationState.Queued,
+                "running" => OperationState.Running,
+                "succeeded" => OperationState.Succeeded,
+                "failed" => OperationState.Failed,
+                "cancelled" => OperationState.Cancelled,
+                _ => throw new OperationFailureException(OperationFailureReason.Invalid),
+            });
+        }
+
+        return parsed;
     }
 
     private static async Task<IResult> ReadAsync(

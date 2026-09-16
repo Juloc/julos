@@ -96,3 +96,10 @@ public sealed record OperationProgressEventResponse(
     int? ProgressPercent,
     string CurrentStep,
     DateTimeOffset OccurredAtUtc);
+
+/// <summary>One page of the authenticated user's operations.</summary>
+/// <param name="Items">Operations, newest first.</param>
+/// <param name="NextCursor">Opaque continuation, or null when this page is the last.</param>
+public sealed record OperationPageResponse(
+    IReadOnlyList<OperationResponse> Items,
+    string? NextCursor);

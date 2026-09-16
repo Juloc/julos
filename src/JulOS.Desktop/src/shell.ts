@@ -91,7 +91,11 @@ export class JulOsShell extends HTMLElement {
     };
     const services = new DesktopClientServices(
       new SignalRJsonConnection(),
-      refresh,
+      async (event) => {
+        // The desktop runtime owns the state each event belongs to; the shell only
+        // routes. A reload of the whole session is not the answer to one changed row.
+        await this.#desktopRuntime?.applyRealtimeEvent(event.eventType, event.resourceId, event.revision);
+      },
       refresh,
     );
     this.#clientServices = services;

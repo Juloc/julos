@@ -73,6 +73,74 @@ public sealed class PostgresOperationService : IOperationService
         }
     }
 
+    /// <summary>Default page size when the caller does not ask for one.</summary>
+    private const int DefaultPageSize = 50;
+
+    /// <summary>Largest page the list will return, whatever the caller asks for.</summary>
+    private const int MaximumPageSize = 200;
+
+    /// <inheritdoc />
+    public async Task<OperationPage> ListAsync(
+        OperationQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        EnsureIdentifier(query.OwnerUserId);
+
+        if (query.Limit is int requested && requested < 1)
+        {
+            throw new OperationFailureException(OperationFailureReason.Invalid);
+        }
+
+        var limit = Math.Min(query.Limit ?? DefaultPageSize, MaximumPageSize);
+        var filter = OperationCursor.Fingerprint(query);
+        var cursor = OperationCursor.Read(query.Cursor, filter);
+
+        // The owner filter is applied first and unconditionally. Everything else narrows
+        // what a user sees of their own work; none of it can widen it to someone else's.
+        var candidates = this.context.Operations.AsNoTracking()
+            .Where(operation => operation.OwnerUserId == query.OwnerUserId);
+
+        if (query.States is { Count: > 0 } states)
+        {
+            var wanted = states.Distinct().ToArray();
+            candidates = candidates.Where(operation => wanted.Contains(operation.State));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.SourcePackageId))
+        {
+            candidates = candidates.Where(operation => operation.SourcePackageId == query.SourcePackageId);
+        }
+
+        if (query.CreatedAfterUtc is DateTimeOffset createdAfter)
+        {
+            candidates = candidates.Where(operation => operation.CreatedAtUtc > createdAfter);
+        }
+
+        if (cursor is OperationCursor position)
+        {
+            // Keyset continuation on the exact sort tuple, so a page boundary cannot repeat
+            // or skip an operation when new work arrives between two requests.
+            candidates = candidates.Where(operation =>
+                operation.CreatedAtUtc < position.CreatedAtUtc
+                || (operation.CreatedAtUtc == position.CreatedAtUtc && operation.Id.CompareTo(position.OperationId) < 0));
+        }
+
+        var page = await candidates
+            .OrderByDescending(operation => operation.CreatedAtUtc)
+            .ThenByDescending(operation => operation.Id)
+            .Take(limit + 1)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var items = page.Take(limit).Select(ToSnapshot).ToArray();
+        var next = page.Length > limit && items.Length > 0
+            ? OperationCursor.Write(items[^1].CreatedAtUtc, items[^1].OperationId, filter)
+            : null;
+
+        return new OperationPage(items, next);
+    }
+
     /// <inheritdoc />
     public async Task<OperationSnapshot> ReadAsync(Guid operationId, Guid ownerUserId, CancellationToken cancellationToken = default)
     {

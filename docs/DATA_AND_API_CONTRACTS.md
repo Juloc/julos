@@ -1053,6 +1053,8 @@ Creation returns `202 Accepted` and requires an idempotency key. Reusing the sam
 
 List requires the existing `core.operation.read` permission and always filters `OwnerUserId` to the authenticated user; global permission does not silently make it a cross-user administrative API. `states` is an optional unique subset of the five public states, `sourcePackageId` and `createdAfterUtc` are optional, and `limit` defaults to 50 with maximum 200. Results sort by `(CreatedAtUtc DESC, OperationId DESC)`. Response is `{ items: OperationResponse[], nextCursor: string? }`; the opaque cursor binds the final sort tuple plus the complete filter set, and invalid/filter-reused cursors return `400 operation.cursor_invalid`. Reads return `200`; an inaccessible item is `404 operation.not_found`. `operation.changed` contains Operation ID and Revision only, and Operation Center refetches the list/item.
 
+Implemented by `MOB-008`. The opaque cursor encodes the final sort tuple of the page it continues together with a fingerprint of the complete filter set, so it cannot be reused against a different question: continuing a filtered page into an unfiltered list would otherwise silently skip whatever sorted between them. A malformed or filter-mismatched cursor is refused rather than quietly returning a different page. Events are at least once, so the Center ignores a notification at or below the revision it already holds, refetches otherwise, and drops an operation that has become invisible to the caller.
+
 ## 8. App discovery contracts
 
 A package submits a proposal:

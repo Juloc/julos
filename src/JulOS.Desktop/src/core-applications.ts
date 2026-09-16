@@ -14,6 +14,15 @@ import {
   type PackageManagerSnapshot,
 } from './package-manager.js';
 import type { SupportedLanguage } from './localization.js';
+import {
+  activeOperationStates,
+  isCancellable,
+  isSettled,
+  OperationCenterStore,
+  type OperationCenterSnapshot,
+  type OperationState,
+  type OperationView,
+} from './operation-center.js';
 import type { DesktopApplication, ShellApiClient, UserProfile } from './shell-api.js';
 import { createWebAppBrowserSurface } from './webapp-browser.js';
 import {
@@ -28,6 +37,7 @@ export const CoreApplicationIds = {
   agents: 'core.agents',
   notifications: 'core.notifications',
   problems: 'core.problems',
+  operations: 'core.operations',
   webappBrowser: 'core.webapp-browser',
 } as const;
 
@@ -39,6 +49,7 @@ export interface CoreSurfaceHandle {
 export interface CoreApplicationCatalogOptions {
   readonly api: ShellApiClient;
   readonly clientDevices: ClientDeviceStore;
+  readonly operations: OperationCenterStore;
   readonly notifications: NotificationCenterStore;
   readonly language: () => SupportedLanguage;
   readonly onFailure: (error: unknown) => void;
@@ -50,6 +61,7 @@ export interface CoreApplicationCatalogOptions {
 export class CoreApplicationCatalog {
   readonly #api: ShellApiClient;
   readonly #clientDevices: ClientDeviceStore;
+  readonly #operations: OperationCenterStore;
   readonly #notifications: NotificationCenterStore;
   readonly #language: () => SupportedLanguage;
   readonly #onFailure: (error: unknown) => void;
@@ -60,6 +72,7 @@ export class CoreApplicationCatalog {
   public constructor(options: CoreApplicationCatalogOptions) {
     this.#api = options.api;
     this.#clientDevices = options.clientDevices;
+    this.#operations = options.operations;
     this.#notifications = options.notifications;
     this.#language = options.language;
     this.#onFailure = options.onFailure;
@@ -75,6 +88,7 @@ export class CoreApplicationCatalog {
       coreApplication(CoreApplicationIds.agents, text(language, 'agents'), 'agents', 820, 580, 480, 360),
       coreApplication(CoreApplicationIds.notifications, text(language, 'notifications'), 'notifications', 720, 560, 420, 340),
       coreApplication(CoreApplicationIds.problems, text(language, 'problems'), 'problems', 760, 580, 440, 360),
+      coreApplication(CoreApplicationIds.operations, text(language, 'operations'), 'operations', 820, 620, 460, 380),
       coreApplication(CoreApplicationIds.webappBrowser, text(language, 'webappBrowser'), 'webapp-browser', 1024, 720, 480, 360, 'multiple-instances'),
     ];
   }
@@ -95,6 +109,8 @@ export class CoreApplicationCatalog {
         return this.#createNotificationSurface(false);
       case CoreApplicationIds.problems:
         return this.#createNotificationSurface(true);
+      case CoreApplicationIds.operations:
+        return this.#createOperationSurface();
       case CoreApplicationIds.webappBrowser:
         return createWebAppBrowserSurface(this.#api);
       default:
@@ -335,6 +351,128 @@ export class CoreApplicationCatalog {
     restore.select.addEventListener('change', apply);
     group.append(caption, scope.label, restore.label);
     return group;
+  }
+
+  /**
+   * The Operation Center from `docs/MOBILE_PWA.md` section 12.
+   *
+   * Operations are shown independently of the window that started them: closing or
+   * suspending that window cancels nothing, and cancellation is a separate action here.
+   */
+  #createOperationSurface(): CoreSurfaceHandle {
+    const language = this.#language();
+    const store = this.#operations;
+    const root = section('core-operations');
+    const toolbar = coreToolbar(text(language, 'operations'), text(language, 'refresh'));
+    const intro = statusText(text(language, 'operationsDescription'));
+
+    const filter = selectField(text(language, 'operationFilter'), [
+      ['all', text(language, 'operationFilterAll')],
+      ['active', text(language, 'operationFilterActive')],
+      ['failed', text(language, 'operationFilterFailed')],
+    ]);
+    const list = document.createElement('div');
+    list.className = 'core-list operation-list';
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'core-secondary-button';
+    more.textContent = text(language, 'operationsMore');
+    root.append(toolbar.root, intro, filter.label, list, more);
+
+    const render = (snapshot: OperationCenterSnapshot): void => {
+      toolbar.button.disabled = snapshot.loading;
+      more.hidden = !snapshot.hasMore;
+      more.disabled = snapshot.loading;
+      list.replaceChildren();
+      if (snapshot.lastError !== null) {
+        list.append(statusText(snapshot.lastError, 'error'));
+      }
+      if (snapshot.operations.length === 0) {
+        list.append(emptyMessage(text(language, snapshot.loading ? 'loading' : 'noOperations')));
+        return;
+      }
+      for (const operation of snapshot.operations) {
+        list.append(this.#operationCard(store, operation, language));
+      }
+    };
+
+    const unsubscribe = store.subscribe(render);
+    toolbar.button.addEventListener('click', () => void store.refresh().catch(this.#onFailure));
+    more.addEventListener('click', () => void store.loadMore().catch(this.#onFailure));
+    filter.select.addEventListener('change', () => {
+      const states = filter.select.value === 'active'
+        ? [...activeOperationStates]
+        : filter.select.value === 'failed'
+          ? (['failed'] as const).slice()
+          : [];
+      void store.setFilter({ states, sourcePackageId: null }).catch(this.#onFailure);
+    });
+    void store.refresh().catch(this.#onFailure);
+    return { element: root, dispose: unsubscribe };
+  }
+
+  #operationCard(
+    store: OperationCenterStore,
+    operation: OperationView,
+    language: SupportedLanguage,
+  ): HTMLElement {
+    const card = document.createElement('article');
+    card.className = 'core-card operation-card';
+    card.dataset['state'] = operation.state;
+
+    const header = document.createElement('div');
+    header.className = 'core-card-heading';
+    const title = document.createElement('strong');
+    title.textContent = operation.operationType;
+    const state = document.createElement('span');
+    state.className = 'connectivity-badge';
+    state.textContent = operationStateLabel(operation.state, language);
+    header.append(title, state);
+
+    const target = document.createElement('p');
+    target.textContent = operation.targetReference;
+
+    const step = document.createElement('small');
+    step.className = 'core-muted';
+    step.textContent = operation.currentStep
+      ?? `${text(language, 'operationCreated')} · ${formatDate(operation.createdAtUtc, language)}`;
+
+    card.append(header, target, step);
+
+    if (operation.progressPercent !== null) {
+      const progress = document.createElement('progress');
+      progress.max = 100;
+      progress.value = operation.progressPercent;
+      card.append(progress);
+    }
+
+    if (operation.failureCode !== null) {
+      const failure = document.createElement('p');
+      failure.className = 'core-error-detail';
+      // Only the stable code and the sanitized detail are ever shown; a failure never
+      // carries an exception, a stack trace or a credential this far.
+      failure.textContent = operation.failureDetail === null
+        ? operation.failureCode
+        : `${operation.failureCode} · ${operation.failureDetail}`;
+      card.append(failure);
+    }
+
+    if (operation.cancellationRequested && !isSettled(operation)) {
+      const pending = document.createElement('small');
+      pending.className = 'core-muted';
+      pending.textContent = text(language, 'operationCancelling');
+      card.append(pending);
+    } else if (isCancellable(operation)) {
+      const cancel = actionButton(
+        text(language, 'operationCancel'),
+        () => store.cancel(operation.operationId),
+        this.#onFailure,
+      );
+      cancel.classList.add('danger');
+      card.append(cancel);
+    }
+
+    return card;
   }
 
   #createPackageManagerSurface(): CoreSurfaceHandle {
@@ -803,6 +941,21 @@ function workspaceLabel(workspaceClass: WorkspaceClass, language: SupportedLangu
   }
 }
 
+function operationStateLabel(state: OperationState, language: SupportedLanguage): string {
+  switch (state) {
+    case 'queued':
+      return text(language, 'operationQueued');
+    case 'running':
+      return text(language, 'operationRunning');
+    case 'succeeded':
+      return text(language, 'operationSucceeded');
+    case 'cancelled':
+      return text(language, 'operationCancelled');
+    default:
+      return text(language, 'operationFailed');
+  }
+}
+
 function themeValue(value: string): 'system' | 'light' | 'dark' {
   return value === 'dark' ? 'dark' : value === 'light' ? 'light' : 'system';
 }
@@ -833,6 +986,12 @@ const messages = {
     layoutScope: 'Window layout', layoutShared: 'Shared with my other devices', layoutDevice: 'Only on this device',
     restoreMode: 'When JulOS opens', restoreResume: 'Restore my windows', restoreFresh: 'Start with an empty desktop',
     confirmRemoveDevice: 'Remove this device? Layouts and preferences stored only for it are deleted. Shared layouts are kept.',
+    operations: 'Operations', operationsDescription: 'Background work JulOS is doing for you. Closing a window never cancels it.',
+    noOperations: 'No operations.', operationsMore: 'Show older', operationFilter: 'Show',
+    operationFilterAll: 'Everything', operationFilterActive: 'Still running', operationFilterFailed: 'Failed',
+    operationQueued: 'Queued', operationRunning: 'Running', operationSucceeded: 'Succeeded',
+    operationFailed: 'Failed', operationCancelled: 'Cancelled', operationCancel: 'Cancel',
+    operationCancelling: 'Cancellation requested; waiting for the work to stop.', operationCreated: 'Created',
     confirmRemoveCurrentDevice: 'Remove the device you are using? It is registered again straight away as a new device, so layouts and preferences stored only for it are lost.',
   },
   de: {
@@ -854,6 +1013,12 @@ const messages = {
     layoutScope: 'Fensterlayout', layoutShared: 'Mit meinen anderen Geräten geteilt', layoutDevice: 'Nur auf diesem Gerät',
     restoreMode: 'Beim Öffnen von JulOS', restoreResume: 'Meine Fenster wiederherstellen', restoreFresh: 'Mit leerem Desktop starten',
     confirmRemoveDevice: 'Dieses Gerät entfernen? Layouts und Einstellungen, die nur dafür gespeichert sind, werden gelöscht. Geteilte Layouts bleiben erhalten.',
+    operations: 'Vorgänge', operationsDescription: 'Hintergrundarbeit, die JulOS für dich erledigt. Ein Fenster zu schließen bricht sie nie ab.',
+    noOperations: 'Keine Vorgänge.', operationsMore: 'Ältere anzeigen', operationFilter: 'Anzeigen',
+    operationFilterAll: 'Alles', operationFilterActive: 'Läuft noch', operationFilterFailed: 'Fehlgeschlagen',
+    operationQueued: 'In Warteschlange', operationRunning: 'Läuft', operationSucceeded: 'Erfolgreich',
+    operationFailed: 'Fehlgeschlagen', operationCancelled: 'Abgebrochen', operationCancel: 'Abbrechen',
+    operationCancelling: 'Abbruch angefordert; warte, bis die Arbeit stoppt.', operationCreated: 'Erstellt',
     confirmRemoveCurrentDevice: 'Das Gerät entfernen, das du gerade benutzt? Es wird sofort als neues Gerät registriert; Layouts und Einstellungen, die nur dafür gespeichert sind, gehen verloren.',
   },
 } as const;

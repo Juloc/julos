@@ -55,12 +55,44 @@ public sealed record OperationProgressSnapshot(
     string CurrentStep,
     DateTimeOffset OccurredAtUtc);
 
+/// <summary>Which operations one page of the Operation Center asks for.</summary>
+/// <param name="OwnerUserId">Authenticated user; the list is always filtered to them.</param>
+/// <param name="States">Optional subset of the public states.</param>
+/// <param name="SourcePackageId">Optional originating package.</param>
+/// <param name="CreatedAfterUtc">Optional lower bound on creation time.</param>
+/// <param name="Cursor">Opaque continuation from a previous page.</param>
+/// <param name="Limit">Page size; defaults to 50 and is capped at 200.</param>
+public sealed record OperationQuery(
+    Guid OwnerUserId,
+    IReadOnlyList<OperationState>? States = null,
+    string? SourcePackageId = null,
+    DateTimeOffset? CreatedAfterUtc = null,
+    string? Cursor = null,
+    int? Limit = null);
+
+/// <summary>One page of operations and the cursor that continues it.</summary>
+/// <param name="Items">Operations, newest first.</param>
+/// <param name="NextCursor">Opaque continuation, or null when the page is the last.</param>
+public sealed record OperationPage(
+    IReadOnlyList<OperationSnapshot> Items,
+    string? NextCursor);
+
 /// <summary>Creates, observes and advances durable operation resources.</summary>
 public interface IOperationService
 {
     /// <summary>Creates one queued operation or returns the matching idempotent result.</summary>
     Task<OperationSnapshot> CreateAsync(
         CreateOperationCommand command,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Lists one page of the authenticated user's operations, newest first.</summary>
+    /// <remarks>
+    /// Always filtered to the owner. A global read permission does not silently turn this
+    /// into a cross-user administrative API: the Operation Center shows a user their own
+    /// work and nothing else.
+    /// </remarks>
+    Task<OperationPage> ListAsync(
+        OperationQuery query,
         CancellationToken cancellationToken = default);
 
     /// <summary>Reads one operation owned by the supplied user.</summary>
