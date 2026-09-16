@@ -19,6 +19,9 @@ internal sealed class PackageInstallationRow
 
     internal PackageInstallationState State { get; set; }
 
+    /// <summary>How much is known about who produced the installed artifact.</summary>
+    internal PackageSignatureState SignatureState { get; set; }
+
     internal int Revision { get; set; }
 
     internal string? FaultCode { get; set; }
@@ -36,6 +39,7 @@ internal sealed class PackageInstallationRow
             Id = installation.Id.Value,
             PackageId = installation.PackageId.Value,
             State = installation.State,
+            SignatureState = installation.SignatureState,
             Revision = installation.Revision.Value,
             FaultCode = installation.FaultCode,
             FaultDetail = installation.FaultDetail,

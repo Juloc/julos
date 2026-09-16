@@ -40,12 +40,14 @@ public sealed class PackageInstallation
         PackageInstallationId id,
         PackageId packageId,
         PackageInstallationState state,
-        Revision revision)
+        Revision revision,
+        PackageSignatureState signatureState)
     {
         this.Id = id;
         this.PackageId = packageId;
         this.State = state;
         this.Revision = revision;
+        this.SignatureState = signatureState;
     }
 
     /// <summary>
@@ -54,11 +56,25 @@ public sealed class PackageInstallation
     /// </summary>
     /// <param name="id">The generated identity of the new installation record.</param>
     /// <param name="packageId">The published identity of the package being installed.</param>
-    public static PackageInstallation BeginInstallation(PackageInstallationId id, PackageId packageId) =>
-        new(id, packageId, PackageInstallationState.Installing, Revision.Initial);
+    /// <param name="signatureState">How much is known about who produced the artifact.</param>
+    public static PackageInstallation BeginInstallation(
+        PackageInstallationId id,
+        PackageId packageId,
+        PackageSignatureState signatureState = PackageSignatureState.TrustedSigned) =>
+        new(id, packageId, PackageInstallationState.Installing, Revision.Initial, signatureState);
 
     /// <summary>The stable identity of this installation record.</summary>
     public PackageInstallationId Id { get; }
+
+    /// <summary>How much is known about who produced the installed artifact.</summary>
+    /// <remarks>
+    /// Recorded once at installation. Trust discovered or withdrawn later never rewrites
+    /// an installed snapshot; it is an input to the next update instead.
+    /// </remarks>
+    public PackageSignatureState SignatureState { get; }
+
+    /// <summary>Whether this package's code runs on the isolated path.</summary>
+    public bool RequiresIsolation => PackageIsolation.IsRequiredFor(this.SignatureState);
 
     /// <summary>
     /// The published identity of the installed package. Fixed for the life of the record:

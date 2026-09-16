@@ -255,6 +255,17 @@ Package UI uses Shadow DOM to prevent style leakage. The host provides theme tok
 
 The host does not provide secrets, raw tokens or unrestricted global state.
 
+### Isolated frontends
+
+Untrusted frontend code does not run in the Shell realm. It runs in a frame sandboxed with `allow-scripts` and deliberately **without** `allow-same-origin`, which gives it an opaque origin: no JulOS session cookie, no Shell DOM, no same-origin fetch against Core and no access to anything the Shell holds. The two sandbox tokens are never combined, because a frame granted both can remove its own sandbox.
+
+The frame is loaded from a generated `srcdoc`, so it has no URL of its own on the JulOS origin, and it carries a content policy of `default-src 'none'` with `connect-src 'none'` — it cannot open connections of its own at all. Only the *origin* of the verified module is placed in that policy, never the path: a path is attacker-shaped input, and spaces or quotes in one would otherwise add source expressions and widen exactly the thing the policy narrows.
+
+Everything the frame may do goes through one typed message bridge. Every message is validated against the package manifest before the Shell acts on it, and anything not explicitly recognised and granted is refused: a frontend cannot widen what its package may reach by asking, because the Shell checks the manifest and not the message. This is not the default application runtime, which `AGENTS.md` forbids; it is the path a package takes precisely because it is not trusted.
+
+
+An installation records how much is known about who produced it: `trusted-signed`, `unknown-signed` or `unsigned`. That is trust, not integrity — every installed artifact was verified byte for byte against its recorded digest regardless. Anything that is not `trusted-signed` runs on the isolated path introduced by `PKG-013`. The check is written as "trusted is the exception" rather than as a list of untrusted states, so a state added later is isolated by default instead of silently inheriting full access.
+
 Shadow DOM is not a security sandbox. The isolated frontend bridge exposes only versioned typed messages, no Shell DOM, JulOS cookies or arbitrary Core endpoints. Mobile-capable applications implement activate, deactivate, suspend, resume, optional Back and dispose semantics from `MOBILE_PWA.md`.
 
 The schema adds one exact case-sensitive object to each mobile-capable `Applications[]` entry, validated by the `package-manifests` stage since `MOB-006`:

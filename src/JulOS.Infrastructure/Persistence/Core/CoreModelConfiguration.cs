@@ -156,6 +156,11 @@ internal static class CoreModelConfiguration
         entity.ToTable("package_installations", Schema, table =>
         {
             table.HasCheckConstraint("ck_package_installations_revision", "revision >= 1");
+            // A signature state added later must be isolated by default, so the stored
+            // value is constrained to the states this build understands.
+            table.HasCheckConstraint(
+                "ck_package_installations_signature_state",
+                "signature_state IN ('TrustedSigned', 'UnknownSigned', 'NotSigned')");
             table.HasCheckConstraint(
                 "ck_package_installations_fault_metadata",
                 "(state = 'Faulted' AND fault_code IS NOT NULL AND fault_detail IS NOT NULL AND faulted_at_utc IS NOT NULL) OR "
@@ -166,6 +171,11 @@ internal static class CoreModelConfiguration
         entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
         entity.Property(row => row.PackageId).HasColumnName("package_id").HasMaxLength(128).IsRequired();
         entity.Property(row => row.State).HasColumnName("state").HasConversion<string>().HasMaxLength(32).IsRequired();
+        entity.Property(row => row.SignatureState)
+            .HasColumnName("signature_state")
+            .HasConversion<string>()
+            .HasMaxLength(24)
+            .IsRequired();
         entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
         entity.Property(row => row.FaultCode).HasColumnName("fault_code").HasMaxLength(256);
         entity.Property(row => row.FaultDetail).HasColumnName("fault_detail").HasMaxLength(2048);
