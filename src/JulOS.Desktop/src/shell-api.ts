@@ -82,6 +82,16 @@ export interface DesktopApplication {
   readonly elementName: string;
   readonly frontend: DesktopApplicationFrontend;
   readonly launchTargets?: readonly DesktopLaunchTarget[];
+  /**
+   * Whether this package's code runs on the isolated path.
+   *
+   * Decided by Server from the installation's signature state. A Shell that does not
+   * understand the field treats its absence as "not isolated", so the flag is always
+   * sent rather than omitted when false.
+   */
+  readonly requiresIsolation?: boolean;
+  /** Capability names the package manifest declares it requires. */
+  readonly requiredCapabilities?: readonly string[];
 }
 
 export type DesktopWidgetSize = 'small' | 'medium' | 'wide' | 'large';

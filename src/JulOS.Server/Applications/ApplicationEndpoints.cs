@@ -34,7 +34,9 @@ internal sealed record DesktopApplicationResponse(
     IReadOnlyList<string> Viewports,
     string ElementName,
     DesktopApplicationFrontendResponse Frontend,
-    IReadOnlyList<DesktopLaunchTargetResponse> LaunchTargets);
+    IReadOnlyList<DesktopLaunchTargetResponse> LaunchTargets,
+    bool RequiresIsolation,
+    IReadOnlyList<string> RequiredCapabilities);
 
 internal sealed record DesktopWidgetResponse(
     string WidgetKey,
@@ -177,7 +179,9 @@ internal static class ApplicationEndpoints
         application.Viewports,
         application.ElementName,
         Frontend(application.PackageId, application.PackageVersion, application.FrontendSha256, application.FrontendExportedElements),
-        application.LaunchTargets.Select(ToResponse).ToArray());
+        application.LaunchTargets.Select(ToResponse).ToArray(),
+        application.RequiresIsolation,
+        application.RequiredCapabilities);
 
     private static DesktopLaunchTargetResponse ToResponse(DesktopPackageLaunchTarget target) => new(
         target.LaunchTargetId,

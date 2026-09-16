@@ -1,7 +1,10 @@
 ﻿import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { JSDOM } from 'jsdom';
+
 import {
+  createIsolatedFrame,
   isolatedFrontendDocument,
   isolationErrorCodes,
   readIsolatedRequest,
@@ -107,4 +110,24 @@ test('a module URL cannot break out of the content policy', () => {
     'Only an origin reaches the policy, never a path.',
   );
   assert.ok(!policy.includes('/packages/'), 'The crafted path never reaches the policy at all.');
+});
+
+test('the sandboxed frame is created without the token that would let it escape', () => {
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'https://julos.test/' });
+  const previousDocument = globalThis.document;
+  const previousLocation = globalThis.location;
+  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true });
+  Object.defineProperty(globalThis, 'location', { value: dom.window.location, configurable: true });
+
+  try {
+    const frame = createIsolatedFrame('/api/v1/packages/example/frontend/1.0.0', 'de.juloc.example');
+
+    assert.equal(frame.getAttribute('sandbox'), 'allow-scripts');
+    assert.equal(frame.getAttribute('referrerpolicy'), 'no-referrer');
+    assert.ok(frame.srcdoc.length > 0, 'The frame has no URL of its own on the JulOS origin.');
+    assert.equal(frame.getAttribute('src'), null);
+  } finally {
+    Object.defineProperty(globalThis, 'document', { value: previousDocument, configurable: true });
+    Object.defineProperty(globalThis, 'location', { value: previousLocation, configurable: true });
+  }
 });

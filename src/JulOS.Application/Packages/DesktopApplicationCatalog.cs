@@ -23,7 +23,9 @@ public sealed record DesktopPackageApplication(
     string ElementName,
     string FrontendSha256,
     IReadOnlyList<string> FrontendExportedElements,
-    IReadOnlyList<DesktopPackageLaunchTarget> LaunchTargets);
+    IReadOnlyList<DesktopPackageLaunchTarget> LaunchTargets,
+    bool RequiresIsolation,
+    IReadOnlyList<string> RequiredCapabilities);
 
 /// <summary>One enabled package widget that can be placed on the JulOS Desktop grid.</summary>
 public sealed record DesktopPackageWidget(

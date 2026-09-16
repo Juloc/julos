@@ -316,6 +316,8 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 throw Failure("package.enable_state_invalid", "Package is not ready to enable.");
             }
 
+            EnsureWorkerIsolation(row, metadata.Manifest);
+
             row.State = PackageInstallationState.Starting;
             row.Revision = checked(row.Revision + 1);
             await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -745,6 +747,31 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
     }
 
     private static string StateName(PackageInstallationState state) => state.ToString().ToLowerInvariant();
+
+    /// <summary>
+    /// Refuses to run untrusted backend code under the Server process identity.
+    /// </summary>
+    /// <remarks>
+    /// A <c>process</c> worker runs as Server itself: same user, same filesystem, same
+    /// network. That is acceptable for a package whose publisher this installation trusts
+    /// and is not acceptable for one it does not, and no sandbox exists on that path to
+    /// make it acceptable. An untrusted package therefore has to declare a container
+    /// runtime, which Runtime Manager can confine, or no runtime at all.
+    /// </remarks>
+    private static void EnsureWorkerIsolation(PackageInstallationRow row, PackageManifest manifest)
+    {
+        if (!PackageIsolation.IsRequiredFor(row.SignatureState))
+        {
+            return;
+        }
+
+        if (string.Equals(manifest.Runtime.Kind, "process", StringComparison.Ordinal))
+        {
+            throw Failure(
+                "package.worker_isolation_required",
+                "A package that is not trusted cannot run a process worker under the Server identity.");
+        }
+    }
 
     private static PackageManagementException Failure(string code, string message, Exception? inner = null) =>
         new(code, message, inner);

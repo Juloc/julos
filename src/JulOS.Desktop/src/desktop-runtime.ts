@@ -24,6 +24,11 @@ import { PackageFrontendHost } from './package-frontend-host.js';
 import { translate, type SupportedLanguage } from './localization.js';
 import { classifyViewport, type DesktopViewport } from './responsive-desktop.js';
 import { ExecutionPreferenceClient, type ExecutionPreference } from './execution-preferences.js';
+import {
+  createIsolatedFrame,
+  readIsolatedRequest,
+  type IsolatedGrants,
+} from './isolated-frontend.js';
 import { PhoneForegroundController } from './phone-foreground.js';
 import { SurfaceActivityMonitor } from './surface-activity.js';
 import { readSurfaceHost, SurfaceScheduler } from './surface-scheduler.js';
@@ -96,6 +101,7 @@ export class DesktopRuntime {
   readonly #phoneForeground = new PhoneForegroundController();
   readonly #preferences = new ExecutionPreferenceClient();
   readonly #packageElements = new Map<string, HTMLElement>();
+  readonly #isolatedListeners = new Map<string, () => void>();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
   readonly #keyboard: ShellKeyboardController;
@@ -684,6 +690,8 @@ export class DesktopRuntime {
         this.#coreSurfaceDisposers.delete(windowId);
         this.#activity.release(windowId);
         this.#packageElements.delete(windowId);
+        this.#isolatedListeners.get(windowId)?.();
+        this.#isolatedListeners.delete(windowId);
         void this.#surfaces.dispose(windowId, 'window-closed');
       }
     }
@@ -1035,6 +1043,13 @@ export class DesktopRuntime {
       body.replaceChildren(handle.element);
       this.#windowSurfaces.set(window.id, handle.element);
       this.#coreSurfaceDisposers.set(window.id, handle.dispose);
+      return;
+    }
+
+    if (application.requiresIsolation === true) {
+      // Untrusted code never reaches the Shell realm, so its custom element is never
+      // registered here and there is nothing to look up.
+      this.#mountIsolatedSurface(window, application, body);
       return;
     }
 
@@ -1602,6 +1617,79 @@ export class DesktopRuntime {
     container.prepend(button);
   }
 
+  /**
+   * Mounts an untrusted package frontend in its own sandboxed frame.
+   *
+   * The frame gets an opaque origin, so it holds no JulOS session cookie and can reach
+   * neither the Shell DOM nor Core. Everything it may do arrives here as a message and is
+   * checked against the package manifest before the Shell acts on it.
+   */
+  #mountIsolatedSurface(
+    window: DesktopWindowSnapshot,
+    application: DesktopApplication,
+    body: HTMLElement,
+  ): void {
+    const grants: IsolatedGrants = {
+      packageId: application.packageId,
+      capabilities: application.requiredCapabilities ?? [],
+    };
+    const frame = createIsolatedFrame(application.frontend.moduleUrl, application.packageId);
+
+    const listener = (event: MessageEvent): void => {
+      // Only the frame the Shell created may speak through this bridge. Anything else is
+      // another window shouting at the same page.
+      if (event.source !== frame.contentWindow) {
+        return;
+      }
+      void this.#handleIsolatedMessage(frame, grants, event.data);
+    };
+    globalThis.addEventListener('message', listener);
+
+    body.replaceChildren(frame);
+    this.#windowSurfaces.set(window.id, frame);
+    this.#isolatedListeners.set(window.id, () => globalThis.removeEventListener('message', listener));
+  }
+
+  async #handleIsolatedMessage(
+    frame: HTMLIFrameElement,
+    grants: IsolatedGrants,
+    message: unknown,
+  ): Promise<void> {
+    const parsed = readIsolatedRequest(message, grants);
+    if ('rejection' in parsed) {
+      // Lifecycle notices from the frame are not requests and are not rejections either.
+      if (!isIsolatedNotice(message)) {
+        this.#onFailure(new Error(`${parsed.rejection.code}: ${parsed.rejection.detail}`));
+        replyToIsolated(frame, message, { ok: false, code: parsed.rejection.code });
+      }
+      return;
+    }
+
+    const request = parsed.request;
+    try {
+      if (request.kind === 'capability') {
+        const result = await this.#capabilities.invoke(
+          grants.packageId,
+          request.capability ?? '',
+          request.operation ?? '',
+          request.payload,
+        );
+        replyToIsolated(frame, message, { ok: true, requestId: request.requestId, result });
+        return;
+      }
+
+      await this.openApplication(request.applicationId ?? '', request.targetId);
+      replyToIsolated(frame, message, { ok: true, requestId: request.requestId, result: null });
+    } catch (error) {
+      this.#onFailure(error);
+      replyToIsolated(frame, message, {
+        ok: false,
+        requestId: request.requestId,
+        code: 'package.bridge_failed',
+      });
+    }
+  }
+
   #ensureStyles(): void {
     const root = this.#shellRoot();
     if (root === null || root.querySelector('link[data-julos-desktop-runtime]') !== null) {
@@ -1630,6 +1718,34 @@ export class DesktopRuntime {
       height: Math.max(this.#elements.windowLayer.clientHeight, 240),
     };
   }
+}
+
+/** Whether a message is one of the frame's own lifecycle notices rather than a request. */
+function isIsolatedNotice(message: unknown): boolean {
+  if (typeof message !== 'object' || message === null) {
+    return false;
+  }
+  const kind = (message as Record<string, unknown>)['kind'];
+  return kind === 'ready' || kind === 'failed';
+}
+
+/** Replies to an isolated frame, targeting its opaque origin with the wildcard it requires. */
+function replyToIsolated(
+  frame: HTMLIFrameElement,
+  message: unknown,
+  reply: { ok: boolean; requestId?: string; result?: unknown; code?: string },
+): void {
+  const requestId = reply.requestId
+    ?? (typeof message === 'object' && message !== null
+      ? String((message as Record<string, unknown>)['requestId'] ?? '')
+      : '');
+  if (requestId.length === 0) {
+    return;
+  }
+  // A sandboxed frame has an opaque origin, which postMessage can only be targeted at
+  // with '*'. That is safe here because the reply carries no secret: it is the result of
+  // something the frame itself asked for and the Shell already authorized.
+  frame.contentWindow?.postMessage({ ...reply, requestId }, '*');
 }
 
 function pointerSample(event: PointerEvent) {

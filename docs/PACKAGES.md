@@ -261,7 +261,16 @@ Untrusted frontend code does not run in the Shell realm. It runs in a frame sand
 
 The frame is loaded from a generated `srcdoc`, so it has no URL of its own on the JulOS origin, and it carries a content policy of `default-src 'none'` with `connect-src 'none'` — it cannot open connections of its own at all. Only the *origin* of the verified module is placed in that policy, never the path: a path is attacker-shaped input, and spaces or quotes in one would otherwise add source expressions and widen exactly the thing the policy narrows.
 
-Everything the frame may do goes through one typed message bridge. Every message is validated against the package manifest before the Shell acts on it, and anything not explicitly recognised and granted is refused: a frontend cannot widen what its package may reach by asking, because the Shell checks the manifest and not the message. This is not the default application runtime, which `AGENTS.md` forbids; it is the path a package takes precisely because it is not trusted.
+Everything the frame may do goes through one typed message bridge. Authorization itself is enforced by Server: the capability broker checks the invoking package against its declared capabilities and answers `403 package.capability_not_granted`. The bridge check in the Shell is defence in depth in front of that, not a substitute for it, and only the frame the Shell created may speak through it.
+
+### Isolated workers
+
+A `process` worker runs as Server itself: same user, same filesystem, same network. That is acceptable for a package whose publisher this installation trusts and is not acceptable for one it does not, and no sandbox exists on that path to make it acceptable. Enabling an untrusted package that declares a `process` runtime therefore fails with `package.worker_isolation_required`.
+
+An untrusted package consequently cannot run any backend worker today: `process` is refused for the reason above, and a `container` runtime already fails with `package.container_runtime_not_configured` because the Runtime Manager transport is not yet connected to the package worker path. The resource-limited container profile for untrusted workers belongs with that transport and is not claimed here.
+
+The trusted path is unchanged and uses the same application model: only where a frontend is mounted differs, never what an application is.
+ Every message is validated against the package manifest before the Shell acts on it, and anything not explicitly recognised and granted is refused: a frontend cannot widen what its package may reach by asking, because the Shell checks the manifest and not the message. This is not the default application runtime, which `AGENTS.md` forbids; it is the path a package takes precisely because it is not trusted.
 
 
 An installation records how much is known about who produced it: `trusted-signed`, `unknown-signed` or `unsigned`. That is trust, not integrity — every installed artifact was verified byte for byte against its recorded digest regardless. Anything that is not `trusted-signed` runs on the isolated path introduced by `PKG-013`. The check is written as "trusted is the exception" rather than as a list of untrusted states, so a state added later is isolated by default instead of silently inheriting full access.

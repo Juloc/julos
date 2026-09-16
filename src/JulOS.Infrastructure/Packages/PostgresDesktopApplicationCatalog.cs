@@ -71,6 +71,7 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
                     row.ExternalIdentity,
                     row.DisplayName)).ToArray());
 
+        var isolated = await this.IsolatedPackageIdsAsync(cancellationToken).ConfigureAwait(false);
         var metadata = new Dictionary<string, InstalledPackageMetadata>(StringComparer.Ordinal);
         var result = new List<DesktopPackageApplication>(rows.Length);
         foreach (var row in rows)
@@ -105,7 +106,14 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
                 application.ElementName,
                 frontend.Sha256,
                 frontend.ExportedElements.ToArray(),
-                targets.GetValueOrDefault(row.Id) ?? []));
+                targets.GetValueOrDefault(row.Id) ?? [],
+                isolated.Contains(row.OwningPackageId),
+                // The manifest is the only source of what an isolated frontend may reach.
+                installed.Manifest.Capabilities
+                    .Where(capability => string.Equals(capability.Direction, "requires", StringComparison.Ordinal))
+                    .Select(capability => capability.Name)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray()));
         }
 
         return result;
@@ -307,6 +315,22 @@ internal sealed class PostgresDesktopApplicationCatalog : IDesktopApplicationCat
         .Where(row => row.State == PackageInstallationState.Enabled)
         .Select(row => row.PackageId)
         .ToArrayAsync(cancellationToken);
+
+    /// <summary>Which enabled packages must run their code on the isolated path.</summary>
+    private async Task<HashSet<string>> IsolatedPackageIdsAsync(CancellationToken cancellationToken)
+    {
+        var states = await this.context.PackageInstallations
+            .AsNoTracking()
+            .Where(row => row.State == PackageInstallationState.Enabled)
+            .Select(row => new { row.PackageId, row.SignatureState })
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return states
+            .Where(row => PackageIsolation.IsRequiredFor(row.SignatureState))
+            .Select(row => row.PackageId)
+            .ToHashSet(StringComparer.Ordinal);
+    }
 
     private async Task<InstalledPackageMetadata> ReadMetadataAsync(
         string packageId,
