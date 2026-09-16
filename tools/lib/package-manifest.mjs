@@ -3,6 +3,9 @@
 const semanticVersion = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const packageIdentifier = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/;
 const identifier = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+/** Surface contract major version JulOS implements; see src/JulOS.Desktop/src/surface-contract.ts. */
+const surfaceContractMajorVersion = 1;
+
 const stableKey = /^[a-z][a-z0-9._-]{0,63}$/;
 const resourceKey = /^[a-z][a-z0-9_.-]{0,127}$/;
 const permissionName = /^[a-z][a-z0-9._:-]{0,127}$/;
@@ -102,13 +105,13 @@ function validateRuntime(value, source, errors) {
 function validateApplications(value, source, errors) {
   validateObjectArray(value, 'Applications', source, errors, (application, index) => {
     const field = `Applications[${index}]`;
-    checkExactFields(
-      application,
-      ['StableKey', 'DisplayNameKey', 'InstancePolicy', 'DefaultWidth', 'DefaultHeight', 'MinimumWidth', 'MinimumHeight', 'Viewports', 'ElementName'],
-      field,
-      source,
-      errors,
-    );
+    const allowed = ['StableKey', 'DisplayNameKey', 'InstancePolicy', 'DefaultWidth', 'DefaultHeight', 'MinimumWidth', 'MinimumHeight', 'Viewports', 'ElementName'];
+    // Surface is declared only by mobile-capable applications, so it is accepted when
+    // present and required below when the application claims the mobile viewport.
+    if (Object.hasOwn(application, 'Surface')) {
+      allowed.push('Surface');
+    }
+    checkExactFields(application, allowed, field, source, errors);
     checkString(application.StableKey, `${field}.StableKey`, source, errors, stableKey, 64);
     checkString(application.DisplayNameKey, `${field}.DisplayNameKey`, source, errors, resourceKey, 128);
     checkString(application.ElementName, `${field}.ElementName`, source, errors, customElement, 200);
@@ -128,7 +131,71 @@ function validateApplications(value, source, errors) {
       errors.push(`${source}: ${field}.DefaultHeight is smaller than MinimumHeight`);
     }
     validateEnumArray(application.Viewports, `${field}.Viewports`, ['desktop', 'tablet', 'mobile'], source, errors, true);
+    validateSurface(application, field, source, errors);
   }, 'StableKey');
+}
+
+/**
+ * Validates the Surface declaration from docs/MOBILE_PWA.md section 10.
+ *
+ * A mobile-capable application must declare it: there is no silent mobile lifecycle
+ * fallback, so an application claiming the mobile viewport without the contract is a
+ * manifest error rather than something the Shell quietly runs anyway.
+ */
+function validateSurface(application, field, source, errors) {
+  const mobileCapable = Array.isArray(application.Viewports)
+    && application.Viewports.includes('mobile');
+  const declared = Object.hasOwn(application, 'Surface');
+
+  if (mobileCapable && !declared) {
+    errors.push(`${source}: ${field}.Surface is required for a mobile-capable application`);
+    return;
+  }
+  if (!declared) {
+    return;
+  }
+
+  const surface = application.Surface;
+  if (typeof surface !== 'object' || surface === null || Array.isArray(surface)) {
+    errors.push(`${source}: ${field}.Surface must be an object`);
+    return;
+  }
+
+  checkExactFields(
+    surface,
+    ['ContractVersion', 'SupportedBackgroundModes', 'HandlesBack'],
+    `${field}.Surface`,
+    source,
+    errors,
+  );
+
+  const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(surface.ContractVersion ?? ''));
+  if (version === null) {
+    errors.push(`${source}: ${field}.Surface.ContractVersion must be a three-part version`);
+  } else if (Number(version[1]) !== surfaceContractMajorVersion) {
+    errors.push(
+      `${source}: ${field}.Surface.ContractVersion major ${version[1]} is unsupported; `
+      + `JulOS implements ${surfaceContractMajorVersion}`,
+    );
+  }
+
+  validateEnumArray(
+    surface.SupportedBackgroundModes,
+    `${field}.Surface.SupportedBackgroundModes`,
+    ['suspend', 'keep-surface-active'],
+    source,
+    errors,
+    true,
+  );
+  if (Array.isArray(surface.SupportedBackgroundModes)
+      && !surface.SupportedBackgroundModes.includes('suspend')) {
+    // Suspend is the default Phone behaviour, so every Surface has to support it.
+    errors.push(`${source}: ${field}.Surface.SupportedBackgroundModes must include "suspend"`);
+  }
+
+  if (typeof surface.HandlesBack !== 'boolean') {
+    errors.push(`${source}: ${field}.Surface.HandlesBack must be a boolean`);
+  }
 }
 
 function validateWidgets(value, source, errors) {

@@ -28,8 +28,7 @@
       "MinimumHeight": 420,
       "Viewports": [
         "desktop",
-        "tablet",
-        "mobile"
+        "tablet"
       ],
       "ElementName": "julos-remote-app"
     }

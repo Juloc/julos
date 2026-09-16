@@ -139,7 +139,24 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": { "enum": ["desktop", "tablet", "mobile"] }
-        }
+        },
+        "ElementName": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$" },
+        "Surface": { "$ref": "#/$defs/surface" }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ContractVersion", "SupportedBackgroundModes", "HandlesBack"],
+      "properties": {
+        "ContractVersion": { "$ref": "#/$defs/semanticVersion" },
+        "SupportedBackgroundModes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["suspend", "keep-surface-active"] }
+        },
+        "HandlesBack": { "type": "boolean" }
       }
     },
     "widget": {

@@ -257,7 +257,7 @@ The host does not provide secrets, raw tokens or unrestricted global state.
 
 Shadow DOM is not a security sandbox. The isolated frontend bridge exposes only versioned typed messages, no Shell DOM, JulOS cookies or arbitrary Core endpoints. Mobile-capable applications implement activate, deactivate, suspend, resume, optional Back and dispose semantics from `MOBILE_PWA.md`.
 
-The target schema adds one exact case-sensitive object to each mobile-capable `Applications[]` entry:
+The schema adds one exact case-sensitive object to each mobile-capable `Applications[]` entry, validated by the `package-manifests` stage since `MOB-006`:
 
 ```json
 "Surface": {
@@ -266,6 +266,8 @@ The target schema adds one exact case-sensitive object to each mobile-capable `A
   "HandlesBack": true
 }
 ```
+
+An application that lists the `mobile` viewport without declaring `Surface` fails manifest validation, and the element the manifest names must implement all six lifecycle methods or the Shell refuses to drive it with `package.surface_contract_unsupported`. Declaring the contract and not implementing it is therefore not a state a package can ship in.
 
 `suspend` is required for every application that lists the `mobile` viewport. `keep-surface-active` is optional capability declaration, never permission for the package to select the user's preference. Unknown fields/major versions fail manifest validation. Exact async methods, deadlines, reasons and state transitions are owned by `MOBILE_PWA.md`.
 

@@ -31,7 +31,15 @@
         "tablet",
         "mobile"
       ],
-      "ElementName": "julos-reference-app"
+      "ElementName": "julos-reference-app",
+      "Surface": {
+        "ContractVersion": "1.0.0",
+        "SupportedBackgroundModes": [
+          "suspend",
+          "keep-surface-active"
+        ],
+        "HandlesBack": true
+      }
     }
   ],
   "Widgets": [
@@ -64,7 +72,7 @@
   ],
   "Frontend": {
     "ModulePath": "frontend/reference-package.js",
-    "Sha256": "0b1c90cb36e8411c88b082dbee9974f98839df48a4923d814f92653d38373533",
+    "Sha256": "6dbe495c61161c938eb207acd171c87d63e7c407d6e744fabde58216a4337abb",
     "ExportedElements": [
       "julos-reference-app",
       "julos-reference-widget"

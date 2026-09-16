@@ -2,7 +2,14 @@
   const read = async () => context.invokeCapability('host.metrics.read', 'latest', {});
 
   class JulOsHostMetricsApp extends HTMLElement {
+    #load = null;
+    #stale = true;
+    #disposed = false;
+
     connectedCallback() {
+      if (this.shadowRoot !== null) {
+        return;
+      }
       const shadow = this.attachShadow({ mode: 'open' });
       const surface = document.createElement('main');
       const heading = document.createElement('h1');
@@ -31,7 +38,50 @@
       };
 
       refresh.addEventListener('click', () => void load());
-      void load();
+      this.#load = load;
+    }
+
+    // --- Surface contract, docs/MOBILE_PWA.md section 10 ---
+
+    async activate() {
+      this.#requireLive();
+      // A metric snapshot read while the Surface was away is stale by definition, so the
+      // Surface reads again rather than showing a number from an unknown time.
+      if (this.#stale) {
+        this.#stale = false;
+        await this.#load?.();
+      }
+    }
+
+    async deactivate() {
+      this.#requireLive();
+      this.#stale = true;
+    }
+
+    async suspend() {
+      this.#requireLive();
+      this.#stale = true;
+    }
+
+    async resume() {
+      this.#requireLive();
+      this.#stale = true;
+    }
+
+    async handleBack() {
+      // This application has no internal navigation, so Back belongs to the Shell.
+      return 'not-handled';
+    }
+
+    async dispose() {
+      this.#load = null;
+      this.#disposed = true;
+    }
+
+    #requireLive() {
+      if (this.#disposed) {
+        throw new Error('package.surface_terminated');
+      }
     }
   }
 

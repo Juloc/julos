@@ -300,6 +300,14 @@ Rules:
 
 Browser and Remote must implement this contract before Phone enables suspension by default. Their current element-disconnect cleanup must be separated from session termination.
 
+Implementation notes from `MOB-006`. `SurfaceScheduler` drives the contract: it chains every request for one Surface onto the previous one, so two Shell events in the same tick cannot interleave calls into a package; a repeated transition produces no calls at all; and every call runs under its deadline with an `AbortSignal`. A package that ignores that signal still cannot hold the Shell, because the deadline rejects independently of whether the package ever settles, and a rejection that arrives because the Shell aborted is reported as the timeout it is rather than as a contract problem the package does not have.
+
+A failed `activate` or `resume` leaves the Surface `faulted`; a failed `deactivate`, `suspend` or `dispose` tears down the frontend realm and records `package.surface_timeout`. Neither touches a runtime Session.
+
+Only the package can stop its own timers, polling and display connections, so the Shell does not claim to do it. What it does instead is measure the observable consequence: `SurfaceActivityMonitor` watches a suspended Surface for DOM mutations in its own subtree and raises one bounded failure if it keeps rendering. The reference package is the conformance application for this — it deliberately owns an interval that writes to its DOM, so "a suspended Surface performs no rendering activity" is measured rather than assumed.
+
+The Remote package stopped claiming the `mobile` viewport in the same change. Its display-connection teardown is not yet separated from session termination, so declaring a Surface it does not honour would be exactly the silent fallback this section forbids.
+
 ## 11. Background execution preference
 
 Default Phone behavior is `suspend`. A user can choose **Keep active in background** from the open app's Shell menu. An application cannot enable this for itself.
