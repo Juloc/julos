@@ -10,6 +10,7 @@ import { NotificationCenterStore, type NotificationCenterSnapshot } from './noti
 import {
   PackageManagerStore,
   type OfficialPackageStoreView,
+  type PackageInstallPreviewView,
   type PackageInstallationView,
   type PackageManagerSnapshot,
 } from './package-manager.js';
@@ -543,8 +544,13 @@ export class CoreApplicationCatalog {
       const action = actionButton(
         text(language, item.updateAvailable ? 'update' : 'install'),
         async () => {
-          await store.installOfficial(item.packageId);
-          await this.#onPackagesChanged();
+          const installed = await store.installOfficial(
+            item.packageId,
+            (preview) => confirmPackageInstall(preview, language),
+          );
+          if (installed) {
+            await this.#onPackagesChanged();
+          }
         },
         this.#onFailure,
       );
@@ -581,21 +587,29 @@ export class CoreApplicationCatalog {
       event.preventDefault();
       const artifactFile = artifact.input.files?.item(0) ?? null;
       const signatureFile = signature.input.files?.item(0) ?? null;
-      if (artifactFile === null || signatureFile === null) {
+      if (artifactFile === null) {
         status.hidden = false;
-        status.textContent = text(language, 'filesRequired');
+        status.textContent = text(language, 'packageRequired');
         status.className = 'core-status core-status-error';
         return;
       }
       status.hidden = false;
       status.className = 'core-status';
       status.textContent = text(language, 'installing');
-      void store.install({
-        artifact: artifactFile,
-        signature: signatureFile,
-        publisherId: publisher.input.value,
-        publisherKeyId: publisherKey.input.value,
-      }).then(async () => {
+      void store.install(
+        {
+          artifact: artifactFile,
+          signature: signatureFile,
+          publisherId: publisher.input.value,
+          publisherKeyId: publisherKey.input.value,
+        },
+        (preview) => confirmPackageInstall(preview, language),
+      ).then(async (installed) => {
+        if (!installed) {
+          status.textContent = text(language, 'installDeclined');
+          return;
+        }
+
         form.reset();
         status.textContent = text(language, 'installed');
         await this.#onPackagesChanged();
@@ -919,6 +933,48 @@ function formatDate(value: string, language: SupportedLanguage): string {
     : value;
 }
 
+/**
+ * Shows what a package is and what it asks for, and returns whether to go ahead.
+ *
+ * One acknowledgement, not a multi-step ceremony: the administrator owns the machine and
+ * the point is that they saw this, not that they worked for it. Signing state and declared
+ * rights are both shown, because signing a package does not make its rights safe.
+ */
+function confirmPackageInstall(
+  preview: PackageInstallPreviewView,
+  language: SupportedLanguage,
+): boolean {
+  const lines: string[] = [`${preview.packageId} ${preview.version}`];
+
+  if (preview.signatureState === 'unsigned') {
+    lines.push(text(language, 'confirmUnsigned'));
+  } else if (preview.signatureState === 'unknown-signed') {
+    lines.push(text(language, 'confirmUnknownPublisher'));
+    lines.push(`${text(language, 'confirmPublisher')}: ${preview.publisherId ?? ''} · ${preview.publicKeyFingerprint ?? ''}`);
+  } else {
+    lines.push(`${text(language, 'confirmPublisher')}: ${preview.publisherId ?? ''}`);
+  }
+
+  if (preview.requiresIsolation) {
+    lines.push(text(language, 'confirmIsolated'));
+  }
+
+  const rights = [...preview.permissions];
+  if (preview.networkAccess) {
+    rights.push(text(language, 'confirmNetwork'));
+  }
+
+  lines.push(rights.length === 0
+    ? text(language, 'confirmNoRights')
+    : `${text(language, 'confirmRights')} ${rights.join(', ')}`);
+
+  if (preview.alreadyInstalled) {
+    lines.push(text(language, 'confirmAlreadyInstalled'));
+  }
+
+  return globalThis.confirm(`${text(language, 'confirmInstallTitle')}\n\n${lines.join('\n')}`);
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
 }
@@ -978,6 +1034,12 @@ const messages = {
     markAllRead: 'Mark all read', markRead: 'Mark read', noNotifications: 'No notifications.', noProblems: 'No problems.',
     advancedInstall: 'Advanced · install external signed package', packageFile: 'Package (.zip)', signatureFile: 'Signature file', publisherId: 'Publisher ID',
     publisherKeyId: 'Publisher key ID', install: 'Install', installing: 'Installing…', installed: 'Installed', filesRequired: 'Package and signature files are required.',
+    packageRequired: 'A package file is required.', installDeclined: 'Not installed.',
+    confirmInstallTitle: 'Confirm this package', confirmPublisher: 'Publisher', confirmUnsigned: 'This package is not signed.',
+    confirmUnknownPublisher: 'The signature is valid, but this installation does not trust the key that made it.',
+    confirmIsolated: 'It will run isolated: no JulOS session, no access to the desktop or to other packages.',
+    confirmRights: 'It asks for:', confirmNetwork: 'network access', confirmNoRights: 'It asks for no additional rights.',
+    confirmAlreadyInstalled: 'A package with this identity is already installed.',
     configuration: 'Configuration JSON', configure: 'Configure',
     devices: 'Devices', thisDevice: 'This device', deviceName: 'Device name', noDevices: 'No devices are registered.',
     devicesDescription: 'Browsers and installed apps you have opened JulOS in. A device stores layout preferences only; it never grants access to your account.',
@@ -1005,6 +1067,12 @@ const messages = {
     markAllRead: 'Alle als gelesen markieren', markRead: 'Als gelesen markieren', noNotifications: 'Keine Benachrichtigungen.', noProblems: 'Keine Probleme.',
     advancedInstall: 'Erweitert · externes signiertes Paket installieren', packageFile: 'Paket (.zip)', signatureFile: 'Signaturdatei', publisherId: 'Publisher-ID',
     publisherKeyId: 'Publisher-Key-ID', install: 'Installieren', installing: 'Installieren…', installed: 'Installiert', filesRequired: 'Paket- und Signaturdatei sind erforderlich.',
+    packageRequired: 'Eine Paketdatei ist erforderlich.', installDeclined: 'Nicht installiert.',
+    confirmInstallTitle: 'Dieses Paket bestätigen', confirmPublisher: 'Herausgeber', confirmUnsigned: 'Dieses Paket ist nicht signiert.',
+    confirmUnknownPublisher: 'Die Signatur ist gültig, aber diese Installation vertraut dem Schlüssel nicht, der sie erstellt hat.',
+    confirmIsolated: 'Es läuft isoliert: keine JulOS-Sitzung, kein Zugriff auf den Desktop oder auf andere Pakete.',
+    confirmRights: 'Es verlangt:', confirmNetwork: 'Netzwerkzugriff', confirmNoRights: 'Es verlangt keine zusätzlichen Rechte.',
+    confirmAlreadyInstalled: 'Ein Paket mit dieser Identität ist bereits installiert.',
     configuration: 'Konfiguration als JSON', configure: 'Konfigurieren',
     devices: 'Geräte', thisDevice: 'Dieses Gerät', deviceName: 'Gerätename', noDevices: 'Keine Geräte registriert.',
     devicesDescription: 'Browser und installierte Apps, in denen du JulOS geöffnet hast. Ein Gerät speichert nur Layout-Einstellungen und gewährt nie Zugriff auf dein Konto.',

@@ -170,8 +170,29 @@ internal sealed class OfficialPackageStoreService : IOfficialPackageStoreService
             .ToArray();
     }
 
+    public async Task<PackageInstallPreview> PreviewAsync(
+        string packageId,
+        CancellationToken cancellationToken = default)
+    {
+        var item = this.catalog.Require(packageId);
+        await using var artifact = File.OpenRead(item.ArtifactPath);
+        var signature = await File.ReadAllBytesAsync(item.SignaturePath, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await this.packages.PreviewAsync(
+            new PackageInstallInput(
+                artifact,
+                signature,
+                item.Entry.ArtifactDigest,
+                item.Entry.PublisherId,
+                item.Entry.PublisherKeyId,
+                OperationKey(item.Entry)),
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<PackageInstallationSnapshot> InstallOrUpdateAsync(
         string packageId,
+        string? acknowledgementDigest = null,
         CancellationToken cancellationToken = default)
     {
         var item = this.catalog.Require(packageId);
@@ -190,7 +211,9 @@ internal sealed class OfficialPackageStoreService : IOfficialPackageStoreService
                     item.Entry.ArtifactDigest,
                     item.Entry.PublisherId,
                     item.Entry.PublisherKeyId,
-                    OperationKey(item.Entry)),
+                    OperationKey(item.Entry),
+                    PublisherPublicKeySpki: null,
+                    acknowledgementDigest),
                 cancellationToken).ConfigureAwait(false);
         }
         else if (!string.Equals(existing.Version, item.Entry.Version, StringComparison.Ordinal))

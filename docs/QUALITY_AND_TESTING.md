@@ -305,6 +305,8 @@ Runtime Manager is security-critical. Tests verify:
 - Content Security Policy validation
 - artifact integrity mismatch and claimed-invalid-signature rejection
 - unsigned/unknown trust warning and authorized acknowledgement
+- an install acknowledgement cannot be replayed for different bytes, rights, publisher or operation
+- a package that is trusted and asks for nothing is installed without a confirmation step
 - unknown native frontend isolation from Shell DOM, cookies and arbitrary Core APIs
 - Host Connector revocation
 - client-device cross-user isolation and non-authentication behavior

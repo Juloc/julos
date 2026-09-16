@@ -9,17 +9,33 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace JulOS.Server.Packages;
 
+/// <summary>Confirms installing one official package.</summary>
+/// <param name="AcknowledgementDigest">The digest its preview produced, when one is required.</param>
+internal sealed record InstallOfficialPackageRequest(string? AcknowledgementDigest);
+
 internal sealed class InstallPackageForm
 {
     public required IFormFile Artifact { get; init; }
 
-    public required IFormFile Signature { get; init; }
+    /// <summary>The publisher signature, absent for an unsigned artifact.</summary>
+    public IFormFile? Signature { get; init; }
 
     public string? ExpectedDigest { get; init; }
 
-    public required string PublisherId { get; init; }
+    /// <summary>Claimed publisher identity, absent for an unsigned artifact.</summary>
+    public string? PublisherId { get; init; }
 
-    public required string PublisherKeyId { get; init; }
+    /// <summary>Claimed publisher key identity, absent for an unsigned artifact.</summary>
+    public string? PublisherKeyId { get; init; }
+
+    /// <summary>
+    /// Base64 SubjectPublicKeyInfo for a publisher this installation has no configured key
+    /// for. It can only ever produce an unknown-signed result.
+    /// </summary>
+    public string? PublisherPublicKeySpki { get; init; }
+
+    /// <summary>The acknowledgement digest the preview produced, when one is required.</summary>
+    public string? AcknowledgementDigest { get; init; }
 
     public required string OperationKey { get; init; }
 }
@@ -35,9 +51,16 @@ internal static class PackageEndpoints
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageRead);
         group.MapGet("/catalog", ListCatalogAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageRead);
+        group.MapPost("/catalog/{packageId}/previews", PreviewOfficialAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
+            .RequireJulOsAntiforgery();
         group.MapPost("/catalog/{packageId}/install", InstallOfficialAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
             .RequireJulOsAntiforgery();
+        group.MapPost("/previews", PreviewAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
+            .RequireJulOsAntiforgery()
+            .DisableAntiforgery();
         group.MapPost("/install", InstallAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.PackageManage)
             .RequireJulOsAntiforgery()
@@ -84,9 +107,29 @@ internal static class PackageEndpoints
                 && !string.Equals(item.Installation.Version, item.Package.Version, StringComparison.Ordinal))).ToArray());
     }
 
+    private static async Task<IResult> PreviewOfficialAsync(
+        HttpContext context,
+        string packageId,
+        IAntiforgery antiforgery,
+        IOfficialPackageStoreService store,
+        CancellationToken cancellationToken)
+    {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+        try
+        {
+            return TypedResults.Ok(
+                await store.PreviewAsync(packageId, cancellationToken).ConfigureAwait(false));
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
+    }
+
     private static async Task<IResult> InstallOfficialAsync(
         HttpContext context,
         string packageId,
+        InstallOfficialPackageRequest? request,
         IAntiforgery antiforgery,
         IOfficialPackageStoreService store,
         SafeModeState safeMode,
@@ -104,7 +147,9 @@ internal static class PackageEndpoints
 
         try
         {
-            return TypedResults.Ok(ToResponse(await store.InstallOrUpdateAsync(packageId, cancellationToken).ConfigureAwait(false)));
+            return TypedResults.Ok(ToResponse(await store
+                .InstallOrUpdateAsync(packageId, request?.AcknowledgementDigest, cancellationToken)
+                .ConfigureAwait(false)));
         }
         catch (PackageManagementException exception)
         {
@@ -120,30 +165,85 @@ internal static class PackageEndpoints
         CancellationToken cancellationToken)
     {
         await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
-        if (form.Artifact.Length <= 0 || form.Signature.Length is <= 0 or > 4096)
+        var input = await ReadInputAsync(form, cancellationToken).ConfigureAwait(false);
+        if (input is null)
         {
             return Results.BadRequest(new { code = "package.upload_invalid", detail = "Package upload is invalid." });
         }
 
-        await using var artifact = form.Artifact.OpenReadStream();
-        await using var signatureStream = form.Signature.OpenReadStream();
-        using var signatureBuffer = new MemoryStream();
-        await signatureStream.CopyToAsync(signatureBuffer, cancellationToken).ConfigureAwait(false);
+        await using var artifact = input.Value.Artifact;
         try
         {
-            var package = await service.InstallAsync(new PackageInstallInput(
-                artifact,
-                signatureBuffer.ToArray(),
-                form.ExpectedDigest,
-                form.PublisherId,
-                form.PublisherKeyId,
-                form.OperationKey), cancellationToken).ConfigureAwait(false);
+            var package = await service.InstallAsync(input.Value.Input, cancellationToken).ConfigureAwait(false);
             return TypedResults.Created($"/api/v1/packages/{package.PackageId}", ToResponse(package));
         }
         catch (PackageManagementException exception)
         {
             return Failure(exception);
         }
+    }
+
+    /// <summary>Reports what installing the uploaded artifact would mean, changing nothing.</summary>
+    private static async Task<IResult> PreviewAsync(
+        HttpContext context,
+        [FromForm] InstallPackageForm form,
+        IAntiforgery antiforgery,
+        IPackageManagementService service,
+        CancellationToken cancellationToken)
+    {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+        var input = await ReadInputAsync(form, cancellationToken).ConfigureAwait(false);
+        if (input is null)
+        {
+            return Results.BadRequest(new { code = "package.upload_invalid", detail = "Package upload is invalid." });
+        }
+
+        await using var artifact = input.Value.Artifact;
+        try
+        {
+            return TypedResults.Ok(await service
+                .PreviewAsync(input.Value.Input, cancellationToken)
+                .ConfigureAwait(false));
+        }
+        catch (PackageManagementException exception)
+        {
+            return Failure(exception);
+        }
+    }
+
+    /// <summary>Reads one upload into the shared install input, or reports it unusable.</summary>
+    /// <remarks>
+    /// Preview and install take the identical upload on purpose: the acknowledgement is a
+    /// digest over what was uploaded, so the two calls have to be able to see the same bytes.
+    /// </remarks>
+    private static async Task<(Stream Artifact, PackageInstallInput Input)?> ReadInputAsync(
+        InstallPackageForm form,
+        CancellationToken cancellationToken)
+    {
+        if (form.Artifact.Length <= 0 || form.Signature?.Length is <= 0 or > 4096)
+        {
+            return null;
+        }
+
+        var signature = Array.Empty<byte>();
+        if (form.Signature is not null)
+        {
+            await using var stream = form.Signature.OpenReadStream();
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+            signature = buffer.ToArray();
+        }
+
+        var artifact = form.Artifact.OpenReadStream();
+        return (artifact, new PackageInstallInput(
+            artifact,
+            signature,
+            form.ExpectedDigest,
+            form.PublisherId ?? string.Empty,
+            form.PublisherKeyId ?? string.Empty,
+            form.OperationKey,
+            form.PublisherPublicKeySpki,
+            form.AcknowledgementDigest));
     }
 
     private static async Task<IResult> ConfigureAsync(
@@ -263,6 +363,9 @@ internal static class PackageEndpoints
         {
             "package.not_found" or "package.catalog_not_found" => StatusCodes.Status404NotFound,
             "package.already_installed" => StatusCodes.Status409Conflict,
+            // The same upload is accepted once its preview has been confirmed, so this is a
+            // state conflict rather than a malformed request.
+            "package.acknowledgement_required" => StatusCodes.Status409Conflict,
             "package.configuration_invalid" => StatusCodes.Status422UnprocessableEntity,
             _ => StatusCodes.Status400BadRequest,
         };

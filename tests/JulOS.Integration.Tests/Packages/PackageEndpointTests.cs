@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 
 using JulOS.Contracts.Authentication;
+using JulOS.Application.Packages;
 using JulOS.Contracts.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.Integration.Tests.Persistence;
@@ -157,11 +158,52 @@ public sealed class PackageEndpointTests
         }
     }
 
+    /// <summary>Confirms the upload, then installs it with the acknowledgement that produced.</summary>
     private static async Task<HttpResponseMessage> InstallAsync(
         HttpClient client,
         ECDsa signingKey,
         byte[] archive,
         string? expectedDigest)
+    {
+        var operationKey = Guid.NewGuid().ToString("N");
+        string? acknowledgement = null;
+
+        using (var preview = await SendUploadAsync(
+            client,
+            "/api/v1/packages/previews",
+            signingKey,
+            archive,
+            expectedDigest,
+            operationKey,
+            acknowledgement: null).ConfigureAwait(false))
+        {
+            if (preview.StatusCode == HttpStatusCode.OK)
+            {
+                var assessed = await preview.Content
+                    .ReadFromJsonAsync<PackageInstallPreview>()
+                    .ConfigureAwait(false);
+                acknowledgement = assessed?.AcknowledgementDigest;
+            }
+        }
+
+        return await SendUploadAsync(
+            client,
+            "/api/v1/packages/install",
+            signingKey,
+            archive,
+            expectedDigest,
+            operationKey,
+            acknowledgement).ConfigureAwait(false);
+    }
+
+    private static async Task<HttpResponseMessage> SendUploadAsync(
+        HttpClient client,
+        string path,
+        ECDsa signingKey,
+        byte[] archive,
+        string? expectedDigest,
+        string operationKey,
+        string? acknowledgement)
     {
         var signature = signingKey.SignData(
             archive,
@@ -173,15 +215,20 @@ public sealed class PackageEndpointTests
             { new ByteArrayContent(signature) { Headers = { ContentType = new MediaTypeHeaderValue("application/octet-stream") } }, "Signature", "package.zip.sig" },
             { new StringContent(PublisherId), "PublisherId" },
             { new StringContent(PublisherKeyId), "PublisherKeyId" },
-            { new StringContent(Guid.NewGuid().ToString("N")), "OperationKey" },
+            { new StringContent(operationKey), "OperationKey" },
         };
         if (expectedDigest is not null)
         {
             content.Add(new StringContent(expectedDigest), "ExpectedDigest");
         }
 
+        if (acknowledgement is not null)
+        {
+            content.Add(new StringContent(acknowledgement), "AcknowledgementDigest");
+        }
+
         var token = await ReadAntiforgeryTokenAsync(client).ConfigureAwait(false);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/packages/install") { Content = content };
+        using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = content };
         request.Headers.Add(token.HeaderName, token.Token);
         return await client.SendAsync(request).ConfigureAwait(false);
     }

@@ -1,5 +1,28 @@
 ﻿namespace JulOS.Contracts.Packages;
 
+/// <summary>How much is known about who produced an installed package.</summary>
+/// <remarks>
+/// The same names the catalog uses for the same distinction, because an administrator
+/// reading one surface after the other should not have to learn two vocabularies for it.
+/// A package never persists an invalid signature: a claim that cannot be proved fails the
+/// install rather than becoming a state.
+/// </remarks>
+public static class PackageSignatureStateNames
+{
+    /// <summary>Signed by a key this installation is configured to trust.</summary>
+    public const string TrustedSigned = "trusted-signed";
+
+    /// <summary>Cryptographically valid, but signed by a key this installation does not trust.</summary>
+    public const string UnknownSigned = "unknown-signed";
+
+    /// <summary>Carries no publisher signature at all.</summary>
+    /// <remarks>Named NotSigned rather than Unsigned so it is not read as a numeric type.</remarks>
+    public const string NotSigned = "unsigned";
+
+    /// <summary>Every package signature state name.</summary>
+    public static IReadOnlyList<string> All { get; } = [TrustedSigned, UnknownSigned, NotSigned];
+}
+
 /// <summary>Current state of one installed package.</summary>
 /// <param name="InstallationId">Installation identity.</param>
 /// <param name="PackageId">Stable package identity.</param>

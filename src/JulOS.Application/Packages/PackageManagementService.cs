@@ -29,16 +29,62 @@ public sealed record PackageInstallationSnapshot(
 /// <param name="Artifact">Complete package archive stream.</param>
 /// <param name="Signature">Publisher signature over the exact package archive bytes.</param>
 /// <param name="ExpectedDigest">Optional expected SHA-256 digest of the complete package archive.</param>
-/// <param name="PublisherId">Trusted publisher identity.</param>
-/// <param name="PublisherKeyId">Trusted publisher key identity.</param>
+/// <param name="PublisherId">Claimed publisher identity, or empty when the artifact is unsigned.</param>
+/// <param name="PublisherKeyId">Claimed publisher key identity, or empty when unsigned.</param>
 /// <param name="OperationKey">Per-caller idempotency key.</param>
+/// <param name="PublisherPublicKeySpki">
+/// Base64 SubjectPublicKeyInfo supplied with the upload, used only when this installation has
+/// no configured key for the claimed identity. It can produce an unknown-signed result and
+/// never a trusted one.
+/// </param>
+/// <param name="AcknowledgementDigest">
+/// The acknowledgement digest a preview produced, required whenever the artifact is not
+/// trusted-signed or declares rights that have to be disclosed.
+/// </param>
 public sealed record PackageInstallInput(
     Stream Artifact,
     byte[] Signature,
     string? ExpectedDigest,
     string PublisherId,
     string PublisherKeyId,
-    string OperationKey);
+    string OperationKey,
+    string? PublisherPublicKeySpki = null,
+    string? AcknowledgementDigest = null);
+
+/// <summary>What installing one uploaded artifact would mean, without installing it.</summary>
+/// <param name="PackageId">The package identity the manifest declares.</param>
+/// <param name="Version">The version the manifest declares.</param>
+/// <param name="ArtifactDigest">The verified artifact digest.</param>
+/// <param name="SignatureState">How much is known about who produced it.</param>
+/// <param name="PublisherId">Who claimed to produce it, or null when unsigned.</param>
+/// <param name="KeyId">Which key signed it, or null when unsigned.</param>
+/// <param name="PublicKeyFingerprint">The fingerprint of that key, or null when unsigned.</param>
+/// <param name="Permissions">The permissions the manifest declares, ordinally sorted.</param>
+/// <param name="RuntimeKind">The worker runtime kind the manifest declares.</param>
+/// <param name="NetworkAccess">Whether the worker requests network access.</param>
+/// <param name="CriticalRightsDigest">The digest over the declared rights.</param>
+/// <param name="Warnings">Stable warning codes, ordinally sorted.</param>
+/// <param name="RequiresIsolation">Whether the package would run on the isolated path.</param>
+/// <param name="AcknowledgementRequired">Whether installing requires the acknowledgement below.</param>
+/// <param name="AcknowledgementDigest">The digest to send back with the install.</param>
+/// <param name="AlreadyInstalled">Whether a package with this identity is already installed.</param>
+public sealed record PackageInstallPreview(
+    string PackageId,
+    string Version,
+    string ArtifactDigest,
+    string SignatureState,
+    string? PublisherId,
+    string? KeyId,
+    string? PublicKeyFingerprint,
+    IReadOnlyList<string> Permissions,
+    string RuntimeKind,
+    bool NetworkAccess,
+    string CriticalRightsDigest,
+    IReadOnlyList<string> Warnings,
+    bool RequiresIsolation,
+    bool AcknowledgementRequired,
+    string AcknowledgementDigest,
+    bool AlreadyInstalled);
 
 /// <summary>Package configuration values and expected revision.</summary>
 /// <param name="Values">Validated non-secret configuration values.</param>
@@ -59,6 +105,18 @@ public interface IPackageManagementService
 {
     /// <summary>Lists all package installations.</summary>
     Task<IReadOnlyList<PackageInstallationSnapshot>> ListAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports what installing one uploaded artifact would mean, changing nothing.
+    /// </summary>
+    /// <remarks>
+    /// The preview mutates nothing and stores nothing. Its acknowledgement is a digest over
+    /// the whole assessment and the operation it is for, so the install recomputes it from
+    /// what was actually uploaded rather than trusting what the caller says it approved.
+    /// </remarks>
+    Task<PackageInstallPreview> PreviewAsync(
+        PackageInstallInput input,
         CancellationToken cancellationToken = default);
 
     /// <summary>Verifies and installs one package idempotently.</summary>

@@ -1519,6 +1519,8 @@ Deliver:
 - administrator acknowledgement bound to that digest and operation
 - pause automatic update when source, key, trust or critical rights change
 
+Landed so far: the four states with an optional signature, the preview and its digest-bound acknowledgement on both the upload and the official-store paths, and the Desktop confirmation that owns both calls. Still open: pausing an automatic update when the source, key, trust state or critical rights changed.
+
 Acceptance:
 
 - unsigned and cryptographically valid unknown-signed artifacts can install after warning through isolated paths

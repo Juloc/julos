@@ -4,6 +4,7 @@ using System.Text.Json;
 
 using JulOS.Application.Concurrency;
 using JulOS.Application.Packages;
+using JulOS.Contracts.Packages;
 using JulOS.Domain.Packages;
 using JulOS.Infrastructure.Persistence.Core;
 using JulOS.PackageSdk;
@@ -138,6 +139,44 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         WorkerHealthy: false,
         ArtifactDigest: string.Empty);
 
+    public async Task<PackageInstallPreview> PreviewAsync(
+        PackageInstallInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        await using var artifact = await BufferArtifactAsync(input.Artifact, cancellationToken)
+            .ConfigureAwait(false);
+        var evaluation = this.EvaluateArtifact(artifact, input);
+        using var archive = new ZipArchive(artifact, ZipArchiveMode.Read, leaveOpen: true);
+        var manifest = await ReadManifestAsync(archive, cancellationToken).ConfigureAwait(false);
+        RequirePublisherMatch(manifest, evaluation);
+
+        var assessment = Assess(evaluation, manifest);
+        var alreadyInstalled = await this.context.PackageInstallations
+            .AsNoTracking()
+            .AnyAsync(row => row.PackageId == manifest.PackageId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new PackageInstallPreview(
+            assessment.PackageId,
+            assessment.Version,
+            assessment.ArtifactDigest,
+            SignatureStateName(assessment.SignatureState),
+            assessment.PublisherId,
+            assessment.KeyId,
+            assessment.PublicKeyFingerprint,
+            [.. manifest.Permissions.Order(StringComparer.Ordinal)],
+            manifest.Runtime.Kind,
+            manifest.Runtime.NetworkAccess,
+            assessment.CriticalRightsDigest,
+            assessment.Warnings,
+            PackageIsolation.IsRequiredFor(assessment.SignatureState),
+            assessment.RequiresAcknowledgement,
+            assessment.Acknowledgement(input.OperationKey),
+            alreadyInstalled);
+    }
+
     public async Task<PackageInstallationSnapshot> InstallAsync(
         PackageInstallInput input,
         CancellationToken cancellationToken = default)
@@ -155,33 +194,19 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
             }
 
             await using var artifact = await BufferArtifactAsync(input.Artifact, cancellationToken).ConfigureAwait(false);
-            var verifiedArtifact = VerifyArtifact(artifact, input);
+            var evaluation = this.EvaluateArtifact(artifact, input);
             using var archive = new ZipArchive(artifact, ZipArchiveMode.Read, leaveOpen: true);
-            var manifestEntry = archive.GetEntry("manifest.json")
-                ?? throw Failure("package.manifest_missing", "Package archive has no manifest.json.");
-            byte[] manifestBytes;
-            await using (var manifestStream = manifestEntry.Open())
-            using (var manifestBuffer = new MemoryStream())
-            {
-                await manifestStream.CopyToAsync(manifestBuffer, cancellationToken).ConfigureAwait(false);
-                manifestBytes = manifestBuffer.ToArray();
-            }
+            var manifest = await ReadManifestAsync(archive, cancellationToken).ConfigureAwait(false);
+            RequirePublisherMatch(manifest, evaluation);
 
-            PackageManifest manifest;
-            try
+            // Recomputed from what was uploaded rather than taken from the request, so an
+            // approval cannot be presented for different bytes, rights or operation.
+            var assessment = Assess(evaluation, manifest);
+            if (!assessment.IsAcknowledgedBy(input.AcknowledgementDigest, input.OperationKey))
             {
-                using var manifestStream = new MemoryStream(manifestBytes, writable: false);
-                manifest = PackageManifestReader.Read(manifestStream);
-            }
-            catch (PackageManifestException exception)
-            {
-                // The reader raises its own exception type so JulOS.PackageSdk stays free of
-                // this service's contract; translate it here, the one place that calls it.
-                throw Failure(exception.Code, exception.Message, exception);
-            }
-            if (!string.Equals(manifest.PublisherId, input.PublisherId, StringComparison.Ordinal))
-            {
-                throw Failure("package.publisher_mismatch", "Manifest publisher does not match the verified publisher.");
+                throw Failure(
+                    "package.acknowledgement_required",
+                    "Installing this package requires the acknowledgement its preview produced.");
             }
 
             var existing = await this.context.PackageInstallations
@@ -198,11 +223,9 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 Id = Guid.CreateVersion7(now),
                 PackageId = manifest.PackageId,
                 State = PackageInstallationState.Installing,
-                // The verifier accepts only a configured trusted publisher today, so an
-                // artifact that reached this line is trusted-signed. Recording it explicitly
-                // rather than leaving the column to a default keeps the value meaningful the
-                // moment PKG-014 makes the other states reachable.
-                SignatureState = PackageSignatureState.TrustedSigned,
+                // What verification concluded, not what the caller claimed: everything that
+                // is not trusted-signed runs on the isolated path from here on.
+                SignatureState = evaluation.SignatureState,
                 Revision = 1,
             };
             this.context.PackageInstallations.Add(row);
@@ -221,7 +244,7 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 var metadata = new InstalledPackageMetadata(
                     manifest.PackageId,
                     manifest.Version,
-                    verifiedArtifact.DigestSha256,
+                    evaluation.DigestSha256,
                     input.PublisherId,
                     input.PublisherKeyId,
                     manifest,
@@ -637,6 +660,110 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
         }
         File.Move(temporary, path, overwrite: true);
     }
+
+    private static string SignatureStateName(PackageSignatureState state) => state switch
+    {
+        PackageSignatureState.TrustedSigned => PackageSignatureStateNames.TrustedSigned,
+        PackageSignatureState.UnknownSigned => PackageSignatureStateNames.UnknownSigned,
+        PackageSignatureState.NotSigned => PackageSignatureStateNames.NotSigned,
+        _ => throw new InvalidOperationException($"Unmapped package signature state '{state}'."),
+    };
+
+    /// <summary>Reads and validates the manifest inside an opened package archive.</summary>
+    private static async Task<PackageManifest> ReadManifestAsync(
+        ZipArchive archive,
+        CancellationToken cancellationToken)
+    {
+        var entry = archive.GetEntry("manifest.json")
+            ?? throw Failure("package.manifest_missing", "Package archive has no manifest.json.");
+
+        byte[] bytes;
+        await using (var stream = entry.Open())
+        using (var buffer = new MemoryStream())
+        {
+            await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+            bytes = buffer.ToArray();
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            return PackageManifestReader.Read(stream);
+        }
+        catch (PackageManifestException exception)
+        {
+            // The reader raises its own exception type so JulOS.PackageSdk stays free of this
+            // service's contract; translate it here, the one place that calls it.
+            throw Failure(exception.Code, exception.Message, exception);
+        }
+    }
+
+    /// <summary>Evaluates the uploaded artifact once, for both preview and install.</summary>
+    private PackageArtifactEvaluation EvaluateArtifact(MemoryStream artifact, PackageInstallInput input)
+    {
+        if (!artifact.TryGetBuffer(out var buffer))
+        {
+            throw Failure("package.artifact_buffer_invalid", "Package archive could not be verified.");
+        }
+
+        var artifactBytes = buffer.AsSpan(0, checked((int)artifact.Length));
+        var expectedDigest = string.IsNullOrWhiteSpace(input.ExpectedDigest)
+            ? Convert.ToHexStringLower(SHA256.HashData(artifactBytes))
+            : input.ExpectedDigest;
+
+        try
+        {
+            return this.verifier.Evaluate(
+                artifactBytes,
+                input.Signature,
+                expectedDigest,
+                input.PublisherId,
+                input.PublisherKeyId,
+                input.PublisherPublicKeySpki);
+        }
+        catch (PackageArtifactVerificationException exception)
+        {
+            // The verifier raises its own exception type so it stays free of the package
+            // lifecycle contract; translate it at this one boundary.
+            throw Failure(exception.Code, exception.Message, exception);
+        }
+    }
+
+    /// <summary>Refuses a manifest that names a different publisher than the signature did.</summary>
+    private static void RequirePublisherMatch(PackageManifest manifest, PackageArtifactEvaluation evaluation)
+    {
+        if (evaluation.Publisher is null)
+        {
+            // An unsigned artifact claims no publisher, so there is nothing for the manifest
+            // to contradict; what it declares is just part of what an administrator is shown.
+            return;
+        }
+
+        if (!string.Equals(manifest.PublisherId, evaluation.Publisher, StringComparison.Ordinal))
+        {
+            throw Failure(
+                "package.publisher_mismatch",
+                "Manifest publisher does not match the verified publisher.");
+        }
+    }
+
+    /// <summary>Builds the assessment an administrator confirms.</summary>
+    private static PackageTrustAssessment Assess(
+        PackageArtifactEvaluation evaluation,
+        PackageManifest manifest) =>
+        PackageTrustAssessment.For(
+            evaluation.DigestSha256,
+            manifest.PackageId,
+            manifest.Version,
+            evaluation.SignatureState,
+            evaluation.Publisher,
+            evaluation.KeyId,
+            evaluation.PublicKeyFingerprint,
+            new PackageCriticalRights(
+                manifest.Permissions,
+                manifest.Runtime.Kind,
+                manifest.Runtime.Image,
+                manifest.Runtime.NetworkAccess));
 
     private VerifiedPackageArtifact VerifyArtifact(MemoryStream artifact, PackageInstallInput input)
     {

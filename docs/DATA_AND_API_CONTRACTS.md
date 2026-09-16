@@ -863,7 +863,11 @@ Request DTOs, registration idempotency/cookie behavior, response scopes and HTTP
 
 ```text
 GET  /api/v1/packages
+POST /api/v1/packages/previews
 POST /api/v1/packages/install
+GET  /api/v1/packages/catalog
+POST /api/v1/packages/catalog/{packageId}/previews
+POST /api/v1/packages/catalog/{packageId}/install
 GET  /api/v1/packages/{packageId}
 POST /api/v1/packages/{packageId}/configure
 POST /api/v1/packages/{packageId}/enable
@@ -874,6 +878,8 @@ DELETE /api/v1/packages/{packageId}
 GET  /api/v1/packages/{packageId}/health
 GET  /api/v1/packages/{packageId}/logs
 ```
+
+Since `PKG-014` a preview precedes an install that is not silently safe. The preview takes the identical upload, changes nothing and returns an acknowledgement digest over the whole assessment and the operation key; the install repeats the upload with that digest, and the server recomputes it from what was uploaded rather than trusting the claim. A missing or foreign acknowledgement returns `409 package.acknowledgement_required`. The signature parts of the upload are optional: an artifact with no signature is `unsigned`, one with a signature and a supplied key this installation does not know is `unknown-signed`, and a claimed signature that cannot be completed fails. The complete trust contract is `PACKAGES.md`.
 
 ### 5.6 Host Connectors
 
