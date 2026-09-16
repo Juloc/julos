@@ -5,6 +5,7 @@ using JulOS.Application.Packages;
 using JulOS.Contracts.Diagnostics;
 using JulOS.Infrastructure.Agents;
 using JulOS.Infrastructure.Authorization;
+using JulOS.Infrastructure.Catalog;
 using JulOS.Infrastructure.Health;
 using JulOS.Infrastructure.Packages;
 using JulOS.Infrastructure.Persistence.Core;
@@ -70,6 +71,7 @@ var coreDatabase = CoreDatabaseConfiguration.Read(builder.Configuration);
 
 builder.Services.AddJulOsErrorHandling();
 builder.Services.AddJulOsCorePersistence(coreDatabase);
+builder.Services.AddJulOsCatalogSources(builder.Configuration);
 builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
 builder.Services.AddJulOsWebAppProxy(builder.Configuration);
 builder.Services.AddHostedService<RemoteSessionProvisioningWorker>();

@@ -503,3 +503,33 @@ be one nothing consumes.
 
 Reason: the credential model follows what the secret store actually stores, and the transport
 that carries it is the narrowest one that works.
+
+## D046 — The Git catalog adapter invokes git as a fixed argument vector
+
+**Status:** Accepted
+
+Reading a Git repository is not something the .NET platform can do, so a catalog source of
+kind `git` needs either the `git` binary in the Server image or a native Git library. JulOS
+ships `git` in the runtime image and invokes it directly, with no shell between: a fixed
+argument list, everything an administrator configured passed positionally after `--`, so a
+location or a reference beginning with a hyphen is a value rather than an option. This is not
+the arbitrary-command execution the prohibited-shortcuts list forbids; it is one program with
+one job and no interpreter in front of it. The native-library alternative was rejected because
+it moves the same capability into the process as a per-architecture binary dependency without
+removing anything.
+
+The clone is shallow, single-branch, tag-free and never recursive. History is not part of a
+catalog, and a submodule points at a repository the administrator did not configure. The
+resolved commit becomes the source digest, which is what makes a refresh from a moving branch
+reproducible.
+
+Only `https://` remotes are accepted. The other transports Git speaks authenticate with a private key, and
+supporting them would mean writing that key to disk for the duration of a refresh. The HTTPS
+credential travels in the child process environment as an `http.extraHeader`, never on the
+command line, because a process list is readable by anything running as the same user. Git
+runs with `GIT_TERMINAL_PROMPT=0` and a five-minute deadline, so an unauthenticated or
+unresponsive remote is a failed refresh rather than a process that waits.
+
+Reason: the capability has to exist somewhere, and a single fixed invocation of a well-known
+tool is easier to audit than either a hand-written Git protocol client or a native library
+loaded into the Server process.

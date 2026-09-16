@@ -56,11 +56,15 @@ LABEL org.opencontainers.image.title="JulOS Server" \
       org.opencontainers.image.source="https://github.com/Juloc/julos" \
       org.opencontainers.image.version="${JULOS_VERSION}"
 
+# git serves the Git catalog-source adapter (CAT-002, decision D046). It is invoked as a
+# fixed argument vector with no shell between, and only to materialize one commit into
+# /var/lib/julos/data/catalog-work.
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends gosu libgssapi-krb5-2 \
+    && apt-get install --yes --no-install-recommends git gosu libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -o "$APP_UID" -g "$APP_UID" \
         /var/lib/julos/data \
+        /var/lib/julos/data/catalog-work \
         /var/lib/julos/packages \
         /var/lib/julos/data-protection
 

@@ -7,6 +7,7 @@ using JulOS.Application.Operations;
 using JulOS.Application.Secrets;
 using JulOS.Contracts.Catalog;
 using JulOS.Domain.Catalog;
+using JulOS.Domain.Observability;
 using JulOS.Infrastructure.Catalog;
 using JulOS.Infrastructure.Identifiers;
 using JulOS.Infrastructure.Persistence.Core;
@@ -241,6 +242,84 @@ public sealed class EfCatalogRefreshServiceTests : IDisposable
     }
 
     [TestMethod]
+    public async Task ASignedDefinitionIsUnknownSignedUntilTheKeyIsTrusted()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        this.PublishSigned(key);
+        var source = await this.AddSourceAsync();
+
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var cached = await this.context.CatalogEntryCache.AsNoTracking().SingleAsync();
+        Assert.AreEqual(
+            CatalogSignatureState.UnknownSigned,
+            cached.SignatureState,
+            "A key the source published is observed, not trusted; reading over TLS is not publisher trust.");
+        Assert.AreEqual("juloc-official", cached.PublisherId);
+        Assert.AreEqual(64, cached.TrustAssessmentDigest.Length);
+    }
+
+    [TestMethod]
+    public async Task ASignedDefinitionIsTrustedSignedWhenTheKeyWasAlreadyTrusted()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        this.PublishSigned(key);
+        var source = await this.AddSourceAsync();
+        await this.TrustPublishedKeyAsync(source, key);
+
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var cached = await this.context.CatalogEntryCache.AsNoTracking().SingleAsync();
+        Assert.AreEqual(CatalogSignatureState.TrustedSigned, cached.SignatureState);
+    }
+
+    [TestMethod]
+    public async Task ASignatureThatDoesNotVerifyIsInvalidRatherThanUnsigned()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var other = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        // The envelope names the published key but was signed with a different one.
+        this.PublishSigned(key, signWith: other);
+        var source = await this.AddSourceAsync();
+
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var cached = await this.context.CatalogEntryCache.AsNoTracking().SingleAsync();
+        Assert.AreEqual(
+            CatalogSignatureState.InvalidSignature,
+            cached.SignatureState,
+            "An artifact that claims authenticity and cannot prove it is not merely unsigned.");
+    }
+
+    [TestMethod]
+    public async Task AFailingSourceRaisesOneProblemAndASucceedingRefreshResolvesIt()
+    {
+        this.PublishCatalog(("home-assistant", "2026.8.0"));
+        var source = await this.AddSourceAsync();
+        var index = Path.Combine(this.root, "catalog.json");
+        var valid = await File.ReadAllTextAsync(index);
+        await File.WriteAllTextAsync(index, "not json");
+
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var problem = await this.context.Problems.AsNoTracking().SingleAsync();
+        Assert.AreEqual(ProblemState.Active, problem.State);
+        Assert.AreEqual(
+            2,
+            problem.ObservationCount,
+            "A source failing twice is one condition an administrator should see, not two.");
+
+        await File.WriteAllTextAsync(index, valid);
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        this.context.ChangeTracker.Clear();
+        var resolved = await this.context.Problems.AsNoTracking().SingleAsync();
+        Assert.AreEqual(ProblemState.Resolved, resolved.State);
+        Assert.IsNotNull(resolved.ResolvedAtUtc);
+    }
+
+    [TestMethod]
     public async Task TheCachedCatalogIsReadableAndCarriesTheRefreshState()
     {
         this.PublishCatalog(("home-assistant", "2026.8.0"), ("hermes", "1.0.0"));
@@ -448,6 +527,101 @@ public sealed class EfCatalogRefreshServiceTests : IDisposable
             ]
           }
           """;
+
+    /// <summary>Publishes one signed application together with the key set that names its key.</summary>
+    private void PublishSigned(ECDsa key, ECDsa? signWith = null)
+    {
+        const string AppId = "home-assistant";
+        const string Version = "2026.8.0";
+        const string KeyId = "official-2026-01";
+        const string PublisherId = "juloc-official";
+
+        var directory = Path.Combine(this.root, "apps", AppId, Version);
+        _ = Directory.CreateDirectory(directory);
+        var definition = Definition(AppId, Version);
+        File.WriteAllText(Path.Combine(directory, "app.json"), definition);
+
+        var spki = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
+        var fingerprint = CatalogSignatureVerifier.Fingerprint(spki);
+        var digest = CatalogCanonicalJson.DefinitionDigest(Encoding.UTF8.GetBytes(definition));
+        var signature = Convert.ToBase64String((signWith ?? key).SignData(
+            CatalogSignatureInput.For(digest),
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
+
+        File.WriteAllText(
+            Path.Combine(directory, "signature.json"),
+            $$"""
+              {
+                "schemaVersion": 1,
+                "publisherId": "{{PublisherId}}",
+                "keyId": "{{KeyId}}",
+                "publicKeyFingerprint": "{{fingerprint}}",
+                "algorithm": "{{CatalogSignatureInput.Algorithm}}",
+                "artifactSha256": "{{digest}}",
+                "createdAtUtc": "2026-09-01T00:00:00Z",
+                "signature": "{{signature}}"
+              }
+              """);
+
+        var keys = $$"""
+                   {
+                     "schema": "app-catalog-keyset.v1",
+                     "publisherId": "{{PublisherId}}",
+                     "keys": [
+                       {
+                         "keyId": "{{KeyId}}",
+                         "algorithm": "{{CatalogSignatureInput.Algorithm}}",
+                         "publicKeySpkiBase64": "{{spki}}",
+                         "publicKeyFingerprint": "{{fingerprint}}",
+                         "validFromUtc": "2026-01-01T00:00:00Z",
+                         "validUntilUtc": null,
+                         "revokedAtUtc": null
+                       }
+                     ]
+                   }
+                   """;
+        File.WriteAllText(Path.Combine(this.root, "keys.json"), keys);
+
+        File.WriteAllText(
+            Path.Combine(this.root, "catalog.json"),
+            $$"""
+              {
+                "schema": "app-catalog-index.v1",
+                "sourceId": "community.example",
+                "generatedAtUtc": "2026-09-16T10:00:00Z",
+                "keySet": { "path": "keys.json", "sha256": "{{Sha256(keys)}}" },
+                "entries": [
+                  {
+                    "appId": "{{AppId}}",
+                    "version": "{{Version}}",
+                    "path": "apps/{{AppId}}/{{Version}}/app.json",
+                    "sha256": "{{Sha256(definition)}}"
+                  }
+                ]
+              }
+              """);
+    }
+
+    /// <summary>Records the administrator decision before the first refresh observes the key.</summary>
+    private async Task TrustPublishedKeyAsync(CatalogSourceRow source, ECDsa key)
+    {
+        var spki = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
+        var observed = CatalogPublisherKey.Observe(
+            new CatalogPublisherKeyId(Guid.CreateVersion7()),
+            source.Id,
+            "juloc-official",
+            "official-2026-01",
+            CatalogSignatureInput.Algorithm,
+            spki,
+            CatalogSignatureVerifier.Fingerprint(spki),
+            Now.AddYears(-1),
+            null,
+            sourceRevision: 0);
+        observed.Decide(AdministratorTrustState.Trusted, Guid.CreateVersion7(), Now);
+        _ = this.context.CatalogPublisherKeys.Add(CatalogPublisherKeyRow.FromDomain(observed));
+        _ = await this.context.SaveChangesAsync();
+    }
 
     private static string Sha256(string text) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));

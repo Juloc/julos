@@ -41,6 +41,12 @@ internal sealed class EfCatalogRefreshService : ICatalogRefreshService
     /// <summary>The stable operation type an administrator sees in the Operation Center.</summary>
     internal const string OperationType = "catalog.source.refresh";
 
+    /// <summary>Core owns catalog refresh, so its problems are attributed to Core.</summary>
+    private const string CoreCatalogPackageId = "julos.core.catalog";
+
+    private const string RefreshProblemType = "catalog.source_refresh_failed";
+    private const string RefreshProblemTitleKey = "problems.catalog.source_refresh_failed";
+
     private readonly CoreDbContext context;
     private readonly Dictionary<CatalogSourceKind, ICatalogSourceReader> readers;
     private readonly ISecretLeaseService leases;
@@ -506,6 +512,7 @@ internal sealed class EfCatalogRefreshService : ICatalogRefreshService
             AuditOutcome.Succeeded,
             $"Refreshed catalog source '{sourceRow.DisplayName}'.",
             $"revision={revision}; digest={digest}; entries={entries.Count}");
+        this.ObserveProblem(sourceRow, failureCode: null, now);
 
         _ = await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new CatalogRefreshResult(sourceRow.Id, Succeeded: true, revision, digest, entries.Count, null);
@@ -572,6 +579,7 @@ internal sealed class EfCatalogRefreshService : ICatalogRefreshService
             AuditOutcome.Failed,
             $"A refresh of catalog source '{reloaded.DisplayName}' failed.",
             $"code={code}; state={source.LastRefreshState}");
+        this.ObserveProblem(reloaded, code, source.LastRefreshAtUtc ?? this.timeProvider.GetUtcNow());
 
         _ = await this.context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new CatalogRefreshResult(
@@ -581,6 +589,71 @@ internal sealed class EfCatalogRefreshService : ICatalogRefreshService
             reloaded.LastSuccessfulDigest,
             EntryCount: 0,
             code);
+    }
+
+    /// <summary>
+    /// Records that a source cannot currently be refreshed, or that it can again.
+    /// </summary>
+    /// <remarks>
+    /// The audit trail says what happened once; a Problem says what is still wrong. A source
+    /// that has been failing for a week is one condition an administrator should see, not
+    /// seven log entries to correlate, which is why this is observed repeatedly on the same
+    /// record rather than raised again each time.
+    /// </remarks>
+    private void ObserveProblem(CatalogSourceRow sourceRow, string? failureCode, DateTimeOffset now)
+    {
+        var identity = sourceRow.Id.ToString("D");
+        var existing = this.context.Problems.Local.SingleOrDefault(Matches)
+            ?? this.context.Problems.SingleOrDefault(Matches);
+
+        if (failureCode is null)
+        {
+            if (existing is { State: ProblemState.Active })
+            {
+                existing.State = ProblemState.Resolved;
+                existing.ResolvedAtUtc = now;
+                existing.LastObservedAtUtc = now;
+                existing.Revision = checked(existing.Revision + 1);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            _ = this.context.Problems.Add(new ProblemRow
+            {
+                Id = Guid.CreateVersion7(now),
+                SourcePackageId = CoreCatalogPackageId,
+                ProblemType = RefreshProblemType,
+                StableResourceIdentity = identity,
+                Severity = ProblemSeverity.Warning,
+                State = ProblemState.Active,
+                TitleKey = RefreshProblemTitleKey,
+                FirstDetectedAtUtc = now,
+                LastObservedAtUtc = now,
+                ObservationCount = 1,
+                Revision = 1,
+            });
+            return;
+        }
+
+        if (existing.State == ProblemState.Resolved)
+        {
+            existing.State = ProblemState.Active;
+            existing.ResolvedAtUtc = null;
+            existing.AcknowledgedAtUtc = null;
+            existing.AcknowledgedByUserId = null;
+        }
+
+        existing.LastObservedAtUtc = now;
+        existing.ObservationCount = checked(existing.ObservationCount + 1);
+        existing.Revision = checked(existing.Revision + 1);
+
+        bool Matches(ProblemRow row) =>
+            row.SourcePackageId == CoreCatalogPackageId
+            && row.ProblemType == RefreshProblemType
+            && row.StableResourceIdentity == identity;
     }
 
     private void StageAudit(
