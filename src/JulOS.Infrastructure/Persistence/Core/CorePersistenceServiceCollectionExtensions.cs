@@ -110,6 +110,13 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IClientDeviceService, EfClientDeviceService>();
         services.AddScoped<IApplicationExecutionPreferenceService, EfApplicationExecutionPreferenceService>();
         services.AddScoped<ICatalogSourceService, EfCatalogSourceService>();
+        services.AddScoped<ICatalogRefreshService, EfCatalogRefreshService>();
+        // One dispatcher for the process: the queue is the hand-off between the request that
+        // asks for a refresh and the worker that runs it.
+        services.TryAddSingleton<ICatalogRefreshDispatcher, CatalogRefreshDispatcher>();
+        services.AddSingleton<ICatalogSourceReader, LocalCatalogSourceReader>();
+        services.AddSingleton<ICatalogSourceReader>(_ => new HttpsCatalogSourceReader(
+            HttpsCatalogSourceReader.CreateClient()));
         services.AddScoped<IOperationService, PostgresOperationService>();
         services.AddScoped<RemoteSessionContractValidator>();
         services.AddScoped<IRemoteSessionService, PostgresRemoteSessionService>();

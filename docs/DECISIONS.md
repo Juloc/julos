@@ -459,3 +459,47 @@ wrong provider.
 
 Reason: the default store must be upgradable and recoverable without weakening either the
 container or the data-integrity guarantees PostgreSQL deployments already have.
+
+## D044 — A catalog definition digest is canonical JSON over exactly-representable integers
+
+**Status:** Accepted
+
+`DefinitionDigest` is SHA-256 over RFC 8785 canonical JSON bytes of the app manifest, and the
+same digest is computed twice: by the repository validator in JavaScript when a catalog is
+built, and by JulOS Server in C# when a catalog is refreshed. A signature is made over one of
+them and verified against the other, so the two implementations have to agree byte for byte.
+
+The one place two languages predictably disagree is number formatting. `app-manifest.v1`
+contains exactly one numeric field, a bounded port, so JulOS restricts canonicalizable numbers
+to integers a double represents exactly and refuses anything else with
+`catalog.definition_invalid`. The alternative — implementing ECMAScript `Number::toString` in
+C# well enough to match in every case — was rejected because it adds a subtle failure mode to
+signature verification in order to support values no catalog definition needs.
+
+A leading byte-order mark is skipped before parsing. JSON itself has none, but a file produced
+on Windows or under this repository's own encoding policy carries one, and the canonical form
+never does. The entry digest in the index therefore covers the published bytes including any
+mark, and the definition digest covers the canonical form; the two answer different questions
+and are deliberately different values.
+
+Reason: a digest that two implementations compute differently is worse than no digest, because
+it fails as an invalid signature rather than as a missing one.
+
+## D045 — A private catalog source authenticates with one bearer token from its secret reference
+
+**Status:** Accepted
+
+A catalog source stores an authentication secret reference, and the secret store holds a single
+opaque value per reference. HTTPS sources therefore send that value as one `Authorization:
+Bearer` header, read out of an operation-owned lease for each request and never copied into a
+field, a URL or a log. A user-and-password scheme was rejected because it would need a second
+value the secret store does not model, and encoding both into one value would put a credential
+into a format nothing else in JulOS parses.
+
+The credential is leased against the refresh Operation, so it exists only while that operation
+runs and its buffer is zeroed when the operation ends. A local catalog source takes no
+credential at all: it is reached by file-system permission, and a configured secret there would
+be one nothing consumes.
+
+Reason: the credential model follows what the secret store actually stores, and the transport
+that carries it is the narrowest one that works.

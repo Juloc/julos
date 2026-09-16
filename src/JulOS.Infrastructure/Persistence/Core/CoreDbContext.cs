@@ -56,6 +56,7 @@ public sealed class CoreDbContext : IdentityDbContext<LocalUser, LocalRole, Guid
     internal DbSet<ApplicationExecutionPreferenceRow> ApplicationExecutionPreferences => this.Set<ApplicationExecutionPreferenceRow>();
     internal DbSet<CatalogSourceRow> CatalogSources => this.Set<CatalogSourceRow>();
     internal DbSet<CatalogPublisherKeyRow> CatalogPublisherKeys => this.Set<CatalogPublisherKeyRow>();
+    internal DbSet<CatalogEntryCacheRow> CatalogEntryCache => this.Set<CatalogEntryCacheRow>();
 
     /// <inheritdoc />
     public override int SaveChanges(bool acceptAllChangesOnSuccess)

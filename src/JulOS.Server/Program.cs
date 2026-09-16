@@ -74,6 +74,7 @@ builder.Services.AddJulOsRemoteOrchestration(builder.Configuration);
 builder.Services.AddJulOsWebAppProxy(builder.Configuration);
 builder.Services.AddHostedService<RemoteSessionProvisioningWorker>();
 builder.Services.AddHostedService<RemoteSessionLifecycleWorker>();
+builder.Services.AddHostedService<CatalogRefreshWorker>();
 builder.Services.AddJulOsAgentControl();
 builder.Services.AddJulOsLocalAuthentication(builder.Configuration);
 builder.Services.AddJulOsAuthorization();

@@ -4,6 +4,7 @@ using JulOS.Application.Catalog;
 using JulOS.Contracts.Catalog;
 using JulOS.Server.Authentication;
 using JulOS.Server.Authorization;
+using JulOS.Server.Operations;
 using JulOS.Server.Errors;
 
 using Microsoft.AspNetCore.Antiforgery;
@@ -39,6 +40,9 @@ internal static class CatalogSourceEndpoints
             .RequireAuthorization(JulOsAuthorizationPolicies.CatalogSourcesManage)
             .RequireJulOsAntiforgery();
         sources.MapDelete("/{catalogSourceId:guid}", RemoveAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.CatalogSourcesManage)
+            .RequireJulOsAntiforgery();
+        sources.MapPost("/{catalogSourceId:guid}/refresh", RefreshAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.CatalogSourcesManage)
             .RequireJulOsAntiforgery();
 
@@ -149,6 +153,30 @@ internal static class CatalogSourceEndpoints
             .ConfigureAwait(false);
 
         return TypedResults.Ok(source);
+    }
+
+    private static async Task<IResult> RefreshAsync(
+        HttpContext context,
+        Guid catalogSourceId,
+        IAntiforgery antiforgery,
+        ICatalogRefreshService refresh,
+        CancellationToken cancellationToken)
+    {
+        await JulOsAntiforgery.ValidateAsync(context, antiforgery).ConfigureAwait(false);
+
+        // The refresh reads a whole remote catalog, so the request returns the durable
+        // operation and the caller follows that instead of holding a connection open.
+        var operation = await refresh
+            .RequestAsync(
+                catalogSourceId,
+                CurrentUserId(context.User),
+                CorrelationId.Get(context),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return TypedResults.Accepted(
+            $"/api/v1/operations/{operation.OperationId:D}",
+            OperationEndpoints.ToResponse(operation));
     }
 
     private static async Task<IResult> ListPublisherKeysAsync(

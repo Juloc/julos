@@ -14,6 +14,67 @@ internal static class CatalogModelConfiguration
 
         modelBuilder.Entity<CatalogSourceRow>(ConfigureSources);
         modelBuilder.Entity<CatalogPublisherKeyRow>(ConfigurePublisherKeys);
+        modelBuilder.Entity<CatalogEntryCacheRow>(ConfigureEntryCache);
+    }
+
+    private static void ConfigureEntryCache(EntityTypeBuilder<CatalogEntryCacheRow> entity)
+    {
+        entity.ToTable("catalog_entry_cache", Schema, table =>
+        {
+            table.HasCheckConstraint("ck_catalog_entry_cache_revision", "revision >= 1");
+            table.HasCheckConstraint(
+                "ck_catalog_entry_cache_signature_state",
+                "signature_state IN ('TrustedSigned', 'UnknownSigned', 'NotSigned', 'InvalidSignature')");
+            // A signed entry names who signed it and with which key; an unsigned one names
+            // nobody. Half of that identity would make the recorded state unexplainable.
+            table.HasCheckConstraint(
+                "ck_catalog_entry_cache_signer",
+                "(signature_state = 'NotSigned' AND publisher_id IS NULL AND signature_key_id IS NULL "
+                + "AND public_key_fingerprint IS NULL) "
+                + "OR (signature_state <> 'NotSigned' AND publisher_id IS NOT NULL "
+                + "AND signature_key_id IS NOT NULL AND public_key_fingerprint IS NOT NULL)");
+        });
+
+        entity.HasKey(row => row.Id).HasName("pk_catalog_entry_cache");
+        entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+        entity.Property(row => row.CatalogSourceId).HasColumnName("catalog_source_id");
+        entity.Property(row => row.AppId).HasColumnName("app_id").HasMaxLength(64).IsRequired();
+        entity.Property(row => row.Version).HasColumnName("version").HasMaxLength(64).IsRequired();
+        entity.Property(row => row.SourceRevision).HasColumnName("source_revision");
+        entity.Property(row => row.SourceDigest).HasColumnName("source_digest").HasMaxLength(256).IsRequired();
+        entity.Property(row => row.DefinitionDigest)
+            .HasColumnName("definition_digest")
+            .HasMaxLength(64)
+            .IsRequired();
+        entity.Property(row => row.Definition).HasColumnName("definition").HasColumnType("jsonb").IsRequired();
+        entity.Property(row => row.PublisherId).HasColumnName("publisher_id").HasMaxLength(128);
+        entity.Property(row => row.SignatureKeyId).HasColumnName("signature_key_id").HasMaxLength(128);
+        entity.Property(row => row.PublicKeyFingerprint)
+            .HasColumnName("public_key_fingerprint")
+            .HasMaxLength(80);
+        entity.Property(row => row.SignatureState)
+            .HasColumnName("signature_state")
+            .HasConversion<string>()
+            .HasMaxLength(24);
+        entity.Property(row => row.TrustAssessmentDigest)
+            .HasColumnName("trust_assessment_digest")
+            .HasMaxLength(64)
+            .IsRequired();
+        entity.Property(row => row.CachedAtUtc).HasColumnName("cached_at_utc");
+        entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+
+        // One version of one application has one cached definition per source. The index
+        // enforces what the index parser already refuses, so a source cannot reach a state
+        // the document format forbids by way of two partially applied refreshes.
+        entity.HasIndex(row => new { row.CatalogSourceId, row.AppId, row.Version })
+            .IsUnique()
+            .HasDatabaseName("ux_catalog_entry_cache_identity");
+
+        entity.HasOne<CatalogSourceRow>()
+            .WithMany()
+            .HasForeignKey(row => row.CatalogSourceId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("fk_catalog_entry_cache_source");
     }
 
     private static void ConfigureSources(EntityTypeBuilder<CatalogSourceRow> entity)
@@ -49,6 +110,7 @@ internal static class CatalogModelConfiguration
         entity.Property(row => row.Location).HasColumnName("location").HasMaxLength(512).IsRequired();
         entity.Property(row => row.AuthenticationSecretReferenceId)
             .HasColumnName("authentication_secret_reference_id");
+        entity.Property(row => row.SourceIdentity).HasColumnName("source_identity").HasMaxLength(128);
         entity.Property(row => row.TrustLevel)
             .HasColumnName("trust_level")
             .HasConversion<string>()

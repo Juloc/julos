@@ -218,6 +218,87 @@ public sealed class CatalogSourceEndpointTests
         Assert.AreEqual(0, keys.Count);
     }
 
+    [TestMethod]
+    public async Task ARefreshReturnsTheOperationThatOwnsItAndRepeatsAreTheSameOperation()
+    {
+        await using var database = await SqliteServerHost.CreateAsync("catalog-sources").ConfigureAwait(false);
+        using var client = database.CreateClient(ClientOptions);
+        await SetupAdministratorAsync(client).ConfigureAwait(false);
+        var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
+        var added = await AddAsync(client, antiforgery).ConfigureAwait(false);
+
+        using var accepted = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/catalog/sources/{added.CatalogSourceId}/refresh",
+            null,
+            antiforgery).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            HttpStatusCode.Accepted,
+            accepted.StatusCode,
+            "A refresh reads a whole remote catalog, so the request returns the durable operation.");
+        var first = await ReadOperationIdAsync(accepted).ConfigureAwait(false);
+        Assert.AreEqual(
+            added.CatalogSourceId.ToString("D"),
+            await ReadTargetReferenceAsync(accepted).ConfigureAwait(false));
+
+        using var again = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/catalog/sources/{added.CatalogSourceId}/refresh",
+            null,
+            antiforgery).ConfigureAwait(false);
+
+        Assert.AreEqual(
+            first,
+            await ReadOperationIdAsync(again).ConfigureAwait(false),
+            "A retried request joins the refresh that is already queued rather than racing a second one.");
+    }
+
+    [TestMethod]
+    public async Task ARemovedSourceIsNotRefreshed()
+    {
+        await using var database = await SqliteServerHost.CreateAsync("catalog-sources").ConfigureAwait(false);
+        using var client = database.CreateClient(ClientOptions);
+        await SetupAdministratorAsync(client).ConfigureAwait(false);
+        var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
+        var added = await AddAsync(client, antiforgery).ConfigureAwait(false);
+
+        using var removed = await SendAsync(
+            client,
+            HttpMethod.Delete,
+            $"/api/v1/catalog/sources/{added.CatalogSourceId}?expectedRevision={added.Revision}",
+            null,
+            antiforgery).ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.OK, removed.StatusCode);
+
+        using var refresh = await SendAsync(
+            client,
+            HttpMethod.Post,
+            $"/api/v1/catalog/sources/{added.CatalogSourceId}/refresh",
+            null,
+            antiforgery).ConfigureAwait(false);
+
+        Assert.AreEqual(HttpStatusCode.Conflict, refresh.StatusCode);
+        Assert.AreEqual(
+            CatalogErrorCodes.SourceRemoved,
+            await ReadProblemCodeAsync(refresh).ConfigureAwait(false));
+    }
+
+    private static async Task<string?> ReadOperationIdAsync(HttpResponseMessage response) =>
+        await ReadPropertyAsync(response, "operationId").ConfigureAwait(false);
+
+    private static async Task<string?> ReadTargetReferenceAsync(HttpResponseMessage response) =>
+        await ReadPropertyAsync(response, "targetReference").ConfigureAwait(false);
+
+    private static async Task<string?> ReadPropertyAsync(HttpResponseMessage response, string name)
+    {
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        using var document = JsonDocument.Parse(body);
+        return document.RootElement.TryGetProperty(name, out var value) ? value.ToString() : null;
+    }
+
     private static AddCatalogSourceRequest NewSourceRequest(string displayName = "Example catalog") =>
         new(
             CatalogSourceKindNames.Https,

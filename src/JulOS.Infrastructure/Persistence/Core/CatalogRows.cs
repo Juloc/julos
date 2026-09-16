@@ -16,6 +16,13 @@ internal sealed class CatalogSourceRow
     /// <summary>Only the reference is stored; the credential itself never is.</summary>
     internal Guid? AuthenticationSecretReferenceId { get; set; }
 
+    /// <summary>The identity the source claimed in its last successful import.</summary>
+    /// <remarks>
+    /// Recorded rather than configured: it is what installed applications resolve through,
+    /// so a source that starts claiming a different one is refused instead of adopted.
+    /// </remarks>
+    internal string? SourceIdentity { get; set; }
+
     internal CatalogSourceTrustLevel TrustLevel { get; set; }
 
     internal bool Enabled { get; set; }

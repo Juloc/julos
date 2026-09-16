@@ -154,7 +154,8 @@ internal static class OperationEndpoints
             : TypedResults.Accepted($"/api/v1/operations/{operation.OperationId:D}", response);
     }
 
-    private static OperationResponse ToResponse(OperationSnapshot operation) => new(
+    /// <summary>The public shape of one operation, shared with endpoints that start one.</summary>
+    internal static OperationResponse ToResponse(OperationSnapshot operation) => new(
         operation.OperationId,
         operation.OperationType,
         operation.OwnerUserId,
