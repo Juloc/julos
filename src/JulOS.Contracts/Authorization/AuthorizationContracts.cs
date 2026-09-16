@@ -35,6 +35,14 @@ public static class AuthorizationPermissionNames
 
     /// <summary>Open local web-application targets through the transparent reverse proxy.</summary>
     public const string WebAppUse = "core.webapp.use";
+
+    /// <summary>Decide whether a catalog publisher key is trusted.</summary>
+    /// <remarks>
+    /// Deliberately separate from managing catalog sources. Adding a source says where to
+    /// look; trusting a key says whose signature is enough to install from, which is a
+    /// larger decision and is held separately.
+    /// </remarks>
+    public const string CatalogTrustManage = "catalog.trust.manage";
 }
 
 /// <summary>Stable authorization assignment subject types.</summary>

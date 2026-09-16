@@ -341,6 +341,8 @@ A source publishes or references the versioned key set above. The calculated SPK
 
 Trust evaluation first verifies bytes, fingerprint and the key validity interval at `createdAtUtc`. Missing key, mismatched fingerprint, bad signature or not-yet-valid signature is `invalid-signature`. A cryptographically valid key is `trusted-signed` only while it is official-pinned or administrator-trusted; otherwise it is `unknown-signed`. `distrusted` or `revoked` adds `deny-policy`; `expired` adds a warning for custom content and `deny-policy` for the official source. Revocation or expiry discovered later never rewrites an installed snapshot, but update Preview compares it to current policy.
 
+Implementation note from `CAT-002`. Verification and trust evaluation are separate steps, and the order is deliberate: bytes first, then the key’s identity and validity interval, then who vouches for it. An administrator decision is read only after the cryptography has already succeeded, which is what makes "trust can never turn a digest mismatch or an invalid signature into installable content" true by construction rather than by review. Revocation and distrust change the policy to deny without rewriting the recorded signature state, so an installed application stays explainable.
+
 Trust is persisted as evidence, not recomputed into history. `CatalogPublisherKey` stores:
 
 ```text
@@ -644,6 +646,8 @@ docker.container.terminal
 ```
 
 Read, deployment, data deletion and terminal access remain separate. A catalog entry cannot grant permissions to itself.
+
+`catalog.trust.manage` exists as a permission of its own since `CAT-002` and is granted to the initial administrator role. Adding a source says where to look; trusting a key says whose signature is enough to install from. The second is the larger decision and is held separately.
 
 ## 12. Preview and apply
 
