@@ -286,6 +286,32 @@ public sealed class CatalogSourceEndpointTests
             await ReadProblemCodeAsync(refresh).ConfigureAwait(false));
     }
 
+    [TestMethod]
+    public async Task TheCachedCatalogIsEmptyUntilASourceHasBeenRefreshed()
+    {
+        await using var database = await SqliteServerHost.CreateAsync("catalog-sources").ConfigureAwait(false);
+        using var client = database.CreateClient(ClientOptions);
+        await SetupAdministratorAsync(client).ConfigureAwait(false);
+        var antiforgery = await ReadAntiforgeryAsync(client).ConfigureAwait(false);
+        var added = await AddAsync(client, antiforgery).ConfigureAwait(false);
+
+        var apps = await client
+            .GetFromJsonAsync<IReadOnlyList<CatalogApplicationResponse>>("/api/v1/catalog/apps")
+            .ConfigureAwait(false);
+        Assert.IsNotNull(apps);
+        Assert.AreEqual(0, apps.Count);
+
+        using var unknown = await client
+            .GetAsync(new Uri(
+                $"/api/v1/catalog/apps/{added.CatalogSourceId}/home-assistant",
+                UriKind.Relative))
+            .ConfigureAwait(false);
+        Assert.AreEqual(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.AreEqual(
+            CatalogErrorCodes.SourceNotFound,
+            await ReadProblemCodeAsync(unknown).ConfigureAwait(false));
+    }
+
     private static async Task<string?> ReadOperationIdAsync(HttpResponseMessage response) =>
         await ReadPropertyAsync(response, "operationId").ConfigureAwait(false);
 

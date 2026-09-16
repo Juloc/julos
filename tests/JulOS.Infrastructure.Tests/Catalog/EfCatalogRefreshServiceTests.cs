@@ -241,6 +241,72 @@ public sealed class EfCatalogRefreshServiceTests : IDisposable
     }
 
     [TestMethod]
+    public async Task TheCachedCatalogIsReadableAndCarriesTheRefreshState()
+    {
+        this.PublishCatalog(("home-assistant", "2026.8.0"), ("hermes", "1.0.0"));
+        var source = await this.AddSourceAsync();
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+        var applications = new EfCatalogApplicationService(this.context);
+
+        var listed = await applications.ListAsync(catalogSourceId: null);
+
+        Assert.AreEqual(2, listed.Count);
+        Assert.AreEqual("community.example", listed[0].SourceIdentity);
+        Assert.AreEqual(CatalogRefreshStateNames.Fresh, listed[0].SourceRefreshState);
+        Assert.AreEqual(
+            CatalogSignatureStateNames.NotSigned,
+            listed[0].Versions.Single().SignatureState);
+
+        var detail = await applications.ReadAsync(source.Id, "hermes", version: null);
+        Assert.AreEqual("1.0.0", detail.Version);
+        Assert.AreEqual(
+            "hermes",
+            detail.Definition.GetProperty("appId").GetString(),
+            "The served definition is the canonical one the digest was taken over.");
+    }
+
+    [TestMethod]
+    public async Task AStaleCatalogSaysSoRatherThanLookingCurrent()
+    {
+        this.PublishCatalog(("home-assistant", "2026.8.0"));
+        var source = await this.AddSourceAsync();
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var definitionPath = Path.Combine(this.root, "apps", "home-assistant", "2026.8.0", "app.json");
+        await File.WriteAllTextAsync(definitionPath, Definition("home-assistant", "2026.8.1"));
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var listed = await new EfCatalogApplicationService(this.context).ListAsync(catalogSourceId: null);
+
+        Assert.AreEqual(
+            CatalogRefreshStateNames.Stale,
+            listed.Single().SourceRefreshState,
+            "A user looking at a catalog is entitled to know it is not current.");
+    }
+
+    [TestMethod]
+    public async Task ARemovedSourceIsNotOfferedToInstallFrom()
+    {
+        this.PublishCatalog(("home-assistant", "2026.8.0"));
+        var source = await this.AddSourceAsync();
+        _ = await this.service.RefreshAsync(source.Id, Guid.CreateVersion7());
+
+        var domain = source.ToDomain();
+        domain.Remove(Now);
+        source.DeletedAtUtc = domain.DeletedAtUtc;
+        source.Enabled = domain.Enabled;
+        source.Revision = domain.Revision.Value;
+        _ = await this.context.SaveChangesAsync();
+
+        var applications = new EfCatalogApplicationService(this.context);
+        Assert.AreEqual(0, (await applications.ListAsync(catalogSourceId: null)).Count);
+
+        var failure = await Assert.ThrowsExactlyAsync<CatalogFailureException>(
+            () => applications.ReadAsync(source.Id, "home-assistant", version: null));
+        Assert.AreEqual(CatalogErrorCodes.SourceNotFound, failure.Code);
+    }
+
+    [TestMethod]
     public async Task AnHttpsSourceRefusesPlainHttpAndARelativeLocation()
     {
         // Plain HTTP is refused rather than downgraded to: a catalog read over it can be

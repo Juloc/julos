@@ -903,7 +903,7 @@ GET    /api/v1/catalog/sources/{sourceId}/publisher-keys
 GET    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}
 PUT    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}/administrator-trust
 GET    /api/v1/catalog/apps
-GET    /api/v1/catalog/apps/{sourceId}/{appId}
+GET    /api/v1/catalog/apps/{catalogSourceId}/{appId}
 GET    /api/v1/connections
 POST   /api/v1/connections
 GET    /api/v1/connections/{connectionId}
@@ -926,7 +926,7 @@ DELETE /api/v1/app-installations/{installationId}
 
 Every apply references an unexpired preview digest and returns a durable Operation. Publisher-key trust mutations use the exact revisioned DTO, `catalog.trust.manage` permission and status behavior in `APPLICATION_CATALOG.md`; source mutation and publisher-key trust are never conflated. The full request, ownership and error contract is `APPLICATION_CATALOG.md`.
 
-The five source routes, the refresh route and the three publisher-key routes are implemented since `CAT-002`. The source and refresh routes require `catalog.sources.manage`, the publisher-key GETs require `catalog.read`, and the trust `PUT` requires `catalog.trust.manage`; the mutations additionally require antiforgery. `DELETE` and `PUT` carry `expectedRevision` and return `409 request.concurrency_conflict` on a stale one. `POST .../refresh` returns `202` with the durable Operation; it is idempotent per source while one refresh is queued or running. The two `catalog/apps` routes are still open, and refresh currently reads `local` and `https` sources.
+The five source routes, the refresh route and the three publisher-key routes are implemented since `CAT-002`. The source and refresh routes require `catalog.sources.manage`, the publisher-key GETs require `catalog.read`, and the trust `PUT` requires `catalog.trust.manage`; the mutations additionally require antiforgery. `DELETE` and `PUT` carry `expectedRevision` and return `409 request.concurrency_conflict` on a stale one. `POST .../refresh` returns `202` with the durable Operation; it is idempotent per source while one refresh is queued or running. The two `catalog/apps` routes serve the cache under `catalog.read` and never reach a source; every response carries the refresh state of the source it came from, and a removed source is excluded. Refresh currently reads `local` and `https` sources.
 
 ### 5.7 Problems and notifications
 

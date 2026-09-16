@@ -84,6 +84,33 @@ public static class CatalogRefreshStateNames
     public const string Stale = "stale";
 }
 
+/// <summary>What verification concluded about one definition's signature.</summary>
+/// <remarks>
+/// The names are the ones the trust table in <c>docs/APPLICATION_CATALOG.md</c> section 6
+/// uses. <c>unsigned</c> and <c>invalid-signature</c> are deliberately different values: an
+/// artifact that claims authenticity and cannot prove it is a stronger claim than one that
+/// never said so.
+/// </remarks>
+public static class CatalogSignatureStateNames
+{
+    /// <summary>Verified with a key that is official-pinned or administrator-trusted.</summary>
+    public const string TrustedSigned = "trusted-signed";
+
+    /// <summary>Cryptographically valid, but the key is not one this installation trusts.</summary>
+    public const string UnknownSigned = "unknown-signed";
+
+    /// <summary>No signature envelope was published for the definition.</summary>
+    /// <remarks>Named NotSigned rather than Unsigned so it is not read as a numeric type.</remarks>
+    public const string NotSigned = "unsigned";
+
+    /// <summary>The definition claims authenticity and fails, or cannot be verified.</summary>
+    public const string InvalidSignature = "invalid-signature";
+
+    /// <summary>Every signature state name.</summary>
+    public static IReadOnlyList<string> All { get; } =
+        [TrustedSigned, UnknownSigned, NotSigned, InvalidSignature];
+}
+
 /// <summary>What an administrator decided about a publisher key.</summary>
 public static class AdministratorTrustStateNames
 {

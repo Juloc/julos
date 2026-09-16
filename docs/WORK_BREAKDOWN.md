@@ -1480,7 +1480,7 @@ Deliver:
 - separate `catalog.trust.manage` permission with Administrator backfill and exact publisher-key list/read/trust API
 - source permissions, Secret References, refresh Operation and Problems
 
-Landed so far: the trust evaluator and publisher-key record; then source persistence with its two tables, the source administration API, the publisher-key trust API and the `catalog.read`/`catalog.sources.manage` permissions; then the catalog document model, the `local` and `https` adapters, the atomic entry cache and the refresh Operation. Still open: the `git` and `oci` adapters with their commit and artifact-digest locking, and the `catalog/apps` read API over the cache.
+Landed so far: the trust evaluator and publisher-key record; then source persistence with its two tables, the source administration API, the publisher-key trust API and the `catalog.read`/`catalog.sources.manage` permissions; then the catalog document model, the `local` and `https` adapters, the atomic entry cache and the refresh Operation. Then the `catalog/apps` read API over the cache. Still open: the `git` and `oci` adapters with their commit and artifact-digest locking.
 
 Acceptance:
 

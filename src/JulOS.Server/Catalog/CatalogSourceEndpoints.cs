@@ -51,6 +51,15 @@ internal static class CatalogSourceEndpoints
         sources.MapGet("/{catalogSourceId:guid}/publisher-keys", ListPublisherKeysAsync)
             .RequireAuthorization(JulOsAuthorizationPolicies.CatalogRead);
 
+        // The cached catalog is content rather than configuration, so reading it is the
+        // catalog read permission and not the one that decides where to look.
+        var apps = endpoints.MapGroup("/api/v1/catalog/apps").WithTags("Catalog");
+
+        apps.MapGet(string.Empty, ListApplicationsAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.CatalogRead);
+        apps.MapGet("/{catalogSourceId:guid}/{appId}", ReadApplicationAsync)
+            .RequireAuthorization(JulOsAuthorizationPolicies.CatalogRead);
+
         var keys = endpoints.MapGroup("/api/v1/catalog/publisher-keys").WithTags("Catalog");
 
         keys.MapGet("/{catalogPublisherKeyId:guid}", ReadPublisherKeyAsync)
@@ -177,6 +186,28 @@ internal static class CatalogSourceEndpoints
         return TypedResults.Accepted(
             $"/api/v1/operations/{operation.OperationId:D}",
             OperationEndpoints.ToResponse(operation));
+    }
+
+    private static async Task<IResult> ListApplicationsAsync(
+        Guid? catalogSourceId,
+        ICatalogApplicationService applications,
+        CancellationToken cancellationToken)
+    {
+        var apps = await applications.ListAsync(catalogSourceId, cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(apps);
+    }
+
+    private static async Task<IResult> ReadApplicationAsync(
+        Guid catalogSourceId,
+        string appId,
+        string? version,
+        ICatalogApplicationService applications,
+        CancellationToken cancellationToken)
+    {
+        var application = await applications
+            .ReadAsync(catalogSourceId, appId, version, cancellationToken)
+            .ConfigureAwait(false);
+        return TypedResults.Ok(application);
     }
 
     private static async Task<IResult> ListPublisherKeysAsync(

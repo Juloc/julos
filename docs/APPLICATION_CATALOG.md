@@ -313,6 +313,8 @@ The source digest is the immutable identity the adapter locked to. `git` and `oc
 
 `SourceId` stability is enforced from the first successful import. A source that later claims a different identity fails the refresh with `catalog.definition_invalid` rather than adopting the new name, because that identity is what installed applications resolve through.
 
+`GET /api/v1/catalog/apps` and `GET /api/v1/catalog/apps/{catalogSourceId}/{appId}` serve the cache and never reach a source, which is what keeps a catalog readable while its source is unreachable. Every response carries the refresh state of the source it came from, so a stale catalog is visibly stale rather than quietly old. Removed sources are excluded: their tombstones keep installed applications resolvable, but a source an administrator removed is not one this installation offers to install from. Versions are listed rather than ranked — how two version strings compare is the update-policy question `APP-003` owns, and reading one version out of several therefore names it explicitly.
+
 The `git` and `oci` adapters are still open.
 
 ## 6. Trust and integrity
@@ -603,7 +605,7 @@ GET    /api/v1/catalog/sources/{sourceId}/publisher-keys
 GET    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}
 PUT    /api/v1/catalog/publisher-keys/{catalogPublisherKeyId}/administrator-trust
 GET    /api/v1/catalog/apps
-GET    /api/v1/catalog/apps/{sourceId}/{appId}
+GET    /api/v1/catalog/apps/{catalogSourceId}/{appId}
 ```
 
 Installations:
