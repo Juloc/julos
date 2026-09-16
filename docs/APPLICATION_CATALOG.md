@@ -315,7 +315,9 @@ The source digest is the immutable identity the adapter locked to. `git` and `oc
 
 `GET /api/v1/catalog/apps` and `GET /api/v1/catalog/apps/{catalogSourceId}/{appId}` serve the cache and never reach a source, which is what keeps a catalog readable while its source is unreachable. Every response carries the refresh state of the source it came from, so a stale catalog is visibly stale rather than quietly old. Removed sources are excluded: their tombstones keep installed applications resolvable, but a source an administrator removed is not one this installation offers to install from. Versions are listed rather than ranked — how two version strings compare is the update-policy question `APP-003` owns, and reading one version out of several therefore names it explicitly.
 
-The `git` and `oci` adapters are still open.
+The `oci` adapter reads `oci://registry/repository:tag` or the same with `@sha256:...`. Only the OCI image manifest media type is accepted: a catalog artifact is something a publisher builds for JulOS, so requiring it costs a publisher nothing and keeps a specific container product out of Core. A tag is accepted as input and resolved once; the manifest digest becomes the source digest, every layer is checked against the digest its manifest declares, and a manifest requested by digest that comes back as other bytes fails with `catalog.integrity_mismatch`. The bundle is materialized once, bounded per file and in total, so a registry cannot turn one refresh into unbounded memory on the Server host. A private registry authenticates through the ordinary registry token handshake, and the configured credential is presented only to a realm on the registry's own host: a realm the response points at another host is used anonymously instead, because presenting the credential there is how a compromised registry would harvest it.
+
+The `git` adapter is still open. Reading a Git repository needs either the `git` binary inside the Server image or a native Git library, and that choice is a deployment decision rather than an implementation detail.
 
 ## 6. Trust and integrity
 

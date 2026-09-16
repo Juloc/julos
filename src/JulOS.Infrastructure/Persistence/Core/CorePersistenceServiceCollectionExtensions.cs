@@ -118,6 +118,8 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddSingleton<ICatalogSourceReader, LocalCatalogSourceReader>();
         services.AddSingleton<ICatalogSourceReader>(_ => new HttpsCatalogSourceReader(
             HttpsCatalogSourceReader.CreateClient()));
+        services.AddSingleton<ICatalogSourceReader>(_ => new OciCatalogSourceReader(
+            HttpsCatalogSourceReader.CreateClient()));
         services.AddScoped<IOperationService, PostgresOperationService>();
         services.AddScoped<RemoteSessionContractValidator>();
         services.AddScoped<IRemoteSessionService, PostgresRemoteSessionService>();
