@@ -533,3 +533,40 @@ unresponsive remote is a failed refresh rather than a process that waits.
 Reason: the capability has to exist somewhere, and a single fixed invocation of a well-known
 tool is easier to audit than either a hand-written Git protocol client or a native library
 loaded into the Server process.
+
+## D047 — A committed schema must have a validator that loads it
+
+**Status:** Accepted
+
+`schemas/package-manifest.v1.schema.json` declared itself the published package manifest
+contract, complete with an `$id` on the JulOS domain, and was referenced by no code, no test
+and no document. Because nothing enforced it, nothing noticed when it drifted: its
+`application` definition omitted `ElementName` while `additionalProperties` was `false`, so
+the schema would have rejected every manifest in `packages/`. `MOB-006` happened to repair it
+while adding `Surface`, which is luck rather than a mechanism.
+
+It is retired rather than wired in. `tools/lib/json-schema.mjs` is a deliberately small
+subset validator, and its `findUnsupportedKeywords` helper reports eleven keywords it cannot
+enforce in that schema: `oneOf` for the nullable `Frontend`, `uniqueItems` on seven arrays,
+and `exclusiveMinimum` on `Runtime.CpuLimit`. Wiring it in would have meant either failing the
+stage or ignoring those reports and enforcing visibly less than is enforced today. Extending
+the subset validator would not have helped either, because the rules that actually protect the
+manifest are cross-field ones no JSON Schema states: `Surface` required for an application
+claiming the `mobile` viewport, `SupportedBackgroundModes` having to include `suspend`,
+`DefaultWidth` not below `MinimumWidth`, `DefaultSize` drawn from `Sizes`, unique surface
+element names, and `Frontend.ExportedElements` covering every declared surface. The schema was
+the weakest of the three statements of the contract while presenting itself as the published
+one.
+
+The contract therefore has exactly two implementations, both of which run:
+`PackageManifestValidator` in `src/JulOS.PackageSdk/PackageManifest.cs` decides what JulOS
+installs, and `tools/lib/package-manifest.mjs` holds every committed manifest to the same
+rules in the `package-manifests` validation stage.
+
+The general rule follows from the specific failure: the `schema-coverage` stage fails when
+`schemas/` holds a schema no validator loads, and when a validator names a schema that is not
+committed. The enforced set is derived from the validators' own use rather than declared
+beside it, so the list cannot drift from the loads it describes.
+
+Reason: an unenforced contract is worse than no contract, because it looks authoritative while
+being free to disagree with the implementation.

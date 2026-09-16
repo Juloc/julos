@@ -407,12 +407,15 @@ Current stages:
 | `remote-frontend-build` | Remote package frontend assets |
 | `remote-frontend-test` | Remote package frontend logic tests |
 | `markdown-links` | relative Markdown links resolve |
+| `schema-coverage` | every schema committed under `schemas/` is loaded by a validator, and every schema a validator names is committed |
 | `host-connector-contracts` | Host Connector request, result, enrollment and journal fixtures validate against the committed schemas; malformed and unsupported-major fixtures are rejected; no contract introduces a generic command, shell, raw TCP destination or Docker API payload |
 | `catalog-manifests` | application-catalog index, manifest and key-set schemas; bundle path, symlink, size and digest rules; the closed `julos-compose-v1` subset and its critical-rights extraction; and that parse/canonicalize/reparse produces identical definition and plan digests |
-| `package-manifests` | package manifest validation |
+| `package-manifests` | every committed `packages/*/manifest.json` and the accept/reject fixtures validate against `tools/lib/package-manifest.mjs`, and each declared frontend module matches its recorded digest |
 | `container-build` | Compose configuration and container image build |
 
 A stage whose subject does not exist yet reports `skipped` with the reason and the work item that implements it. It never reports a pass it did not perform. `PKG-001` implements manifest validation.
+
+`schema-coverage` exists because a committed schema that nothing loads is not a contract. `schemas/package-manifest.v1.schema.json` declared itself the published package manifest contract, was referenced by no code, test or document, and had drifted into a state that would have rejected every manifest in `packages/`. It was retired rather than wired in; decision `D047` records why. The stage fails in both directions — a schema nobody enforces, and a validator naming a schema that is not committed — so neither half can change alone. The package manifest contract is owned by `tools/lib/package-manifest.mjs` for committed manifests and by `PackageManifestValidator` in `src/JulOS.PackageSdk/PackageManifest.cs` at install time, and no JSON Schema is published for it.
 
 `container-build` reports `skipped` when no container runtime answers, because a developer without one must still be able to validate everything else. Continuous integration always has a runtime, so the images are built there.
 

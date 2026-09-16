@@ -90,7 +90,11 @@ Initial semantic shape:
 }
 ```
 
-The final JSON schema is committed before implementation. Unknown required fields, unsupported schema versions, integrity mismatches, claimed-but-invalid signatures and incompatible Core versions fail installation clearly. Missing/unknown signatures produce the documented trust warning.
+The block above is the original semantic sketch, not the field-for-field contract. **No JSON Schema is published for the package manifest.** Two implementations own the contract: `PackageManifestValidator` in `src/JulOS.PackageSdk/PackageManifest.cs` decides what JulOS installs, and `tools/lib/package-manifest.mjs` enforces the same rules over every committed `packages/*/manifest.json` in the `package-manifests` validation stage.
+
+A JSON Schema existed as a third copy and was retired by decision `D047`. It could not express the cross-field rules both validators already apply — `Surface` required for an application that claims the `mobile` viewport, `DefaultWidth` not below `MinimumWidth`, `DefaultSize` drawn from `Sizes`, `Frontend.ExportedElements` covering every declared surface — so it was the weakest statement of the contract while presenting itself as the published one.
+
+Unknown required fields, unsupported schema versions, integrity mismatches, claimed-but-invalid signatures and incompatible Core versions fail installation clearly. Missing/unknown signatures produce the documented trust warning.
 
 ## 5. Package component types
 
@@ -277,7 +281,7 @@ An installation records how much is known about who produced it: `trusted-signed
 
 Shadow DOM is not a security sandbox. The isolated frontend bridge exposes only versioned typed messages, no Shell DOM, JulOS cookies or arbitrary Core endpoints. Mobile-capable applications implement activate, deactivate, suspend, resume, optional Back and dispose semantics from `MOBILE_PWA.md`.
 
-The schema adds one exact case-sensitive object to each mobile-capable `Applications[]` entry, validated by the `package-manifests` stage since `MOB-006`:
+The manifest contract adds one exact case-sensitive object to each mobile-capable `Applications[]` entry, validated by the `package-manifests` stage since `MOB-006`:
 
 ```json
 "Surface": {

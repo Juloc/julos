@@ -36,6 +36,13 @@ const fixtures = [
   { file: 'journal-result-ready.json', schema: 'host-connector-journal.v1', accept: true },
 ];
 
+/**
+ * The committed schemas this validator loads, derived from the fixtures rather than listed
+ * again. Reported to `schema-coverage`, which fails when `schemas/` holds anything nobody
+ * loads.
+ */
+export const enforcedSchemas = Object.freeze([...new Set(fixtures.map((entry) => entry.schema))]);
+
 /** Capability shapes docs/HOST_CONNECTOR.md prohibits outright. */
 const prohibitedCapabilities = [
   'host.command',
@@ -64,7 +71,7 @@ export async function validateHostConnectorContracts() {
   const errors = [];
   const schemas = new Map();
 
-  for (const name of new Set(fixtures.map((entry) => entry.schema))) {
+  for (const name of enforcedSchemas) {
     try {
       const text = await readFile(join(schemaRoot, `${name}.schema.json`), 'utf8');
       const schema = JSON.parse(text.replace(/^﻿/, ''));

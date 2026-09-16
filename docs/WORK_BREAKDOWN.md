@@ -714,7 +714,7 @@ Status: done for the documented shipped theme/motion/token scope. Deferred perso
 
 Depends on: CORE-002, CORE-003.
 
-Deliver versioned JSON schema, validation and fixtures.
+Deliver a versioned manifest contract, validation and fixtures. No JSON Schema is published for it; see decision `D047`.
 
 Acceptance:
 

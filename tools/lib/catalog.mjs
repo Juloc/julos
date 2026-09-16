@@ -24,6 +24,19 @@ export const maximumBundleFileBytes = 2 * 1024 * 1024;
 
 const schemaDirectory = join(repositoryRoot, 'schemas');
 
+/**
+ * The committed schemas this validator loads, named once so every use below and the
+ * `schema-coverage` stage read the same values.
+ */
+const schemaNames = Object.freeze({
+  index: 'app-catalog-index.v1',
+  manifest: 'app-manifest.v1',
+  keySet: 'app-catalog-keyset.v1',
+});
+
+/** Reported to `schema-coverage`, which fails when `schemas/` holds anything nobody loads. */
+export const enforcedSchemas = Object.freeze(Object.values(schemaNames));
+
 /** Loads a committed schema and reports any keyword the validator cannot enforce. */
 async function loadSchema(name, errors) {
   const text = await readFile(join(schemaDirectory, `${name}.schema.json`), 'utf8');
@@ -42,9 +55,9 @@ export async function validateCatalogBundle(root) {
   const errors = [];
   const entries = [];
 
-  const indexSchema = await loadSchema('app-catalog-index.v1', errors);
-  const manifestSchema = await loadSchema('app-manifest.v1', errors);
-  const keySetSchema = await loadSchema('app-catalog-keyset.v1', errors);
+  const indexSchema = await loadSchema(schemaNames.index, errors);
+  const manifestSchema = await loadSchema(schemaNames.manifest, errors);
+  const keySetSchema = await loadSchema(schemaNames.keySet, errors);
 
   const indexPath = join(root, 'catalog.json');
   const index = await readJson(indexPath, errors, 'catalog.json');
@@ -52,7 +65,7 @@ export async function validateCatalogBundle(root) {
     return { errors, entries };
   }
 
-  if (index.schema !== 'app-catalog-index.v1') {
+  if (index.schema !== schemaNames.index) {
     errors.push(`${catalogErrorCodes.schemaUnsupported}: catalog.json declares '${String(index.schema)}'`);
     return { errors, entries };
   }
@@ -90,7 +103,7 @@ export async function validateCatalogBundle(root) {
     const manifest = await readJson(join(root, entry.path), errors, entry.path);
     if (manifest === null) continue;
 
-    if (manifest.schema !== 'app-manifest.v1') {
+    if (manifest.schema !== schemaNames.manifest) {
       errors.push(`${catalogErrorCodes.schemaUnsupported}: ${entry.path} declares '${String(manifest.schema)}'`);
       continue;
     }

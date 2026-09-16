@@ -13,6 +13,7 @@ import { canonicalJson, planDigest, validateJulosCompose } from './lib/julos-com
 import { findBrokenLinks } from './lib/markdown-links.mjs';
 import { readAndValidatePackageManifest } from './lib/package-manifest.mjs';
 import { repositoryRoot, toRepositoryPath, walkFiles } from './lib/repository.mjs';
+import { enforcedSchemas, findSchemaCoverageErrors } from './lib/schema-coverage.mjs';
 
 const desktopDirectory = join(repositoryRoot, 'src', 'JulOS.Desktop');
 const remoteFrontendDirectory = join(repositoryRoot, 'packages', 'JulOS.Remote', 'frontend');
@@ -224,6 +225,16 @@ const stages = [
       return broken.length === 0
         ? passed('every relative link resolves')
         : failed(`${broken.length} broken link(s):\n  ${broken.join('\n  ')}`);
+    },
+  },
+  {
+    name: 'schema-coverage',
+    title: 'Verify every committed schema is enforced by a validator',
+    async run() {
+      const errors = await findSchemaCoverageErrors();
+      return errors.length === 0
+        ? passed(`${enforcedSchemas.length} committed schema(s), each loaded by a validation stage`)
+        : failed(`${errors.length} schema coverage error(s):\n  ${errors.join('\n  ')}`);
     },
   },
   {
