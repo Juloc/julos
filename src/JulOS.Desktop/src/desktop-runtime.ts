@@ -23,7 +23,10 @@ import { PackageCapabilityClient } from './package-capability-client.js';
 import { PackageFrontendHost } from './package-frontend-host.js';
 import { translate, type SupportedLanguage } from './localization.js';
 import { classifyViewport, type DesktopViewport } from './responsive-desktop.js';
+import { ExecutionPreferenceClient, type ExecutionPreference } from './execution-preferences.js';
 import { PhoneForegroundController } from './phone-foreground.js';
+import { SurfaceActivityMonitor } from './surface-activity.js';
+import { readSurfaceHost, SurfaceScheduler } from './surface-scheduler.js';
 import type { WorkspaceClass } from './workspace-contract.js';
 import {
   clampSplitRatioPermille,
@@ -91,6 +94,8 @@ export class DesktopRuntime {
   readonly #widgetHost = new WidgetHostStore();
   readonly #clientDevices = new ClientDeviceStore();
   readonly #phoneForeground = new PhoneForegroundController();
+  readonly #preferences = new ExecutionPreferenceClient();
+  readonly #packageElements = new Map<string, HTMLElement>();
   readonly #layoutPersistence: DesktopLayoutPersistence;
   readonly #coreApplications: CoreApplicationCatalog;
   readonly #keyboard: ShellKeyboardController;
@@ -122,6 +127,8 @@ export class DesktopRuntime {
   #unbindHomeIndicator: (() => void) | null = null;
   #dockRevealTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   #homeGestureStart: { readonly x: number; readonly y: number } | null = null;
+  readonly #surfaces: SurfaceScheduler;
+  readonly #activity: SurfaceActivityMonitor;
   #dividerElement: HTMLElement | null = null;
   #dividerDrag: number | null = null;
 
@@ -131,6 +138,18 @@ export class DesktopRuntime {
     this.#notifications = options.notifications ?? desktopNotificationCenter;
     this.#language = options.language;
     this.#onFailure = options.onFailure;
+    this.#surfaces = new SurfaceScheduler({
+      onFailure: (failure) => options.onFailure(
+        new Error(`Surface ${failure.call ?? 'transition'} failed: ${failure.code}`, { cause: failure.cause }),
+      ),
+    });
+    this.#activity = new SurfaceActivityMonitor({
+      onViolation: (violation) => options.onFailure(
+        new Error(
+          `A suspended Surface kept rendering (${violation.mutations} changes): ${violation.code}`,
+        ),
+      ),
+    });
     this.#layoutPersistence = new DesktopLayoutPersistence(
       globalThis.fetch.bind(globalThis),
       { onFailure: (error) => this.#onFailure(error) },
@@ -573,7 +592,7 @@ export class DesktopRuntime {
         frame.dataset['size'] = widget.defaultSize;
         applyWidgetPlacement(frame, placement);
         const surface = this.#frontendHost.createHostElement(widget.elementName);
-        frame.append(surface);
+        frame.append(surface.host);
         layer.append(frame);
       } catch (error) {
         this.#onFailure(error);
@@ -663,6 +682,9 @@ export class DesktopRuntime {
         this.#windowSurfaces.delete(windowId);
         this.#coreSurfaceDisposers.get(windowId)?.();
         this.#coreSurfaceDisposers.delete(windowId);
+        this.#activity.release(windowId);
+        this.#packageElements.delete(windowId);
+        void this.#surfaces.dispose(windowId, 'window-closed');
       }
     }
 
@@ -681,10 +703,12 @@ export class DesktopRuntime {
       }
       element.querySelector<HTMLButtonElement>('[data-action="maximize"]')
         ?.setAttribute('aria-label', window.state === 'maximized' ? 'Restore' : 'Maximize');
+      this.#refreshBackgroundModeControl(element, window);
       applyBounds(element, placement?.bounds ?? area);
       this.#mountWindowSurface(window);
     }
 
+    this.#driveSurfaces(stage, windows);
     this.#renderDivider(stage);
     this.#renderTaskbar();
     this.#updateDockMode(stage.placements.length > 0);
@@ -1030,8 +1054,10 @@ export class DesktopRuntime {
             displayName: target.displayName,
           },
     );
-    body.replaceChildren(surface);
-    this.#windowSurfaces.set(window.id, surface);
+    body.replaceChildren(surface.host);
+    this.#windowSurfaces.set(window.id, surface.host);
+    this.#packageElements.set(window.id, surface.element);
+    void this.#registerSurface(window, surface.element);
   }
 
   #renderTaskbar(): void {
@@ -1438,6 +1464,142 @@ export class DesktopRuntime {
         secondaryWindowId: secondary,
         splitRatioPermille: clampSplitRatioPermille(foreground.splitRatioPermille ?? 500),
       };
+  }
+
+  /**
+   * Drives every registered Surface to match what the stage is showing.
+   *
+   * Window presentation and Surface execution are separate lifecycles, so this translates
+   * from one to the other rather than conflating them: a window that is placed and focused
+   * has a focused Surface, a window that is placed but not focused is visible, and a window
+   * that is open but not on screen goes to its resolved background state.
+   */
+  #driveSurfaces(stage: WorkspaceStage, windows: readonly DesktopWindowSnapshot[]): void {
+    const placements = new Map(stage.placements.map((placement) => [placement.windowId, placement]));
+
+    for (const window of windows) {
+      if (this.#surfaces.state(window.id) === null) {
+        continue;
+      }
+
+      const placement = placements.get(window.id);
+      if (placement === undefined) {
+        void this.#surfaces.background(window.id, 'window-backgrounded');
+        this.#watchSuspended(window.id);
+        continue;
+      }
+
+      this.#activity.release(window.id);
+      void this.#surfaces.show(
+        {
+          windowId: window.id,
+          workspaceClass: this.#workspaceClass,
+          presentation: stage.activeWindowId === window.id ? 'focused' : 'visible',
+          bounds: { ...placement.bounds },
+          revision: window.zIndex + 1,
+        },
+        'presentation-changed',
+      );
+    }
+  }
+
+  /**
+   * Watches a Surface once it has actually reached the suspended state.
+   *
+   * A Surface whose owner chose to keep it active is deliberately still running, so it is
+   * never watched: mutations there are expected rather than a violation.
+   */
+  #watchSuspended(windowId: string): void {
+    const element = this.#packageElements.get(windowId);
+    if (element === undefined) {
+      return;
+    }
+
+    globalThis.queueMicrotask(() => {
+      if (this.#surfaces.state(windowId) === 'suspended') {
+        this.#activity.watch(windowId, element);
+      }
+    });
+  }
+
+  /**
+   * Registers the Surface a package element implements, once its window is mounted.
+   *
+   * A package that declares the contract in its manifest but does not implement it is
+   * refused rather than quietly run without a lifecycle.
+   */
+  async #registerSurface(window: DesktopWindowSnapshot, element: HTMLElement): Promise<void> {
+    const application = this.#applications.get(window.applicationId);
+    if (application === undefined || this.#surfaces.state(window.id) !== null) {
+      return;
+    }
+
+    let preference: ExecutionPreference | null = null;
+    try {
+      preference = this.#preferences.cached(application.applicationDefinitionId, this.#workspaceClass)
+        ?? await this.#preferences.read(application.applicationDefinitionId, this.#workspaceClass);
+    } catch (error) {
+      this.#onFailure(error);
+    }
+
+    try {
+      this.#surfaces.register(
+        window.id,
+        readSurfaceHost(element),
+        preference?.backgroundMode ?? 'suspend',
+        preference?.supportsKeepSurfaceActive === true,
+      );
+    } catch (error) {
+      // An element that does not implement the contract gets no lifecycle at all. It keeps
+      // rendering, because removing a window the user opened would be worse, but it is
+      // reported rather than silently treated as Surface-capable.
+      this.#onFailure(error);
+      return;
+    }
+
+    this.#renderWindows(this.#store.windows);
+  }
+
+  /** Lets the user choose whether an application keeps running in the background. */
+  #refreshBackgroundModeControl(element: HTMLElement, window: DesktopWindowSnapshot): void {
+    element.querySelector('[data-action="background-mode"]')?.remove();
+    const container = element.querySelector<HTMLElement>('.window-controls');
+    const application = this.#applications.get(window.applicationId);
+    if (container === null || application === undefined) {
+      return;
+    }
+
+    const preference = this.#preferences.cached(application.applicationDefinitionId, this.#workspaceClass);
+    if (preference === null || !preference.supportsKeepSurfaceActive) {
+      // An application that never declared the capability is not offered the choice, and
+      // could not be given it by Server either.
+      return;
+    }
+
+    const language = this.#language();
+    const active = preference.backgroundMode === 'keep-surface-active';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset['action'] = 'background-mode';
+    button.dataset['enabled'] = String(active);
+    button.setAttribute('aria-pressed', String(active));
+    button.title = translate(language, 'keepActiveInBackground');
+    button.setAttribute('aria-label', button.title);
+    button.innerHTML = '<span class="window-control-fallback" aria-hidden="true">◎</span>';
+    button.addEventListener('click', () => {
+      button.disabled = true;
+      void this.#preferences
+        .write(
+          application.applicationDefinitionId,
+          this.#workspaceClass,
+          active ? 'suspend' : 'keep-surface-active',
+          preference.revision,
+        )
+        .then(() => this.#renderWindows(this.#store.windows))
+        .catch(this.#onFailure)
+        .finally(() => { button.disabled = false; });
+    });
+    container.prepend(button);
   }
 
   #ensureStyles(): void {

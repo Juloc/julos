@@ -312,6 +312,10 @@ The Remote package stopped claiming the `mobile` viewport in the same change. It
 
 Default Phone behavior is `suspend`. A user can choose **Keep active in background** from the open app's Shell menu. An application cannot enable this for itself.
 
+Implementation notes from `MOB-006`. The choice is a control in the window chrome of the open application, shown only where the application declares the capability and Server would accept it. The Shell drives Surface execution from the same render pass that places windows: a placed and focused window has a `foreground-focused` Surface, a placed unfocused one is `foreground-visible`, and an open window that is not on screen goes to its resolved background state. Window presentation and Surface execution stay separate lifecycles; this translates between them rather than merging them.
+
+An element that does not implement the contract is reported and given no lifecycle at all. It keeps rendering, because removing a window the user opened would be worse than leaving it unmanaged, but it is never silently treated as Surface-capable.
+
 `ApplicationExecutionPreference`:
 
 ```text

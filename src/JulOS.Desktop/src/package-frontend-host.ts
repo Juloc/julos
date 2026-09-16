@@ -26,6 +26,12 @@ export interface PackageFrontendContext {
   readonly deleteLaunchTarget: (launchTargetId: string) => Promise<void>;
 }
 
+/** A mounted package surface: the Shell-owned wrapper and the package element inside it. */
+export interface PackageSurfaceElement {
+  readonly host: HTMLElement;
+  readonly element: HTMLElement;
+}
+
 export interface PackageFrontendModule {
   readonly register: (context: PackageFrontendContext) => void | Promise<void>;
 }
@@ -61,7 +67,17 @@ export class PackageFrontendHost {
     return loading;
   }
 
-  public createHostElement(elementName: string, launchTarget: PackageLaunchTarget | null = null): HTMLElement {
+  /**
+   * Creates the Shell-owned wrapper and the package element inside it.
+   *
+   * The shadow root stays closed, so nothing else can reach into the package. The
+   * element is handed back because the Shell created it and has to drive its Surface
+   * lifecycle; it is not a way for anything else to reach inside.
+   */
+  public createHostElement(
+    elementName: string,
+    launchTarget: PackageLaunchTarget | null = null,
+  ): PackageSurfaceElement {
     if (!customElements.get(elementName)) {
       throw new PackageFrontendError(
         'package.frontend_element_missing',
@@ -74,7 +90,7 @@ export class PackageFrontendHost {
     const element = document.createElement(elementName) as HTMLElement & { launchTarget?: PackageLaunchTarget | null };
     element.launchTarget = launchTarget;
     shadow.append(element);
-    return shell;
+    return { host: shell, element };
   }
 
   async #load(

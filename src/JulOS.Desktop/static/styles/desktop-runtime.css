@@ -822,6 +822,26 @@
   min-width: 2rem;
 }
 
+/* The background-mode toggle sits with the window controls and shows its own state, so a
+   user can tell at a glance whether an application keeps running when it is put away. */
+.window-controls button[data-action="background-mode"][data-enabled="true"] {
+  color: var(--julos-color-accent);
+}
+
+.window-controls button[data-action="background-mode"][data-enabled="true"]::after {
+  content: "";
+  position: absolute;
+  inset-block-end: 0.15rem;
+  inline-size: 0.35rem;
+  block-size: 0.35rem;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.window-controls button[data-action="background-mode"] {
+  position: relative;
+}
+
 @media (forced-colors: active) {
   .phone-split-divider {
     background: CanvasText;
