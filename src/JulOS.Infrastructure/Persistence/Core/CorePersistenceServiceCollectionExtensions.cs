@@ -106,6 +106,7 @@ public static class CorePersistenceServiceCollectionExtensions
         services.AddScoped<IWorkspaceLayoutService, EfWorkspaceLayoutService>();
         services.AddScoped<IProfileService, EfProfileService>();
         services.AddScoped<IClientDeviceService, EfClientDeviceService>();
+        services.AddScoped<IApplicationExecutionPreferenceService, EfApplicationExecutionPreferenceService>();
         services.AddScoped<IOperationService, PostgresOperationService>();
         services.AddScoped<RemoteSessionContractValidator>();
         services.AddScoped<IRemoteSessionService, PostgresRemoteSessionService>();

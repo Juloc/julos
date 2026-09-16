@@ -67,6 +67,10 @@ internal static class ProblemDetailsCustomizer
         {
             context.ProblemDetails.Detail = layoutDetail.Message;
         }
+        else if (exception is ApplicationExecutionPreferenceException preferenceDetail)
+        {
+            context.ProblemDetails.Detail = preferenceDetail.Message;
+        }
         else if (exception is ProfileFailureException profileFailure)
         {
             context.ProblemDetails.Detail = profileFailure.Message;
@@ -131,6 +135,11 @@ internal static class ProblemDetailsCustomizer
         if (exception is WorkspaceLayoutFailureException layoutFailure)
         {
             return (layoutFailure.Code, false);
+        }
+
+        if (exception is ApplicationExecutionPreferenceException preferenceFailure)
+        {
+            return (preferenceFailure.Code, false);
         }
 
         if (exception is SecretReferenceFailureException secretFailure)

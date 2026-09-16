@@ -45,6 +45,9 @@ internal static class PackageApplicationRegistration
                     MinimumWidth = application.MinimumWidth,
                     MinimumHeight = application.MinimumHeight,
                     IsEnabled = enabled,
+                    SurfaceContractVersion = application.Surface?.ContractVersion,
+                    SurfaceSupportsKeepActive = SupportsKeepActive(application),
+                    SurfaceHandlesBack = application.Surface?.HandlesBack ?? false,
                     Revision = 1,
                 };
                 foreach (var viewport in application.Viewports)
@@ -69,6 +72,12 @@ internal static class PackageApplicationRegistration
                 || row.MinimumWidth != application.MinimumWidth
                 || row.MinimumHeight != application.MinimumHeight
                 || row.IsEnabled != enabled
+                || !string.Equals(
+                    row.SurfaceContractVersion,
+                    application.Surface?.ContractVersion,
+                    StringComparison.Ordinal)
+                || row.SurfaceSupportsKeepActive != SupportsKeepActive(application)
+                || row.SurfaceHandlesBack != (application.Surface?.HandlesBack ?? false)
                 || !currentViewports.SetEquals(desiredViewports);
             if (!changed)
             {
@@ -82,6 +91,9 @@ internal static class PackageApplicationRegistration
             row.MinimumWidth = application.MinimumWidth;
             row.MinimumHeight = application.MinimumHeight;
             row.IsEnabled = enabled;
+            row.SurfaceContractVersion = application.Surface?.ContractVersion;
+            row.SurfaceSupportsKeepActive = SupportsKeepActive(application);
+            row.SurfaceHandlesBack = application.Surface?.HandlesBack ?? false;
             row.Revision = checked(row.Revision + 1);
 
             if (!currentViewports.SetEquals(desiredViewports))
@@ -107,6 +119,13 @@ internal static class PackageApplicationRegistration
             }
         }
     }
+
+    /// <summary>
+    /// Whether the manifest declares that the application can stay active in the background.
+    /// </summary>
+    private static bool SupportsKeepActive(PackageApplicationManifest application) =>
+        application.Surface?.SupportedBackgroundModes
+            .Contains("keep-surface-active", StringComparer.Ordinal) ?? false;
 
     private static ApplicationInstancePolicy MapPolicy(string value) => value switch
     {

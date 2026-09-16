@@ -194,6 +194,11 @@ internal static class CoreModelConfiguration
         entity.Property(row => row.MinimumWidth).HasColumnName("minimum_width");
         entity.Property(row => row.MinimumHeight).HasColumnName("minimum_height");
         entity.Property(row => row.IsEnabled).HasColumnName("is_enabled");
+        entity.Property(row => row.SurfaceContractVersion)
+            .HasColumnName("surface_contract_version")
+            .HasMaxLength(32);
+        entity.Property(row => row.SurfaceSupportsKeepActive).HasColumnName("surface_supports_keep_active");
+        entity.Property(row => row.SurfaceHandlesBack).HasColumnName("surface_handles_back");
         entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
 
         entity.HasIndex(row => new { row.OwningPackageId, row.StableKey })

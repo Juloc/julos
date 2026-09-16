@@ -112,6 +112,12 @@ internal static class ErrorHandling
                 SecretReferenceFailureReason.LeaseExpired => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status500InternalServerError,
             },
+            ApplicationExecutionPreferenceException preference => preference.Code switch
+            {
+                ClientDeviceErrorCodes.NotFound => StatusCodes.Status404NotFound,
+                ClientDeviceErrorCodes.NotOwned => StatusCodes.Status403Forbidden,
+                _ => StatusCodes.Status400BadRequest,
+            },
             ClientDeviceException device => device.Code switch
             {
                 ClientDeviceErrorCodes.NotFound => StatusCodes.Status404NotFound,

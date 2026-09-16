@@ -362,9 +362,10 @@ public sealed class WorkspaceLayoutServiceTests
             """
             INSERT INTO application_definitions (id, owning_package_id, stable_key, display_name_key,
                                                  instance_policy, default_width, default_height,
-                                                 minimum_width, minimum_height, is_enabled, revision)
+                                                 minimum_width, minimum_height, is_enabled,
+                                                 surface_supports_keep_active, surface_handles_back, revision)
             VALUES ($id, 'de.juloc.julos.reference', 'reference', 'reference.title',
-                    'SingleInstancePerUser', 800, 600, 320, 240, 1, 1);
+                    'SingleInstancePerUser', 800, 600, 320, 240, 1, 0, 0, 1);
             """;
         _ = command.Parameters.AddWithValue("$id", ApplicationId.ToString());
         _ = await command.ExecuteNonQueryAsync();

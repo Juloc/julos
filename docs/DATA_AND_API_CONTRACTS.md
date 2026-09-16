@@ -768,7 +768,16 @@ DELETE /api/v1/client-devices/{clientDeviceId}?revision={revision}
 GET    /api/v1/workspace-layouts/{workspaceClass}/current
 PUT    /api/v1/workspace-layouts/{workspaceClass}/current
 POST   /api/v1/workspace-layouts/desktop-multi/initialization
+
+GET    /api/v1/application-execution-preferences/{applicationDefinitionId}/current?workspaceClass={workspaceClass}
+PUT    /api/v1/application-execution-preferences/{applicationDefinitionId}/current?workspaceClass={workspaceClass}
 ```
+
+The execution preference decides what happens to an application’s surface when it leaves the visible foreground. It is stored per user, application and workspace class, optionally narrowed to one device, and a device-scoped preference answers ahead of the user’s shared one. A write targets exactly one scope and never rewrites the other, so configuring one phone does not change what the same user gets on a desktop.
+
+The default is `suspend`, and `keep-surface-active` is refused with `application.background_mode_unsupported` unless the application’s manifest declares it. The declaration is persisted with the application, so the stored preference and the resolved Surface state cannot disagree. An application registered before `MOB-006` is recorded as declaring no contract rather than as declaring the default: a package that never said it can stay active cannot be given that mode until it re-registers and says so.
+
+The preference is reachable only through this authenticated, antiforgery-protected surface. A package has no way to call it, which is what makes “an application cannot enable keep-surface-active for itself” a property of the system rather than an instruction packages are trusted to follow.
 
 A layout route names a workspace class and nothing else. Which stored layout answers — the user’s shared one or the one private to this device — is resolved on the server from the authenticated user and the owner-scoped device cookie, so a caller cannot select a layout identity, a client device or a scope through request data. `GET` answers with the resolved scope and restore mode beside the layout; the first `PUT` creates and returns `201`, a replacement returns `200`, and a stale expected revision returns the common `409` with `currentRevision`.
 

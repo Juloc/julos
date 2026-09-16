@@ -66,6 +66,21 @@ internal sealed class ApplicationDefinitionRow
 
     internal bool IsEnabled { get; set; }
 
+    /// <summary>Declared Surface contract version, or null when the application declares none.</summary>
+    internal string? SurfaceContractVersion { get; set; }
+
+    /// <summary>
+    /// Whether the application declares support for staying active in the background.
+    /// </summary>
+    /// <remarks>
+    /// A capability, never a permission: the background mode is the user's stored
+    /// preference, and an application that does not declare this cannot be given it.
+    /// <c>suspend</c> needs no column because every Surface must support it.
+    /// </remarks>
+    internal bool SurfaceSupportsKeepActive { get; set; }
+
+    internal bool SurfaceHandlesBack { get; set; }
+
     internal int Revision { get; set; }
 
     internal List<ApplicationViewportRow> SupportedViewports { get; } = [];

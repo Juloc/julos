@@ -47,7 +47,21 @@ public sealed record PackageApplicationManifest(
     int MinimumWidth,
     int MinimumHeight,
     IReadOnlyList<string> Viewports,
-    string ElementName);
+    string ElementName,
+    PackageSurfaceManifest? Surface = null);
+
+/// <summary>The Surface lifecycle contract a mobile-capable application declares.</summary>
+/// <param name="ContractVersion">Surface contract version the application implements.</param>
+/// <param name="SupportedBackgroundModes">Background modes the application supports; always includes <c>suspend</c>.</param>
+/// <param name="HandlesBack">Whether the application is offered Back before the Shell handles it.</param>
+/// <remarks>
+/// Declaring <c>keep-surface-active</c> states a capability. It is never permission for the
+/// package to select it: the background mode is the user's stored preference.
+/// </remarks>
+public sealed record PackageSurfaceManifest(
+    string ContractVersion,
+    IReadOnlyList<string> SupportedBackgroundModes,
+    bool HandlesBack);
 
 /// <summary>One widget exported by a package.</summary>
 public sealed record PackageWidgetManifest(
@@ -244,6 +258,54 @@ public static partial class PackageManifestReader
             Fail("package.application_viewports_invalid", "Application viewports are invalid.");
         }
         EnsureDistinct(application.Viewports, "package.application_viewport_duplicate");
+        ValidateSurface(application);
+    }
+
+    /// <summary>
+    /// Validates the Surface declaration from <c>docs/MOBILE_PWA.md</c> section 10.
+    /// </summary>
+    /// <remarks>
+    /// A mobile-capable application must declare the contract. There is no silent mobile
+    /// lifecycle fallback, so an application claiming the mobile viewport without it is a
+    /// manifest error rather than something Server quietly registers anyway.
+    /// </remarks>
+    private static void ValidateSurface(PackageApplicationManifest application)
+    {
+        var mobileCapable = application.Viewports.Contains("mobile", StringComparer.Ordinal);
+        if (application.Surface is null)
+        {
+            if (mobileCapable)
+            {
+                Fail(
+                    "package.application_surface_missing",
+                    "A mobile-capable application declares the Surface contract.");
+            }
+
+            return;
+        }
+
+        var surface = application.Surface;
+        var version = SurfaceContractVersion().Match(surface.ContractVersion ?? string.Empty);
+        if (!version.Success
+            || !int.TryParse(version.Groups[1].Value, out var major)
+            || major != SupportedSurfaceContractMajorVersion)
+        {
+            Fail(
+                "package.surface_contract_unsupported",
+                "The Surface contract version is not one this JulOS implements.");
+        }
+
+        if (surface.SupportedBackgroundModes.Count == 0
+            || surface.SupportedBackgroundModes.Any(
+                mode => mode is not ("suspend" or "keep-surface-active"))
+            || !surface.SupportedBackgroundModes.Contains("suspend", StringComparer.Ordinal))
+        {
+            Fail(
+                "application.background_mode_unsupported",
+                "Surface background modes are invalid; suspend is the required default.");
+        }
+
+        EnsureDistinct(surface.SupportedBackgroundModes, "package.surface_background_mode_duplicate");
     }
 
     private static void ValidateWidget(PackageWidgetManifest widget)
@@ -390,6 +452,9 @@ public static partial class PackageManifestReader
         }
     }
 
+    /// <summary>The Surface contract major version this JulOS implements.</summary>
+    private const int SupportedSurfaceContractMajorVersion = 1;
+
     private static void Fail(string code, string message) => throw new PackageManifestException(code, message);
 
     [GeneratedRegex("^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9-]*)+$", RegexOptions.CultureInvariant)]
@@ -415,4 +480,7 @@ public static partial class PackageManifestReader
 
     [GeneratedRegex("^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$", RegexOptions.CultureInvariant)]
     private static partial Regex CustomElementName();
+
+    [GeneratedRegex(@"^(\d+)\.(\d+)\.(\d+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex SurfaceContractVersion();
 }
