@@ -309,6 +309,7 @@ Runtime Manager is security-critical. Tests verify:
 - Host Connector revocation
 - client-device cross-user isolation and non-authentication behavior
 - publisher-key trust mutation requires `catalog.trust.manage` and cannot override integrity/validity/revocation failure
+- package installation persists every column the schema constrains, on a database that enforces those constraints
 - catalog source administration requires `catalog.sources.manage`, never returns a source credential, and refuses a second live source for a location
 - a failed or partial catalog refresh never replaces the last valid cache, and a source that changes the identity it claims fails the refresh
 - the definition digest the Server computes equals the one the repository validator computes for the same fixture

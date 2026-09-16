@@ -79,8 +79,13 @@ public sealed class OperationTests
             await ReadProblemCodeAsync(conflict).ConfigureAwait(false));
 
         var dataSource = host.Services.GetRequiredService<EndpointDataSource>();
+        // The list endpoint shares the pattern, so the method is part of what selects the
+        // one under test; matching on the pattern alone stopped being unambiguous when
+        // MOB-008 added GET beside it.
         var createEndpoint = dataSource.Endpoints.OfType<RouteEndpoint>().Single(endpoint =>
-            string.Equals(endpoint.RoutePattern.RawText?.TrimEnd('/'), "/api/v1/operations", StringComparison.Ordinal));
+            string.Equals(endpoint.RoutePattern.RawText?.TrimEnd('/'), "/api/v1/operations", StringComparison.Ordinal)
+            && endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods
+                .Contains("POST", StringComparer.Ordinal) == true);
         Assert.IsNotNull(createEndpoint.Metadata.GetMetadata<IAntiforgeryMetadata>());
         Assert.IsNotNull(createEndpoint.Metadata.GetMetadata<IHttpMethodMetadata>());
     }

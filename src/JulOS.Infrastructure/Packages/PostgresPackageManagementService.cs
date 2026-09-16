@@ -198,6 +198,11 @@ internal sealed class PostgresPackageManagementService : IPackageManagementServi
                 Id = Guid.CreateVersion7(now),
                 PackageId = manifest.PackageId,
                 State = PackageInstallationState.Installing,
+                // The verifier accepts only a configured trusted publisher today, so an
+                // artifact that reached this line is trusted-signed. Recording it explicitly
+                // rather than leaving the column to a default keeps the value meaningful the
+                // moment PKG-014 makes the other states reachable.
+                SignatureState = PackageSignatureState.TrustedSigned,
                 Revision = 1,
             };
             this.context.PackageInstallations.Add(row);

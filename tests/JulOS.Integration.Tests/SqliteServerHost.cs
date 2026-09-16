@@ -24,7 +24,13 @@ internal sealed class SqliteServerHost : IAsyncDisposable
 
     internal string ConnectionString { get; }
 
-    internal static async Task<SqliteServerHost> CreateAsync(string name)
+    internal static Task<SqliteServerHost> CreateAsync(string name) =>
+        CreateAsync(name, settings: null);
+
+    /// <summary>Creates a host with extra deployment settings, such as trusted publishers.</summary>
+    internal static async Task<SqliteServerHost> CreateAsync(
+        string name,
+        IReadOnlyDictionary<string, string?>? settings)
     {
         var directory = Path.Combine(
             Path.GetTempPath(),
@@ -38,11 +44,18 @@ internal sealed class SqliteServerHost : IAsyncDisposable
             new CoreDatabaseConfiguration(CoreDatabaseProvider.Sqlite, connectionString))
             .ConfigureAwait(false);
 
+        var configuration = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["Database:Provider"] = "sqlite",
+        };
+        foreach (var setting in settings ?? new Dictionary<string, string?>(StringComparer.Ordinal))
+        {
+            configuration[setting.Key] = setting.Value;
+        }
+
         return new SqliteServerHost(
             directory,
-            new ServerHost(
-                connectionString,
-                new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" }),
+            new ServerHost(connectionString, configuration),
             connectionString);
     }
 
